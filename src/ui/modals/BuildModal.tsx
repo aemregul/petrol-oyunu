@@ -1,17 +1,121 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { X, Hammer, Fuel, Database, Building2, ShoppingBag, Maximize, Lock, CheckCircle } from 'lucide-react';
+import { X, Hammer, Lock, Map as MapIcon, Milestone } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+
+/**
+ * Land and road work are bought on the map rather than placed from the
+ * catalogue, but players look for them here, so the catalogue carries the
+ * entry points.
+ */
+const LandAndRoadCards: React.FC<{
+  onBuyLand: () => void;
+  onUpgradeRoad: () => void;
+}> = ({ onBuyLand, onUpgradeRoad }) => {
+  const station = useGameStore((s) => s.gameState.station);
+  const player = useGameStore((s) => s.gameState.player);
+  const road = GAME_CONFIG.roadUpgrade;
+
+  const roadDone = station.roadLevel >= 2;
+  const meetsRoadRequirements =
+    player.level >= road.minLevel && player.reputation >= road.minReputation;
+  const canAffordRoad = player.cash >= road.price;
+
+  return (
+    <>
+      <div className="bg-slate-950/60 border border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between gap-3 hover:border-emerald-500/50 transition-all">
+        <div>
+          <div className="flex justify-between items-start mb-1">
+            <div className="font-extrabold text-sm text-white">Arsa Satın Al</div>
+            <div className="font-mono font-bold text-emerald-400 text-sm">değişken</div>
+          </div>
+          <div className="text-xs text-slate-400 leading-relaxed mb-3">
+            Haritada komşu parsellerin üstüne gelip satın alın. Arsa çitle çevrili
+            gelir; inşaat için ayrıca beton dökmeniz gerekir.
+          </div>
+          <div className="text-[10px] font-mono text-slate-400 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+            Sahip olunan parsel: {station.plots.ownedParcels.length} · Betonlanan:{' '}
+            {station.plots.pavedParcels.length}
+          </div>
+        </div>
+        <button
+          onClick={onBuyLand}
+          className="w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 transition-all"
+        >
+          <MapIcon className="w-3.5 h-3.5" />
+          <span>Haritada Aç</span>
+        </button>
+      </div>
+
+      <div
+        className={`bg-slate-950/60 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all ${
+          roadDone ? 'border-slate-800 opacity-70' : 'border-slate-700/80 hover:border-amber-500/50'
+        }`}
+      >
+        <div>
+          <div className="flex justify-between items-start mb-1">
+            <div className="font-extrabold text-sm text-white">Yol Genişletme</div>
+            <div className="font-mono font-bold text-emerald-400 text-sm">
+              ₺{road.price.toLocaleString('tr-TR')}
+            </div>
+          </div>
+          <div className="text-xs text-slate-400 leading-relaxed mb-3">
+            Karayolunu bölünmüş yola çevirir: karşı yöne ikinci bir şerit ve arada
+            peyzajlı refüj gelir. Yolun karşısındaki parseller satın alınabilir hale
+            gelir.
+          </div>
+          <div className="text-[10px] font-mono text-slate-400 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+            Seviye {road.minLevel} · {road.minReputation.toFixed(2)} itibar gerekir
+          </div>
+        </div>
+
+        {roadDone ? (
+          <div className="w-full py-2.5 rounded-xl bg-slate-800/80 text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5">
+            <Milestone className="w-3.5 h-3.5" />
+            <span>Yol Zaten Genişletildi</span>
+          </div>
+        ) : !meetsRoadRequirements ? (
+          <div className="w-full py-2.5 rounded-xl bg-slate-800/80 text-slate-500 text-xs font-bold flex items-center justify-center gap-1.5">
+            <Lock className="w-3.5 h-3.5" />
+            <span>Seviye {road.minLevel} & {road.minReputation.toFixed(2)} İtibar</span>
+          </div>
+        ) : (
+          <button
+            onClick={onUpgradeRoad}
+            disabled={!canAffordRoad}
+            className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+              canAffordRoad
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            <Milestone className="w-3.5 h-3.5" />
+            <span>{canAffordRoad ? 'Yolu Genişlet' : 'Yetersiz Bakiye'}</span>
+          </button>
+        )}
+      </div>
+    </>
+  );
+};
 
 export const BuildModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const enterBuildMode = useGameStore((s) => s.enterBuildMode);
+  const enterLandMode = useGameStore((s) => s.enterLandMode);
+  const upgradeRoad = useGameStore((s) => s.upgradeRoad);
 
-  const [category, setCategory] = useState<'all' | 'pump' | 'tank' | 'structure' | 'service' | 'energy'>('all');
+  const [category, setCategory] = useState<
+    'all' | 'pump' | 'tank' | 'structure' | 'service' | 'energy' | 'land'
+  >('all');
 
-  const items = Object.values(GAME_CONFIG.buildings).filter((b) => category === 'all' || b.category === category);
+  const items =
+    category === 'land'
+      ? []
+      : Object.values(GAME_CONFIG.buildings).filter(
+          (b) => category === 'all' || b.category === category
+        );
 
   const handleSelectBuild = (type: string) => {
     enterBuildMode(type);
@@ -52,7 +156,8 @@ export const BuildModal: React.FC = () => {
             { id: 'tank', name: 'Tanklar' },
             { id: 'structure', name: 'Yapılar' },
             { id: 'service', name: 'Tesis & Market' },
-            { id: 'energy', name: 'Elektrik & Şarj' }
+            { id: 'energy', name: 'Elektrik & Şarj' },
+            { id: 'land', name: 'Arsa & Altyapı' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -73,6 +178,11 @@ export const BuildModal: React.FC = () => {
 
         {/* Catalog Grid */}
         <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+          {category === 'land' && <LandAndRoadCards
+            onBuyLand={() => { enterLandMode(); setActiveModal('NONE'); }}
+            onUpgradeRoad={upgradeRoad}
+          />}
+
           {items.map((item) => {
             const isUnlocked = gameState.player.level >= item.unlockLevel;
             const canAfford = gameState.player.cash >= item.price;

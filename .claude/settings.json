@@ -87,7 +87,12 @@
       "Bash(cp __TRACKED_VAR__/v2.png screenshots/13-cift-serit.png)",
       "Bash(cp __TRACKED_VAR__/s1.png screenshots/12-tek-serit.png)",
       "Bash(cp __TRACKED_VAR__/s2.png screenshots/13-bolunmus-yol.png)",
-      "Bash(cp __TRACKED_VAR__/e1.png screenshots/14-rampa-kesik-cizgi.png)"
+      "Bash(cp __TRACKED_VAR__/e1.png screenshots/14-rampa-kesik-cizgi.png)",
+      "Bash(cp __TRACKED_VAR__/f1.png screenshots/15-arsa-altyapi-menusu.png)",
+      "Bash(cp __TRACKED_VAR__/f3.png screenshots/16-karsi-beton-rampasiz.png)",
+      "Bash(cp __TRACKED_VAR__/f4.png screenshots/17-karsi-bina-rampali.png)",
+      "Bash(cp __TRACKED_VAR__/c1.png screenshots/18-arsa-temizlendi.png)",
+      "Bash(cp __TRACKED_VAR__/c2.png screenshots/19-yol-temizlendi.png)"
     ]
   }
 }

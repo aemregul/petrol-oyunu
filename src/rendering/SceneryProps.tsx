@@ -1,10 +1,14 @@
 import React, { useMemo } from 'react';
 import { Instances, Instance } from '@react-three/drei';
 import { useGameStore } from '../store/gameStore';
-import { LAYOUT } from '../domain/services/simulationEngine';
+import { LAYOUT, getLayout } from '../domain/services/simulationEngine';
+import { parseParcelKey, parcelBounds } from '../domain/services/land';
 
 const S = 2;
 const roadZ = LAYOUT.roadZ * S;
+
+/** Nothing decorative may stand this close to owned land or tarmac. */
+const CLEARANCE = 1.5;
 
 /** Deterministic pseudo-random so scenery never reshuffles between frames. */
 function seeded(seed: number): () => number {
@@ -28,21 +32,60 @@ interface Placement {
  */
 export const SceneryProps: React.FC = () => {
   const plots = useGameStore((s) => s.gameState.station.plots);
+  const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+
   const plotWidth = plots.width * S;
   const plotDepth = plots.height * S;
+
+  const layout = useMemo(() => getLayout({ station: { plots } }), [plots]);
+  const roadHalfWidth = layout.roadHalfWidth * S;
+  const farRoadZ = layout.farRoadLaneZ * S;
+
+  /**
+   * The band of ground the roadworks occupy: one carriageway now, both plus
+   * the median once the road is widened.
+   */
+  const corridor = useMemo(
+    () => ({
+      minZ: (roadLevel >= 2 ? farRoadZ : roadZ) - roadHalfWidth,
+      maxZ: roadZ + roadHalfWidth
+    }),
+    [roadLevel, farRoadZ, roadHalfWidth]
+  );
 
   const { trees, bushes, lamps } = useMemo(() => {
     const rand = seeded(20240822);
     const treeList: Placement[] = [];
     const bushList: Placement[] = [];
 
+    /**
+     * Land the player has bought, and the roadworks themselves, are cleared:
+     * a tree left standing on fresh concrete or in the middle of a new
+     * carriageway is the one thing that gives the scenery away as decoration.
+     */
+    const isCleared = (x: number, z: number): boolean => {
+      if (z > corridor.minZ - CLEARANCE && z < corridor.maxZ + CLEARANCE) return true;
+
+      return plots.ownedParcels.some((key) => {
+        const { col, row } = parseParcelKey(key);
+        const b = parcelBounds(col, row);
+        return (
+          x > b.minX * S - CLEARANCE &&
+          x < b.maxX * S + CLEARANCE &&
+          z > b.minZ * S - CLEARANCE &&
+          z < b.maxZ * S + CLEARANCE
+        );
+      });
+    };
+
     const push = (x: number, z: number, scaleBase: number) => {
-      const placement: Placement = {
-        position: [x, 0, z],
-        scale: scaleBase,
-        rotation: rand() * Math.PI * 2
-      };
-      if (rand() > 0.34) treeList.push(placement);
+      // Draw the die either way so the layout stays stable as land is bought.
+      const rotation = rand() * Math.PI * 2;
+      const isTree = rand() > 0.34;
+      if (isCleared(x, z)) return;
+
+      const placement: Placement = { position: [x, 0, z], scale: scaleBase, rotation };
+      if (isTree) treeList.push(placement);
       else bushList.push(placement);
     };
 
@@ -64,14 +107,16 @@ export const SceneryProps: React.FC = () => {
       );
     }
 
+    // Lamps sit on the verge beyond whatever the road currently occupies.
+    const lampZ = corridor.minZ - 4;
     const lampList: Placement[] = Array.from({ length: 9 }, (_, i) => ({
-      position: [-30 + i * 22, 0, roadZ - 9] as [number, number, number],
+      position: [-30 + i * 22, 0, lampZ] as [number, number, number],
       scale: 1,
       rotation: 0
     }));
 
     return { trees: treeList, bushes: bushList, lamps: lampList };
-  }, [plotWidth, plotDepth]);
+  }, [plotWidth, plotDepth, plots.ownedParcels, corridor]);
 
   return (
     <group>
