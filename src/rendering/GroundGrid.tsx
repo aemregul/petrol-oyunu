@@ -336,8 +336,14 @@ export const GroundGrid: React.FC = () => {
 
   const unpaved = plots.ownedParcels.filter((key) => !plots.pavedParcels.includes(key));
 
-  // Mirror of apronFront for land across the highway.
-  const farApronFront = farRoadZ - roadHalfWidth - VERGE_DEPTH;
+  // Mirror of apronFront for land across the highway. The far parcels already
+  // begin past the verge line, so a plain mirror would leave the ramps ending
+  // in the grass a little short of the concrete: take whichever edge is
+  // further from the road so the two always meet.
+  const farApronFront = Math.min(
+    farRoadZ - roadHalfWidth - VERGE_DEPTH,
+    parcelBounds(0, -1).maxZ * S
+  );
   /**
    * Far-side mouths only appear once something is actually built over there.
    * Bare or freshly paved land needs no access road yet.

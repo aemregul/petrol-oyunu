@@ -93,7 +93,18 @@
       "Bash(cp __TRACKED_VAR__/f4.png screenshots/17-karsi-bina-rampali.png)",
       "Bash(cp __TRACKED_VAR__/c1.png screenshots/18-arsa-temizlendi.png)",
       "Bash(cp __TRACKED_VAR__/c2.png screenshots/19-yol-temizlendi.png)",
-      "Bash(node .r2.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/q1.png /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/q2.png /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/q3.png)"
+      "Bash(node .r2.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/q1.png /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/q2.png /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/q3.png)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/before.png 45)",
+      "Bash(node /Users/emre/petrol-oyunu/.shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/before.png 45)",
+      "Bash(sed -i '' 's/cameraTarget: \\\\[16, -14\\\\], cameraZoom: 6/cameraTarget: [6, -26], cameraZoom: 7/' .shot.mjs)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/before2.png 225)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/debug.png 225)",
+      "Bash(sips -c 400 600 --cropOffset 250 400 debug.png --out crop.png)",
+      "Bash(python3 -c \"import PIL; print\\(PIL.__version__\\)\")",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/after.png 225)",
+      "Bash(sips -c 400 600 --cropOffset 250 400 after.png --out after_crop.png)",
+      "Bash(npm test *)",
+      "Bash(pkill -f \"vite\")"
     ]
   }
 }
