@@ -12,6 +12,16 @@ interface VehicleModelProps {
 }
 
 /**
+ * Only the four road wheels turn. The kit names them
+ * `wheel-{front,back}-{left,right}`, while the spare bolted to the SUV's
+ * tailgate is a bare `wheel-back` — matching on the side suffix keeps that one
+ * still instead of spinning a tyre attached to the bodywork.
+ */
+function isRoadWheel(name: string): boolean {
+  return name.startsWith('wheel-') && (name.endsWith('-left') || name.endsWith('-right'));
+}
+
+/**
  * Renders one Kenney vehicle. The loaded scene is shared between every car of
  * the same archetype, so it is cloned per instance and its material cloned
  * alongside it — otherwise tinting one car would tint all of them.
@@ -26,7 +36,7 @@ export const VehicleModel: React.FC<VehicleModelProps> = ({ archetype, speed }) 
     const wheels: THREE.Object3D[] = [];
 
     clone.traverse((child) => {
-      if (child.name.startsWith('wheel')) wheels.push(child);
+      if (isRoadWheel(child.name)) wheels.push(child);
 
       if (!(child instanceof THREE.Mesh)) return;
       child.castShadow = true;
