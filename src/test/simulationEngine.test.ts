@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
 import {
   createEffects,
@@ -11,11 +11,38 @@ import {
   getEventModifiers,
   generateDailyMissions,
   trackMissionMetric,
-  queueSlotPosition
+  queueSlotPosition,
+  getLayout,
+  LAYOUT
 } from '../domain/services/simulationEngine';
 import { GAME_EVENTS } from '../config/eventConfig';
 import { GameState, VehicleState } from '../domain/types/gameState';
 import { GAME_CONFIG } from '../config/gameConfig';
+
+/**
+ * Vehicle spawning is a per-tick dice roll, so tests that wait for a car to
+ * appear would otherwise be flaky. Pinning Math.random to a fixed sequence
+ * makes every run identical without changing the code under test.
+ */
+function seedRandom(seed = 12345): () => void {
+  let value = seed;
+  const spy = vi.spyOn(Math, 'random').mockImplementation(() => {
+    value = (value * 1664525 + 1013904223) % 4294967296;
+    return value / 4294967296;
+  });
+  return () => spy.mockRestore();
+}
+
+let restoreRandom: (() => void) | null = null;
+
+beforeEach(() => {
+  restoreRandom = seedRandom();
+});
+
+afterEach(() => {
+  restoreRandom?.();
+  restoreRandom = null;
+});
 
 function advance(state: GameState, seconds: number, stepSeconds = 0.05): void {
   const effects = createEffects();
@@ -444,5 +471,61 @@ describe('simulationEngine - forecourt boundary', () => {
       expect(x).toBeLessThan(width);
       expect(z).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('simulationEngine - highway lanes and driveways', () => {
+  it('keeps the station carriageway put when the road is upgraded', () => {
+    const single = getLayout(createInitialGameState());
+    const dual = getLayout(createInitialGameState());
+
+    // Upgrading mirrors the road rather than widening it, so the lane the
+    // station's traffic uses must not move underneath it.
+    expect(single.roadLaneZ).toBe(LAYOUT.roadZ);
+    expect(dual.roadLaneZ).toBe(single.roadLaneZ);
+  });
+
+  it('separates the two carriageways with a landscaped median', () => {
+    const layout = getLayout(createInitialGameState());
+
+    // The opposite carriageway sits on the far side of the centre.
+    expect(layout.farRoadLaneZ).toBeLessThan(layout.roadLaneZ);
+
+    // Their inner kerbs are exactly a median apart.
+    const nearInner = layout.roadLaneZ - layout.roadHalfWidth;
+    const farInner = layout.farRoadLaneZ + layout.roadHalfWidth;
+    expect(nearInner - farInner).toBeCloseTo(LAYOUT.medianWidth, 5);
+  });
+
+  it('brings vehicles in at the entry and sends them out at the exit', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    const layout = getLayout(state);
+
+    // Entry is upstream of exit, so a car meets the entry mouth first.
+    expect(layout.entryX).toBeLessThan(layout.exitX);
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.state === 'ROAD_APPROACH'),
+      600
+    );
+    const arriving = Object.values(state.vehicles).find(
+      (v) => v.state === 'ROAD_APPROACH'
+    )!;
+
+    // It heads for the entry driveway, never the exit one.
+    expect(arriving.targetWaypoint?.[0]).toBe(layout.entryX);
+  });
+
+  it('spawns vehicles on the driving lane', () => {
+    const state = createInitialGameState();
+    state.station.roadLevel = 2;
+    state.dayState.timeSpeed = 4;
+
+    advanceUntil(state, (s) => Object.keys(s.vehicles).length > 0, 600);
+    const vehicle = Object.values(state.vehicles)[0];
+
+    expect(vehicle.worldPosition[2]).toBeCloseTo(getLayout(state).roadLaneZ, 3);
   });
 });

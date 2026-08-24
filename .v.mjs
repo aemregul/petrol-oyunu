@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+const errs=[];
+page.on('pageerror', e=>errs.push('PAGEERROR '+e.message));
+page.on('console', m=>m.type()==='error'&&errs.push('CONSOLE '+m.text().slice(0,150)));
+await page.goto('http://localhost:3001/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(5000);
+await page.evaluate(() => window.__store.setState({ cameraTarget: [10, 0], cameraZoom: 6 }));
+await page.waitForTimeout(7000);
+await page.screenshot({ path: process.argv[2] });
+console.log(errs.length ? 'HATA: '+[...new Set(errs)].slice(0,3).join(' | ') : 'konsol temiz');
+await browser.close();

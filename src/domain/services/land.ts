@@ -29,7 +29,7 @@ export function paveCost(row: number): number {
  * Negative rows sit across the road and only open once it is widened; row -1
  * is the strip nearest the far kerb.
  */
-export const FAR_SIDE_FRONT = -8;
+export const FAR_SIDE_FRONT = -14;
 
 /** Land cannot be bought beyond these limits, so the map stays bounded. */
 export const LAND_BOUNDS = { minCol: -2, maxCol: 5, minRow: -3, maxRow: 4 };

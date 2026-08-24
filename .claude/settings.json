@@ -82,7 +82,12 @@
       "Bash(git ls-tree *)",
       "Bash([ -f \"$MEM/MEMORY.md\" ])",
       "Bash(node .road.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/rd1.png /private/tmp/claude-501/-Users-emre-petrol-oyunu/f5fb086f-f94d-4a54-b74d-c5236867f03a/scratchpad/rd2.png)",
-      "Bash(cp __TRACKED_VAR__/rd2.png screenshots/11-yol-genisletme.png)"
+      "Bash(cp __TRACKED_VAR__/rd2.png screenshots/11-yol-genisletme.png)",
+      "Bash(cp __TRACKED_VAR__/v1.png screenshots/12-tek-serit.png)",
+      "Bash(cp __TRACKED_VAR__/v2.png screenshots/13-cift-serit.png)",
+      "Bash(cp __TRACKED_VAR__/s1.png screenshots/12-tek-serit.png)",
+      "Bash(cp __TRACKED_VAR__/s2.png screenshots/13-bolunmus-yol.png)",
+      "Bash(cp __TRACKED_VAR__/e1.png screenshots/14-rampa-kesik-cizgi.png)"
     ]
   }
 }

@@ -12,6 +12,8 @@ import {
   paveCost,
   PARCEL
 } from '../domain/services/land';
+import { getLayout } from '../domain/services/simulationEngine';
+import { createInitialGameState } from '../domain/types/initialState';
 
 describe('land parcels', () => {
   it('starts with a 2x2 block against the road', () => {
@@ -144,5 +146,16 @@ describe('land — the far side of the highway', () => {
   it('charges the frontage premium on both sides of the road', () => {
     expect(parcelPrice(STARTING_PARCELS, -1)).toBe(parcelPrice(STARTING_PARCELS, 0));
     expect(paveCost(-1)).toBe(paveCost(0));
+  });
+});
+
+describe('land — clearance from the second carriageway', () => {
+  it('places far-side parcels beyond the opposite carriageway', () => {
+    const layout = getLayout(createInitialGameState());
+    const far = parcelBounds(0, -1);
+
+    // The nearest far parcel must start past the far carriageway's outer kerb,
+    // otherwise concrete would be laid over the road.
+    expect(far.maxZ).toBeLessThanOrEqual(layout.farRoadLaneZ - layout.roadHalfWidth);
   });
 });

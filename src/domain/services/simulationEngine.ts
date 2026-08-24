@@ -126,10 +126,10 @@ export function releasePump(pump: PumpEntity): void {
 export const LAYOUT = {
   /** Highway centreline. The plot's front edge butts up against it. */
   roadZ: -3,
-  /** Half the carriageway width before the road is widened, in grid units. */
+  /** Half a carriageway, in grid units. One lane, one direction. */
   roadHalfWidth: 2.2,
-  /** Half-width once the road becomes a dual carriageway. */
-  roadHalfWidthWide: 3.4,
+  /** Landscaped central reservation between the two carriageways. */
+  medianWidth: 2.6,
   /** Where cars appear and disappear along the highway. */
   roadStartX: -12,
   /** Wide enough that a truck in the queue does not overlap the car behind. */
@@ -153,6 +153,12 @@ export interface PlotLayout {
   exitLaneZ: number;
   queueHeadX: number;
   roadEndX: number;
+  /** Half a carriageway, in grid units. */
+  roadHalfWidth: number;
+  /** Centre of the near carriageway — the one that serves this station. */
+  roadLaneZ: number;
+  /** Centre of the opposite carriageway; only built at road level 2. */
+  farRoadLaneZ: number;
 }
 
 export function getLayout(state: {
@@ -160,7 +166,17 @@ export function getLayout(state: {
 }): PlotLayout {
   const { width, height } = state.station.plots;
 
+  // Upgrading mirrors the existing carriageway across a landscaped median
+  // rather than widening it, so the near lane never moves and the station
+  // keeps its position relative to the road.
+  const roadHalfWidth = LAYOUT.roadHalfWidth;
+  const roadLaneZ = LAYOUT.roadZ;
+  const farRoadLaneZ = LAYOUT.roadZ - 2 * roadHalfWidth - LAYOUT.medianWidth;
+
   return {
+    roadHalfWidth,
+    roadLaneZ,
+    farRoadLaneZ,
     entryX: 3,
     exitX: Math.max(6, width - 3),
     // The circulation lane hugs the road; the return lane runs along the back.
@@ -219,7 +235,7 @@ export function queueSlotPosition(state: GameState, index: number): [number, num
 function approachRoute(state: GameState): Array<[number, number, number]> {
   const layout = getLayout(state);
   return [
-    [layout.entryX, 0, LAYOUT.roadZ],
+    [layout.entryX, 0, layout.roadLaneZ],
     [layout.entryX, 0, layout.laneZ]
   ];
 }
@@ -251,8 +267,8 @@ function exitRoute(
     clampToApron(state, [from.worldPosition[0], 0, layout.exitLaneZ]),
     clampToApron(state, [layout.exitX, 0, layout.exitLaneZ]),
     // Leaving the plot down the exit driveway and away along the highway.
-    [layout.exitX, 0, LAYOUT.roadZ],
-    [layout.roadEndX, 0, LAYOUT.roadZ]
+    [layout.exitX, 0, layout.roadLaneZ],
+    [layout.roadEndX, 0, layout.roadLaneZ]
   ];
 }
 
@@ -897,7 +913,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     state: 'SPAWN',
     targetPumpId: null,
     assignedActor: null,
-    worldPosition: [LAYOUT.roadStartX, 0, LAYOUT.roadZ],
+    worldPosition: [LAYOUT.roadStartX, 0, getLayout(state).roadLaneZ],
     targetWaypoint: null,
     route: [],
     heading: Math.PI / 2,

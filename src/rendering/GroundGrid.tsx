@@ -7,11 +7,7 @@ import { PARCEL, parseParcelKey, parcelBounds, isOwned } from '../domain/service
 const S = 2;
 
 const roadZ = LAYOUT.roadZ * S;
-
-/** The carriageway widens when the player pays to upgrade it. */
-function roadHalfWidthFor(roadLevel: number): number {
-  return (roadLevel >= 2 ? LAYOUT.roadHalfWidthWide : LAYOUT.roadHalfWidth) * S;
-}
+const roadHalfWidth = LAYOUT.roadHalfWidth * S;
 
 /** Kerbs are a trim detail, not a wall — keep them low and narrow. */
 const KERB = { width: 0.34, height: 0.16 };
@@ -23,8 +19,8 @@ const VERGE_DEPTH = 3.2;
 const DRIVEWAY_WIDTH = 6;
 
 /**
- * Splits a kerb run into the pieces that survive after the driveways cut
- * through it. Vehicles must never have to cross a raised kerb.
+ * Splits a kerb or edge-line run into the pieces that survive after the
+ * driveways cut through it. Vehicles must never have to cross a raised kerb.
  */
 function kerbSegments(from: number, to: number, gapCentres: number[]): Array<[number, number]> {
   const half = DRIVEWAY_WIDTH / 2;
@@ -45,41 +41,29 @@ function kerbSegments(from: number, to: number, gapCentres: number[]): Array<[nu
   return out.filter(([a, b]) => b - a > 0.4);
 }
 
-/** White dashed lane marking running the length of the carriageway. */
-const LaneDashes: React.FC<{ centreX: number; offset: number }> = ({ centreX, offset }) => {
-  const dashes = useMemo(() => Array.from({ length: 80 }, (_, i) => -240 + i * 6), []);
-
-  return (
-    <group position={[centreX, 0.02, roadZ + offset]}>
-      {dashes.map((x) => (
-        <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0, 0]}>
-          <planeGeometry args={[3.4, 0.24]} />
-          <meshBasicMaterial color="#e2e8f0" />
-        </mesh>
-      ))}
-    </group>
-  );
-};
-
 /**
- * Driveway joining the highway to the forecourt.
+ * Driveway joining a carriageway to a forecourt.
  *
- * The ramp stops at the verge instead of running onto the carriageway, and it
- * is only as wide as two cars so it does not eat into the buildable forecourt.
+ * The ramp stops at the kerb line instead of running onto the carriageway,
+ * and it is only as wide as two cars so it does not eat into the buildable
+ * forecourt.
  */
 const Driveway: React.FC<{
   x: number;
   apronFront: number;
   entering: boolean;
   halfWidth: number;
+  /** Centre of the carriageway this mouth joins. */
+  roadCentreZ: number;
   /** Far-side driveways leave from the opposite kerb. */
   far?: boolean;
-}> = ({ x, apronFront, entering, halfWidth, far = false }) => {
-  // Runs from the road kerb to the forecourt edge, exactly filling the gap
-  // left in both kerb lines.
-  const from = far ? apronFront : roadZ + halfWidth;
+}> = ({ x, apronFront, entering, halfWidth, roadCentreZ, far = false }) => {
+  // Near side sits at +z, far side at -z, so "entering" points opposite ways.
+  const travelsTowardPositiveZ = far ? !entering : entering;
+
+  const from = far ? apronFront : roadCentreZ + halfWidth;
   const depth = far
-    ? Math.max(0.4, roadZ - halfWidth - apronFront)
+    ? Math.max(0.4, roadCentreZ - halfWidth - apronFront)
     : Math.max(0.4, apronFront - from);
   const midZ = far ? apronFront + depth / 2 : from + depth / 2;
 
@@ -90,8 +74,13 @@ const Driveway: React.FC<{
         <meshStandardMaterial color="#2b3340" roughness={0.8} />
       </mesh>
 
-      {/* Painted arrow, sized from the mouth so it never runs off the tarmac */}
-      <group position={[0, 0.034, midZ]} rotation={[-Math.PI / 2, 0, entering ? 0 : Math.PI]}>
+      {/* Painted arrow, sized from the mouth so it never runs off the tarmac.
+          The group's local +y points to world -z once it is laid flat, so a
+          ramp whose traffic runs toward +z needs the extra half turn. */}
+      <group
+        position={[0, 0.034, midZ]}
+        rotation={[-Math.PI / 2, 0, travelsTowardPositiveZ ? Math.PI : 0]}
+      >
         {(() => {
           // Fit the arrow inside the shorter of the two dimensions.
           const total = Math.min(depth * 0.78, DRIVEWAY_WIDTH * 0.5);
@@ -114,6 +103,142 @@ const Driveway: React.FC<{
           );
         })()}
       </group>
+    </group>
+  );
+};
+
+/**
+ * One one-way carriageway: asphalt, a solid white line along each edge and a
+ * dashed yellow line down the middle of the lane. Upgrading the road mirrors
+ * this same piece across a landscaped median rather than widening it.
+ */
+const Carriageway: React.FC<{
+  centreX: number;
+  centreZ: number;
+  /** World x of each driveway that meets this carriageway. */
+  driveways: number[];
+  /**
+   * Which edge those driveways are on: +1 for the +z side, -1 for -z. That
+   * edge is broken into dashes where a mouth crosses it, the way a real road
+   * marks a place traffic may leave the carriageway.
+   */
+  drivewaySide: 1 | -1;
+}> = ({ centreX, centreZ, driveways, drivewaySide }) => {
+  const laneDashes = useMemo(
+    () => Array.from({ length: 90 }, (_, i) => -260 + i * 6),
+    []
+  );
+
+  const from = centreX - 300;
+  const to = centreX + 300;
+
+  /** Short dashes filling one driveway mouth. */
+  const crossingDashes = (centre: number) => {
+    const half = DRIVEWAY_WIDTH / 2;
+    const step = 1.6;
+    const out: number[] = [];
+    for (let x = centre - half + step / 2; x < centre + half; x += step) out.push(x);
+    return out;
+  };
+
+  return (
+    <group position={[centreX, 0, centreZ]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[600, roadHalfWidth * 2]} />
+        <meshStandardMaterial color="#2b3340" roughness={0.8} />
+      </mesh>
+
+      {/* Edge lines. Solid all the way along, except across a mouth. */}
+      {([1, -1] as const).map((side) => {
+        const z = side * (roadHalfWidth - 0.5);
+        const isCrossed = side === drivewaySide;
+
+        if (!isCrossed) {
+          return (
+            <mesh
+              key={`edge${side}`}
+              rotation={[-Math.PI / 2, 0, 0]}
+              position={[0, 0.02, z]}
+            >
+              <planeGeometry args={[600, 0.22]} />
+              <meshBasicMaterial color="#e8edf3" />
+            </mesh>
+          );
+        }
+
+        return (
+          <group key={`edge${side}`}>
+            {kerbSegments(from, to, driveways).map(([a, b]) => (
+              <mesh
+                key={`solid${a}`}
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[(a + b) / 2 - centreX, 0.02, z]}
+              >
+                <planeGeometry args={[b - a, 0.22]} />
+                <meshBasicMaterial color="#e8edf3" />
+              </mesh>
+            ))}
+
+            {driveways.flatMap((centre) =>
+              crossingDashes(centre).map((x) => (
+                <mesh
+                  key={`cross${centre}_${x}`}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[x - centreX, 0.02, z]}
+                >
+                  <planeGeometry args={[0.85, 0.22]} />
+                  <meshBasicMaterial color="#e8edf3" />
+                </mesh>
+              ))
+            )}
+          </group>
+        );
+      })}
+
+      {/* Dashed yellow line down the middle of the lane */}
+      {laneDashes.map((x) => (
+        <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.02, 0]}>
+          <planeGeometry args={[3.2, 0.24]} />
+          <meshBasicMaterial color="#e0b114" />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+/** Shrubs and saplings down the central reservation. */
+const MedianPlanting: React.FC<{ centreX: number; centreZ: number }> = ({
+  centreX,
+  centreZ
+}) => {
+  const plants = useMemo(
+    () => Array.from({ length: 34 }, (_, i) => -240 + i * 15),
+    []
+  );
+
+  return (
+    <group position={[centreX, 0, centreZ]}>
+      {plants.map((x, i) => (
+        <group key={x} position={[x, 0, i % 2 === 0 ? -0.7 : 0.7]}>
+          {i % 3 === 0 ? (
+            <>
+              <mesh position={[0, 0.7, 0]} castShadow>
+                <cylinderGeometry args={[0.12, 0.16, 1.4, 6]} />
+                <meshStandardMaterial color="#5b4534" roughness={1} />
+              </mesh>
+              <mesh position={[0, 1.9, 0]} castShadow>
+                <icosahedronGeometry args={[0.95, 0]} />
+                <meshStandardMaterial color="#41802f" roughness={0.95} flatShading />
+              </mesh>
+            </>
+          ) : (
+            <mesh position={[0, 0.45, 0]} castShadow>
+              <icosahedronGeometry args={[0.7, 0]} />
+              <meshStandardMaterial color="#4d8f3c" roughness={1} flatShading />
+            </mesh>
+          )}
+        </group>
+      ))}
     </group>
   );
 };
@@ -185,13 +310,20 @@ export const GroundGrid: React.FC = () => {
   const weather = useGameStore((s) => s.gameState.dayState.weather);
   const cleanliness = useGameStore((s) => s.gameState.station.cleanliness);
   const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+  const buildings = useGameStore((s) => s.gameState.buildings);
+  const pumps = useGameStore((s) => s.gameState.pumps);
 
-  const roadHalfWidth = roadHalfWidthFor(roadLevel);
   const isDualCarriageway = roadLevel >= 2;
 
   // Derived from the plot rather than selected: returning a fresh object from
   // a zustand selector would re-render on every store write.
   const layout = useMemo(() => getLayout({ station: { plots } }), [plots]);
+
+  const farRoadZ = layout.farRoadLaneZ * S;
+
+  // A mouth only exists where a ramp is actually drawn, so the kerb and the
+  // edge line are cut in exactly the same places and nowhere else.
+  const nearDriveways = [layout.entryX * S, layout.exitX * S];
 
   const plotWidth = plots.width * S;
   const plotDepth = plots.height * S;
@@ -205,8 +337,20 @@ export const GroundGrid: React.FC = () => {
   const unpaved = plots.ownedParcels.filter((key) => !plots.pavedParcels.includes(key));
 
   // Mirror of apronFront for land across the highway.
-  const farApronFront = roadZ - roadHalfWidth - VERGE_DEPTH;
-  const hasFarSideLand = plots.ownedParcels.some((key) => parseParcelKey(key).row < 0);
+  const farApronFront = farRoadZ - roadHalfWidth - VERGE_DEPTH;
+  /**
+   * Far-side mouths only appear once something is actually built over there.
+   * Bare or freshly paved land needs no access road yet.
+   */
+  const hasFarSideBuilding = useMemo(() => {
+    const onFarSide = (position: [number, number]) => position[1] < 0;
+    return (
+      Object.values(buildings).some((b) => onFarSide(b.position)) ||
+      Object.values(pumps).some((p) => onFarSide(p.position))
+    );
+  }, [buildings, pumps]);
+
+  const farDriveways = hasFarSideBuilding ? nearDriveways : [];
 
   /**
    * World-space z span of a parcel, held clear of the carriageway. Near-side
@@ -229,42 +373,56 @@ export const GroundGrid: React.FC = () => {
         <meshStandardMaterial color="#3f5a2c" roughness={0.95} />
       </mesh>
 
-      {/* Carriageway */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[plotWidth / 2, 0, roadZ]} receiveShadow>
-        <planeGeometry args={[600, roadHalfWidth * 2]} />
-        <meshStandardMaterial color="#2b3340" roughness={0.8} />
-      </mesh>
+      {/* The carriageway that serves this station */}
+      <Carriageway
+        centreX={plotWidth / 2}
+        centreZ={roadZ}
+        driveways={nearDriveways}
+        drivewaySide={1}
+      />
 
-      {/* A single lane needs no centre line; a dual carriageway gets one. */}
-      {isDualCarriageway &&
-        [-0.32, 0.32].map((offset) => (
+      {/* Its mirror image, added when the road is upgraded */}
+      {isDualCarriageway && (
+        <>
+          <Carriageway
+            centreX={plotWidth / 2}
+            centreZ={farRoadZ}
+            driveways={farDriveways}
+            drivewaySide={-1}
+          />
+
+          {/* Landscaped central reservation between the two */}
           <mesh
-            key={`centre${offset}`}
             rotation={[-Math.PI / 2, 0, 0]}
-            position={[plotWidth / 2, 0.02, roadZ + offset]}
+            position={[plotWidth / 2, 0.01, (roadZ + farRoadZ) / 2]}
+            receiveShadow
           >
-            <planeGeometry args={[600, 0.24]} />
-            <meshBasicMaterial color="#e0b114" />
+            <planeGeometry args={[600, LAYOUT.medianWidth * S]} />
+            <meshStandardMaterial color="#3f5a2c" roughness={0.95} />
           </mesh>
-        ))}
+          <MedianPlanting
+            centreX={plotWidth / 2}
+            centreZ={(roadZ + farRoadZ) / 2}
+          />
+        </>
+      )}
 
-      {/* Dashed white lane lines */}
-      {(isDualCarriageway
-        ? [-roadHalfWidth * 0.58, roadHalfWidth * 0.58]
-        : [-roadHalfWidth + 0.9, roadHalfWidth - 0.9]
-      ).map((offset) => (
-        <LaneDashes key={`dash${offset}`} centreX={plotWidth / 2} offset={offset} />
-      ))}
-
-      {/* Pale shoulder kerb, fully open where each driveway crosses it */}
-      {[-roadHalfWidth, roadHalfWidth].map((offset) =>
-        kerbSegments(plotWidth / 2 - 300, plotWidth / 2 + 300, [
-          layout.entryX * S,
-          layout.exitX * S
-        ]).map(([a, b]) => (
+      {/* Shoulder kerb. Only the edge a driveway actually meets is broken —
+          the other side stays continuous, so no phantom mouths appear. */}
+      {[
+        { z: roadZ, offset: roadHalfWidth, gaps: nearDriveways },
+        { z: roadZ, offset: -roadHalfWidth, gaps: [] as number[] },
+        ...(isDualCarriageway
+          ? [
+              { z: farRoadZ, offset: -roadHalfWidth, gaps: farDriveways },
+              { z: farRoadZ, offset: roadHalfWidth, gaps: [] as number[] }
+            ]
+          : [])
+      ].map(({ z, offset, gaps }) =>
+        kerbSegments(plotWidth / 2 - 300, plotWidth / 2 + 300, gaps).map(([a, b]) => (
           <mesh
-            key={`sh${offset}_${a}`}
-            position={[(a + b) / 2, 0.08, roadZ + offset]}
+            key={`sh${z}_${offset}_${a}`}
+            position={[(a + b) / 2, 0.08, z + offset]}
             receiveShadow
           >
             <boxGeometry args={[b - a, 0.16, 0.6]} />
@@ -345,7 +503,7 @@ export const GroundGrid: React.FC = () => {
         const neighbourTowardRoad = row < 0 ? `${col},${row + 1}` : `${col},${row - 1}`;
         const roadEdgePieces = plots.pavedParcels.includes(neighbourTowardRoad)
           ? []
-          : kerbSegments(left, right, [layout.entryX * S, layout.exitX * S]);
+          : kerbSegments(left, right, row < 0 ? farDriveways : nearDriveways);
 
         return (
           <group key={`kerb_${key}`}>
@@ -377,22 +535,25 @@ export const GroundGrid: React.FC = () => {
         x={layout.entryX * S}
         apronFront={apronFront}
         halfWidth={roadHalfWidth}
+        roadCentreZ={roadZ}
         entering
       />
       <Driveway
         x={layout.exitX * S}
         apronFront={apronFront}
         halfWidth={roadHalfWidth}
+        roadCentreZ={roadZ}
         entering={false}
       />
 
       {/* Once the far side is developed it needs its own mouths */}
-      {hasFarSideLand && (
+      {hasFarSideBuilding && (
         <>
           <Driveway
             x={layout.entryX * S}
             apronFront={farApronFront}
             halfWidth={roadHalfWidth}
+            roadCentreZ={farRoadZ}
             entering={false}
             far
           />
@@ -400,6 +561,7 @@ export const GroundGrid: React.FC = () => {
             x={layout.exitX * S}
             apronFront={farApronFront}
             halfWidth={roadHalfWidth}
+            roadCentreZ={farRoadZ}
             entering
             far
           />
