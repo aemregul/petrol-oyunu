@@ -159,3 +159,23 @@ describe('land — clearance from the second carriageway', () => {
     expect(far.maxZ).toBeLessThanOrEqual(layout.farRoadLaneZ - layout.roadHalfWidth);
   });
 });
+
+describe('land — bounds drive the build area', () => {
+  it('reports negative bounds once land across the road is owned', () => {
+    const near = ownedBounds(STARTING_PARCELS);
+    expect(near.minX).toBe(0);
+    expect(near.minZ).toBe(0);
+
+    // The build overlay and the placement clamp both read these bounds, so a
+    // far-side parcel has to push minZ negative or that land stays unreachable.
+    const withFarSide = ownedBounds([...STARTING_PARCELS, '0,-1']);
+    expect(withFarSide.minZ).toBeLessThan(0);
+    expect(withFarSide.minZ).toBe(parcelBounds(0, -1).minZ);
+  });
+
+  it('reports negative bounds for columns left of the origin', () => {
+    const bounds = ownedBounds([...STARTING_PARCELS, '-1,0']);
+    expect(bounds.minX).toBe(parcelBounds(-1, 0).minX);
+    expect(bounds.minX).toBeLessThan(0);
+  });
+});

@@ -568,18 +568,28 @@ export const GroundGrid: React.FC = () => {
         </>
       )}
 
-      {/* Build grid overlay */}
-      {buildMode && (
-        <gridHelper
-          args={[
-            Math.max(plotWidth, plotDepth),
-            Math.max(plots.width, plots.height),
-            '#38bdf8',
-            '#0ea5e9'
-          ]}
-          position={[plotWidth / 2, 0.09, plotDepth / 2]}
-        />
-      )}
+      {/* Build grid, drawn per owned parcel so it follows the land the player
+          actually holds — including the block across the road — instead of one
+          square anchored at the origin. */}
+      {buildMode &&
+        plots.pavedParcels.map((key) => {
+          const { col, row } = parseParcelKey(key);
+          const b = parcelBounds(col, row);
+          const [front, back] = parcelSpan(b);
+
+          return (
+            <gridHelper
+              key={`grid_${key}`}
+              args={[PARCEL.width * S, PARCEL.width, '#38bdf8', '#0ea5e9']}
+              position={[
+                ((b.minX + b.maxX) / 2) * S,
+                0.09,
+                (front + back) / 2
+              ]}
+              scale={[1, 1, (back - front) / (PARCEL.width * S)]}
+            />
+          );
+        })}
     </group>
   );
 };

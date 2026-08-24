@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { ownedBounds } from '../domain/services/land';
 
 export interface PointerState {
   /** A button is currently held, so the camera may be being panned. */
@@ -28,12 +29,19 @@ export const BuildPlacementPlane: React.FC<BuildPlacementPlaneProps> = ({ pointe
   const setBuildPreviewPos = useGameStore((s) => s.setBuildPreviewPos);
   const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
 
+  // The clamp has to follow every parcel the player owns, including columns
+  // left of the origin and the rows across the road, which sit at negative
+  // coordinates. Clamping to [0, width] made that land unreachable.
+  const bounds = useMemo(
+    () => ownedBounds(plots.ownedParcels),
+    [plots.ownedParcels]
+  );
+
   if (!buildMode.active) return null;
 
-  // Snap to whole grid cells, clamped to the plot the player actually owns.
   const toGrid = (point: THREE.Vector3): [number, number] => [
-    Math.max(0, Math.min(plots.width, Math.round(point.x / 2))),
-    Math.max(0, Math.min(plots.height, Math.round(point.z / 2)))
+    Math.max(bounds.minX, Math.min(bounds.width, Math.round(point.x / 2))),
+    Math.max(bounds.minZ, Math.min(bounds.height, Math.round(point.z / 2)))
   ];
 
   const handleMove = (e: ThreeEvent<PointerEvent>) => {
@@ -54,12 +62,16 @@ export const BuildPlacementPlane: React.FC<BuildPlacementPlaneProps> = ({ pointe
   return (
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[plots.width, 0.04, plots.height]}
+      position={[
+        ((bounds.minX + bounds.width) / 2) * 2,
+        0.04,
+        ((bounds.minZ + bounds.height) / 2) * 2
+      ]}
       onPointerMove={handleMove}
       onClick={handleClick}
     >
       {/* Generous overhang so the pointer still registers past the kerb. */}
-      <planeGeometry args={[plots.width * 4, plots.height * 4]} />
+      <planeGeometry args={[(bounds.width - bounds.minX) * 6, (bounds.height - bounds.minZ) * 6]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     </mesh>
   );
