@@ -308,7 +308,7 @@ export interface GameNotification {
 }
 
 export interface GameState {
-  schemaVersion: 4;
+  schemaVersion: 5;
   saveId: string;
   createdAt: number;
   updatedAt: number;
@@ -328,6 +328,11 @@ export interface GameState {
       pavedParcels: string[];
     };
     managerId: string | null;
+    /**
+     * 1 = single one-way lane, only the near side is developable.
+     * 2 = dual carriageway; the land across the road opens up.
+     */
+    roadLevel: 1 | 2;
   };
   tanks: Record<FuelType, FuelTankEntity>;
   pricing: Record<FuelType, FuelPricingState>;

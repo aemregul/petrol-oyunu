@@ -107,3 +107,42 @@ describe('land parcels', () => {
     expect(paveCost(0)).toBeLessThan(parcelPrice(STARTING_PARCELS, 0) / 2);
   });
 });
+
+describe('land — the far side of the highway', () => {
+  it('keeps the far side shut until the road is widened', () => {
+    // Straight across the road from an owned parcel.
+    expect(isBuyable(STARTING_PARCELS, 0, -1, 1)).toBe(false);
+    expect(isBuyable(STARTING_PARCELS, 0, -1, 2)).toBe(true);
+  });
+
+  it('only lets you cross where you already hold the near side', () => {
+    // Column 4 is nowhere near the starting block.
+    expect(isBuyable(STARTING_PARCELS, 4, -1, 2)).toBe(false);
+  });
+
+  it('extends an existing far-side holding away from the road', () => {
+    const owned = [...STARTING_PARCELS, '0,-1'];
+    expect(isBuyable(owned, 0, -2, 2)).toBe(true);
+    expect(isBuyable(owned, 1, -1, 2)).toBe(true);
+  });
+
+  it('places far-side parcels clear of the carriageway', () => {
+    const far = parcelBounds(0, -1);
+    const near = parcelBounds(0, 0);
+
+    // The far parcel sits entirely on the negative side, with the road between.
+    expect(far.maxZ).toBeLessThan(near.minZ);
+    expect(far.maxZ - far.minZ).toBe(PARCEL.depth);
+  });
+
+  it('maps a point across the road back to its far-side parcel', () => {
+    const b = parcelBounds(1, -1);
+    const mid = (b.minZ + b.maxZ) / 2;
+    expect(parcelAt(b.minX + 1, mid)).toEqual({ col: 1, row: -1 });
+  });
+
+  it('charges the frontage premium on both sides of the road', () => {
+    expect(parcelPrice(STARTING_PARCELS, -1)).toBe(parcelPrice(STARTING_PARCELS, 0));
+    expect(paveCost(-1)).toBe(paveCost(0));
+  });
+});

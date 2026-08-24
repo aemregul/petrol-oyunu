@@ -51,6 +51,7 @@ export const HUD: React.FC = () => {
   const landMode = useGameStore((s) => s.landMode);
   const enterLandMode = useGameStore((s) => s.enterLandMode);
   const exitLandMode = useGameStore((s) => s.exitLandMode);
+  const upgradeRoad = useGameStore((s) => s.upgradeRoad);
   const lastUndoTimer = useGameStore((s) => s.lastUndoTimer);
 
   const { player, dayState, tanks } = gameState;
@@ -238,6 +239,18 @@ export const HUD: React.FC = () => {
                 Komşu bir parselin üstüne gelip tıklayın
               </div>
             </div>
+            {gameState.station.roadLevel < 2 && (
+              <button
+                onClick={upgradeRoad}
+                className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex flex-col items-start leading-tight"
+                title={`Seviye ${GAME_CONFIG.roadUpgrade.minLevel}, ${GAME_CONFIG.roadUpgrade.minReputation.toFixed(2)} itibar gerekir`}
+              >
+                <span>Yolu Genişlet — ₺{GAME_CONFIG.roadUpgrade.price.toLocaleString('tr-TR')}</span>
+                <span className="text-[10px] font-semibold text-amber-100/80">
+                  Çift şerit + yolun karşısı açılır
+                </span>
+              </button>
+            )}
             <button
               onClick={exitLandMode}
               className="bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold px-3 py-2 rounded-xl"

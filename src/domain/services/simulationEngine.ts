@@ -126,8 +126,10 @@ export function releasePump(pump: PumpEntity): void {
 export const LAYOUT = {
   /** Highway centreline. The plot's front edge butts up against it. */
   roadZ: -3,
-  /** Half the carriageway width, in grid units: one lane each way. */
-  roadHalfWidth: 3.2,
+  /** Half the carriageway width before the road is widened, in grid units. */
+  roadHalfWidth: 2.2,
+  /** Half-width once the road becomes a dual carriageway. */
+  roadHalfWidthWide: 3.4,
   /** Where cars appear and disappear along the highway. */
   roadStartX: -12,
   /** Wide enough that a truck in the queue does not overlap the car behind. */

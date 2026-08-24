@@ -151,6 +151,8 @@ interface GameStore {
   hoverParcel: (col: number, row: number) => void;
   buyHoveredParcel: () => boolean;
   paveHoveredParcel: () => boolean;
+  /** Widens the highway to a dual carriageway and opens the far side. */
+  upgradeRoad: () => boolean;
   upgradePump: (pumpId: string) => boolean;
   repairPump: (pumpId: string) => boolean;
   cleanStation: () => boolean;
@@ -556,11 +558,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   hoverParcel: (col, row) => {
     set((state) => {
       const owned = state.gameState.station.plots.ownedParcels;
-      const buyable = isBuyable(owned, col, row);
+      const buyable = isBuyable(owned, col, row, state.gameState.station.roadLevel);
       const price = buyable ? parcelPrice(owned, row) : 0;
-
-      const previous = state.landMode.hovered;
-      if (previous && previous.col === col && previous.row === row) return state;
 
       // An owned but unpaved parcel offers paving rather than a purchase.
       const paved = state.gameState.station.plots.pavedParcels;
@@ -571,14 +570,29 @@ export const useGameStore = create<GameStore>((set, get) => {
         : buyable
           ? 'BUY'
           : 'NONE';
+      const canBuy = action !== 'NONE' && state.gameState.player.cash >= cost;
+
+      // Bail out only when nothing at all would change. Comparing the parcel
+      // alone would keep a stale offer on screen after the road is widened or
+      // the cash balance moves.
+      const before = state.landMode;
+      if (
+        before.hovered?.col === col &&
+        before.hovered?.row === row &&
+        before.action === action &&
+        before.price === cost &&
+        before.canBuy === canBuy
+      ) {
+        return state;
+      }
 
       return {
         landMode: {
-          active: state.landMode.active,
+          active: before.active,
           hovered: { col, row },
           action,
           price: cost,
-          canBuy: action !== 'NONE' && state.gameState.player.cash >= cost
+          canBuy
         }
       };
     });
@@ -591,11 +605,14 @@ export const useGameStore = create<GameStore>((set, get) => {
     const { col, row } = landMode.hovered;
     const owned = gameState.station.plots.ownedParcels;
 
-    if (!isBuyable(owned, col, row)) {
+    if (!isBuyable(owned, col, row, gameState.station.roadLevel)) {
       get().addNotification({
         type: 'WARNING',
         title: 'Bu Arsa Alınamaz',
-        message: 'Yalnızca sahip olduğunuz araziye komşu parseller satın alınabilir.'
+        message:
+          gameState.station.roadLevel < 2 && row < 0
+            ? 'Yolun karşısı ancak yol çift şeride çıkarıldıktan sonra açılır.'
+            : 'Yalnızca sahip olduğunuz araziye komşu parseller satın alınabilir.'
       });
       return false;
     }
@@ -676,6 +693,55 @@ export const useGameStore = create<GameStore>((set, get) => {
       type: 'INFO',
       title: 'Beton Döküldü',
       message: 'Parsel artık inşaata hazır.'
+    });
+    return true;
+  },
+
+  upgradeRoad: () => {
+    const { gameState } = get();
+    const conf = GAME_CONFIG.roadUpgrade;
+
+    if (gameState.station.roadLevel >= 2) return false;
+
+    if (
+      gameState.player.level < conf.minLevel ||
+      gameState.player.reputation < conf.minReputation
+    ) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Şartlar Sağlanmadı',
+        message: `Yol genişletmesi için Seviye ${conf.minLevel} ve ${conf.minReputation.toFixed(2)} itibar gerekiyor.`
+      });
+      return false;
+    }
+
+    if (gameState.player.cash < conf.price) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `Yol genişletmesi ${conf.price.toLocaleString('tr-TR')} TL tutuyor.`
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const tx = TransactionService.executeCashTransaction(state, {
+      type: 'BUILD',
+      amount: -conf.price,
+      description: 'Karayolu genişletme çalışması'
+    });
+    if (!tx.success) return false;
+
+    state.station.roadLevel = 2;
+
+    sounds.playLevelUp();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+
+    get().addNotification({
+      type: 'REWARD',
+      title: 'Yol Çift Şeride Çıktı!',
+      message: 'Karayolu iki yönlü oldu. Yolun karşısındaki parseller artık satın alınabilir.'
     });
     return true;
   },

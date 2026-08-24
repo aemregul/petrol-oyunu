@@ -136,6 +136,12 @@ export interface GameConfig {
     overdraftLimit: number; // -5000 TL
     defaultAutonomyBudgetReserve: number; // 8000 TL
   };
+  /** What it takes to turn the single lane into a dual carriageway. */
+  roadUpgrade: {
+    price: number;
+    minLevel: number;
+    minReputation: number;
+  };
   grid: {
     initialWidth: number;
     initialHeight: number;
@@ -830,6 +836,11 @@ export const GAME_CONFIG: GameConfig = {
     tankerCancelRefundRatio: 0.85,
     overdraftLimit: -5000,
     defaultAutonomyBudgetReserve: 8000
+  },
+  roadUpgrade: {
+    price: 250000,
+    minLevel: 8,
+    minReputation: 4.0
   },
   grid: {
     initialWidth: 16,

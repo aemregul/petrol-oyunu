@@ -30,6 +30,7 @@ export const LandParcelLayer: React.FC<LandParcelLayerProps> = ({ pointerState }
   const landMode = useGameStore((s) => s.landMode);
   const owned = useGameStore((s) => s.gameState.station.plots.ownedParcels);
   const paved = useGameStore((s) => s.gameState.station.plots.pavedParcels);
+  const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
   const hoverParcel = useGameStore((s) => s.hoverParcel);
   const buyHoveredParcel = useGameStore((s) => s.buyHoveredParcel);
   const paveHoveredParcel = useGameStore((s) => s.paveHoveredParcel);
@@ -46,7 +47,7 @@ export const LandParcelLayer: React.FC<LandParcelLayerProps> = ({ pointerState }
   if (!landMode.active) return null;
 
   // Two kinds of offer: unowned neighbours to buy, and owned land to pave.
-  const forSale = buyableParcels(owned);
+  const forSale = buyableParcels(owned, roadLevel);
   const toPave = owned
     .filter((key) => !paved.includes(key))
     .map((key) => parseParcelKey(key));

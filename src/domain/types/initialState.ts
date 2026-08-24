@@ -6,7 +6,7 @@ export function createInitialGameState(): GameState {
   const now = Date.now();
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     saveId: 'save_' + Math.random().toString(36).substring(2, 9),
     createdAt: now,
     updatedAt: now,
@@ -40,7 +40,8 @@ export function createInitialGameState(): GameState {
         // The starting block comes ready to trade on.
         pavedParcels: [...STARTING_PARCELS]
       },
-      managerId: null
+      managerId: null,
+      roadLevel: 1
     },
     tanks: {
       gasoline: {

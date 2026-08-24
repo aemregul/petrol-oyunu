@@ -7,7 +7,11 @@ import { PARCEL, parseParcelKey, parcelBounds, isOwned } from '../domain/service
 const S = 2;
 
 const roadZ = LAYOUT.roadZ * S;
-const roadHalfWidth = LAYOUT.roadHalfWidth * S;
+
+/** The carriageway widens when the player pays to upgrade it. */
+function roadHalfWidthFor(roadLevel: number): number {
+  return (roadLevel >= 2 ? LAYOUT.roadHalfWidthWide : LAYOUT.roadHalfWidth) * S;
+}
 
 /** Kerbs are a trim detail, not a wall — keep them low and narrow. */
 const KERB = { width: 0.34, height: 0.16 };
@@ -63,16 +67,21 @@ const LaneDashes: React.FC<{ centreX: number; offset: number }> = ({ centreX, of
  * The ramp stops at the verge instead of running onto the carriageway, and it
  * is only as wide as two cars so it does not eat into the buildable forecourt.
  */
-const Driveway: React.FC<{ x: number; apronFront: number; entering: boolean }> = ({
-  x,
-  apronFront,
-  entering
-}) => {
+const Driveway: React.FC<{
+  x: number;
+  apronFront: number;
+  entering: boolean;
+  halfWidth: number;
+  /** Far-side driveways leave from the opposite kerb. */
+  far?: boolean;
+}> = ({ x, apronFront, entering, halfWidth, far = false }) => {
   // Runs from the road kerb to the forecourt edge, exactly filling the gap
   // left in both kerb lines.
-  const from = roadZ + roadHalfWidth;
-  const depth = Math.max(0.4, apronFront - from);
-  const midZ = from + depth / 2;
+  const from = far ? apronFront : roadZ + halfWidth;
+  const depth = far
+    ? Math.max(0.4, roadZ - halfWidth - apronFront)
+    : Math.max(0.4, apronFront - from);
+  const midZ = far ? apronFront + depth / 2 : from + depth / 2;
 
   return (
     <group position={[x, 0, 0]}>
@@ -175,6 +184,10 @@ export const GroundGrid: React.FC = () => {
   const buildMode = useGameStore((s) => s.buildMode.active);
   const weather = useGameStore((s) => s.gameState.dayState.weather);
   const cleanliness = useGameStore((s) => s.gameState.station.cleanliness);
+  const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+
+  const roadHalfWidth = roadHalfWidthFor(roadLevel);
+  const isDualCarriageway = roadLevel >= 2;
 
   // Derived from the plot rather than selected: returning a fresh object from
   // a zustand selector would re-render on every store write.
@@ -191,8 +204,18 @@ export const GroundGrid: React.FC = () => {
 
   const unpaved = plots.ownedParcels.filter((key) => !plots.pavedParcels.includes(key));
 
-  /** Front edge of a parcel row, pushed clear of the road for row 0. */
-  const parcelFront = (minZ: number) => Math.max(minZ * S, apronFront);
+  // Mirror of apronFront for land across the highway.
+  const farApronFront = roadZ - roadHalfWidth - VERGE_DEPTH;
+  const hasFarSideLand = plots.ownedParcels.some((key) => parseParcelKey(key).row < 0);
+
+  /**
+   * World-space z span of a parcel, held clear of the carriageway. Near-side
+   * parcels are trimmed at their front edge, far-side ones at their back.
+   */
+  const parcelSpan = (b: { minZ: number; maxZ: number }): [number, number] =>
+    b.minZ >= 0
+      ? [Math.max(b.minZ * S, apronFront), b.maxZ * S]
+      : [b.minZ * S, Math.min(b.maxZ * S, farApronFront)];
 
   return (
     <group>
@@ -212,20 +235,24 @@ export const GroundGrid: React.FC = () => {
         <meshStandardMaterial color="#2b3340" roughness={0.8} />
       </mesh>
 
-      {/* Double yellow line separating the two directions */}
-      {[-0.32, 0.32].map((offset) => (
-        <mesh
-          key={`centre${offset}`}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[plotWidth / 2, 0.02, roadZ + offset]}
-        >
-          <planeGeometry args={[600, 0.24]} />
-          <meshBasicMaterial color="#e0b114" />
-        </mesh>
-      ))}
+      {/* A single lane needs no centre line; a dual carriageway gets one. */}
+      {isDualCarriageway &&
+        [-0.32, 0.32].map((offset) => (
+          <mesh
+            key={`centre${offset}`}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[plotWidth / 2, 0.02, roadZ + offset]}
+          >
+            <planeGeometry args={[600, 0.24]} />
+            <meshBasicMaterial color="#e0b114" />
+          </mesh>
+        ))}
 
-      {/* Dashed white lane line on each side of the centre */}
-      {[-roadHalfWidth * 0.56, roadHalfWidth * 0.56].map((offset) => (
+      {/* Dashed white lane lines */}
+      {(isDualCarriageway
+        ? [-roadHalfWidth * 0.58, roadHalfWidth * 0.58]
+        : [-roadHalfWidth + 0.9, roadHalfWidth - 0.9]
+      ).map((offset) => (
         <LaneDashes key={`dash${offset}`} centreX={plotWidth / 2} offset={offset} />
       ))}
 
@@ -252,8 +279,7 @@ export const GroundGrid: React.FC = () => {
         if (!isOwned(plots.ownedParcels, col, row)) return null;
 
         const b = parcelBounds(col, row);
-        const front = parcelFront(b.minZ);
-        const back = b.maxZ * S;
+        const [front, back] = parcelSpan(b);
 
         return (
           <mesh
@@ -282,8 +308,7 @@ export const GroundGrid: React.FC = () => {
       {plots.pavedParcels.map((key) => {
         const { col, row } = parseParcelKey(key);
         const b = parcelBounds(col, row);
-        const front = parcelFront(b.minZ);
-        const back = b.maxZ * S;
+        const [front, back] = parcelSpan(b);
         const left = b.minX * S;
         const right = b.maxX * S;
 
@@ -292,14 +317,14 @@ export const GroundGrid: React.FC = () => {
           pos: [number, number, number];
           size: [number, number, number];
         }> = [
-          // Front edge is emitted separately below so it can be cut open.
+          // The road-facing edge is emitted separately below so it can open.
           {
-            show: false,
+            show: row < 0 && !plots.pavedParcels.includes(`${col},${row - 1}`),
             pos: [(left + right) / 2, KERB.height / 2, front],
             size: [right - left, KERB.height, KERB.width]
           },
           {
-            show: !plots.pavedParcels.includes(`${col},${row + 1}`),
+            show: row >= 0 && !plots.pavedParcels.includes(`${col},${row + 1}`),
             pos: [(left + right) / 2, KERB.height / 2, back],
             size: [right - left, KERB.height, KERB.width]
           },
@@ -315,17 +340,19 @@ export const GroundGrid: React.FC = () => {
           }
         ];
 
-        const frontOpen = plots.pavedParcels.includes(`${col},${row - 1}`);
-        const frontPieces = frontOpen
+        // Edge that looks onto the highway, cut open at the driveways.
+        const roadEdgeZ = row < 0 ? back : front;
+        const neighbourTowardRoad = row < 0 ? `${col},${row + 1}` : `${col},${row - 1}`;
+        const roadEdgePieces = plots.pavedParcels.includes(neighbourTowardRoad)
           ? []
           : kerbSegments(left, right, [layout.entryX * S, layout.exitX * S]);
 
         return (
           <group key={`kerb_${key}`}>
-            {frontPieces.map(([a, b]) => (
+            {roadEdgePieces.map(([a, b]) => (
               <mesh
                 key={`front_${a}`}
-                position={[(a + b) / 2, KERB.height / 2, front]}
+                position={[(a + b) / 2, KERB.height / 2, roadEdgeZ]}
                 castShadow
                 receiveShadow
               >
@@ -346,8 +373,38 @@ export const GroundGrid: React.FC = () => {
       })}
 
       {/* Driveway ramps */}
-      <Driveway x={layout.entryX * S} apronFront={apronFront} entering />
-      <Driveway x={layout.exitX * S} apronFront={apronFront} entering={false} />
+      <Driveway
+        x={layout.entryX * S}
+        apronFront={apronFront}
+        halfWidth={roadHalfWidth}
+        entering
+      />
+      <Driveway
+        x={layout.exitX * S}
+        apronFront={apronFront}
+        halfWidth={roadHalfWidth}
+        entering={false}
+      />
+
+      {/* Once the far side is developed it needs its own mouths */}
+      {hasFarSideLand && (
+        <>
+          <Driveway
+            x={layout.entryX * S}
+            apronFront={farApronFront}
+            halfWidth={roadHalfWidth}
+            entering={false}
+            far
+          />
+          <Driveway
+            x={layout.exitX * S}
+            apronFront={farApronFront}
+            halfWidth={roadHalfWidth}
+            entering
+            far
+          />
+        </>
+      )}
 
       {/* Build grid overlay */}
       {buildMode && (
