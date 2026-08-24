@@ -1496,7 +1496,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       activeModal: 'NONE',
       selectedVehicleId: null,
       selectedPumpId: null,
-      selectedBuildingId: null
+      selectedBuildingId: null,
+      // The world shrinks back to the starting plot, so a camera left over the
+      // old expansion would be staring at empty countryside.
+      cameraTarget: [16, 12],
+      cameraZoom: 4,
+      cameraAngle: 225,
+      buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
+      landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false }
     });
   },
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { Activity, PlusCircle, Unlock } from 'lucide-react';
+import { Activity, PlusCircle, Unlock, RotateCcw } from 'lucide-react';
 import { TransactionService } from '../domain/services/TransactionService';
 import { SaveManager } from '../domain/services/SaveManager';
 
@@ -9,7 +9,10 @@ export const PerformanceOverlay: React.FC = () => {
   const perfMetrics = useGameStore((s) => s.perfMetrics);
   const updatePerfMetrics = useGameStore((s) => s.updatePerfMetrics);
   const devUnlockEverything = useGameStore((s) => s.devUnlockEverything);
+  const resetGameSave = useGameStore((s) => s.resetGameSave);
   const [showDebug, setShowDebug] = useState(false);
+  // Wiping the save is destructive, so it takes a second, deliberate click.
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // The vehicle map gets a new identity on every simulation tick, so this
   // effect must not depend on it: re-creating the loop 20 times a second
@@ -50,6 +53,22 @@ export const PerformanceOverlay: React.FC = () => {
     useGameStore.setState({ gameState: { ...state } });
   };
 
+  const handleReset = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      return;
+    }
+    resetGameSave();
+    setConfirmReset(false);
+    setShowDebug(false);
+  };
+
+  // Closing the panel cancels a pending confirmation.
+  const toggleDebug = () => {
+    setShowDebug((open) => !open);
+    setConfirmReset(false);
+  };
+
   return (
     <div className="fixed bottom-4 left-4 z-40 select-none pointer-events-auto">
       <div className="bg-slate-950/80 border border-slate-800 backdrop-blur-md rounded-2xl p-2 px-3 shadow-xl flex items-center gap-3 text-[10px] font-mono text-slate-400">
@@ -67,7 +86,7 @@ export const PerformanceOverlay: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setShowDebug(!showDebug)}
+          onClick={toggleDebug}
           className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded font-sans text-[9px] font-bold"
         >
           {showDebug ? 'Kapat' : 'Test Paneli'}
@@ -106,6 +125,29 @@ export const PerformanceOverlay: React.FC = () => {
             Tüm yapılar, arsa genişlemeleri, krediler, müdür ve dizel/LPG tankları
             açılır. Pompalar üç yakıtı da destekler hale gelir.
           </div>
+
+          <button
+            onClick={handleReset}
+            className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 justify-center transition-all ${
+              confirmReset
+                ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
+                : 'bg-slate-800 hover:bg-slate-700 text-red-400 border border-red-500/40'
+            }`}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>
+              {confirmReset
+                ? 'Emin misiniz? Onaylamak için tekrar tıklayın'
+                : 'Oyunu Sıfırla'}
+            </span>
+          </button>
+
+          {confirmReset && (
+            <div className="text-[10px] text-red-300/90 leading-relaxed">
+              Kayıt tamamen silinir: kasa, seviye, arsalar, yapılar ve görevler
+              sıfırdan başlar.
+            </div>
+          )}
         </div>
       )}
     </div>

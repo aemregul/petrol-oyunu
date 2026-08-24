@@ -2,13 +2,46 @@ import React, { useMemo } from 'react';
 import { Instances, Instance } from '@react-three/drei';
 import { useGameStore } from '../store/gameStore';
 import { LAYOUT, getLayout } from '../domain/services/simulationEngine';
-import { parseParcelKey, parcelBounds } from '../domain/services/land';
+import {
+  parseParcelKey,
+  parcelBounds,
+  PARCEL,
+  LAND_BOUNDS,
+  FAR_SIDE_FRONT
+} from '../domain/services/land';
 
 const S = 2;
 const roadZ = LAYOUT.roadZ * S;
 
 /** Nothing decorative may stand this close to owned land or tarmac. */
 const CLEARANCE = 1.5;
+
+/**
+ * The whole area the map can ever cover, in world units, plus a margin of
+ * countryside. Scenery is scattered across all of it and then cleared where
+ * the player has built, so buying land removes the trees standing on it and
+ * never shuffles the rest.
+ */
+const WORLD = {
+  minX: (LAND_BOUNDS.minCol - 2) * PARCEL.width * S,
+  maxX: (LAND_BOUNDS.maxCol + 3) * PARCEL.width * S,
+  minZ: (FAR_SIDE_FRONT - (-LAND_BOUNDS.minRow) * PARCEL.depth - 14) * S,
+  maxZ: ((LAND_BOUNDS.maxRow + 1) * PARCEL.depth + 14) * S
+};
+
+/** Roughly one prop per cell, jittered so the scatter never looks like a grid. */
+const SCATTER_CELL = 13;
+
+/**
+ * Instance buffer capacities. drei's <Instances> allocates its matrix buffer
+ * once, from the `limit` it sees on first render, and never resizes it — so
+ * `limit` has to be a fixed ceiling and only `range` may vary. Passing a live
+ * count instead left the buffer stuck at whatever the scene happened to need
+ * at mount, and anything above that silently stopped rendering.
+ */
+const MAX_TREES = 400;
+const MAX_BUSHES = 400;
+const MAX_LAMPS = 32;
 
 /** Deterministic pseudo-random so scenery never reshuffles between frames. */
 function seeded(seed: number): () => number {
@@ -33,9 +66,6 @@ interface Placement {
 export const SceneryProps: React.FC = () => {
   const plots = useGameStore((s) => s.gameState.station.plots);
   const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
-
-  const plotWidth = plots.width * S;
-  const plotDepth = plots.height * S;
 
   const layout = useMemo(() => getLayout({ station: { plots } }), [plots]);
   const roadHalfWidth = layout.roadHalfWidth * S;
@@ -89,22 +119,18 @@ export const SceneryProps: React.FC = () => {
       else bushList.push(placement);
     };
 
-    // Treeline behind the station and along the far side of the highway.
-    for (let i = 0; i < 26; i++) {
-      push(-55 + rand() * (plotWidth + 120), plotDepth + 9 + rand() * 34, 0.8 + rand() * 0.85);
-    }
-    for (let i = 0; i < 24; i++) {
-      push(-55 + rand() * (plotWidth + 120), roadZ - 40 + rand() * 28, 0.8 + rand() * 0.85);
-    }
-
-    // Shrubs hugging the left and right edges of the plot.
-    for (let i = 0; i < 14; i++) {
-      const onLeft = i % 2 === 0;
-      push(
-        onLeft ? -9 - rand() * 18 : plotWidth + 9 + rand() * 18,
-        2 + rand() * (plotDepth - 4),
-        0.6 + rand() * 0.6
-      );
+    // Jittered scatter across the whole map. Position depends only on the
+    // cell, so a prop never moves when the plot changes size — it is either
+    // there or it has been cleared away.
+    for (let x = WORLD.minX; x < WORLD.maxX; x += SCATTER_CELL) {
+      for (let z = WORLD.minZ; z < WORLD.maxZ; z += SCATTER_CELL) {
+        const jitterX = x + rand() * SCATTER_CELL;
+        const jitterZ = z + rand() * SCATTER_CELL;
+        const scale = 0.6 + rand() * 1;
+        // Leave natural gaps rather than covering every cell.
+        const keep = rand() > 0.42;
+        if (keep) push(jitterX, jitterZ, scale);
+      }
     }
 
     // Lamps sit on the verge beyond whatever the road currently occupies.
@@ -115,13 +141,25 @@ export const SceneryProps: React.FC = () => {
       rotation: 0
     }));
 
-    return { trees: treeList, bushes: bushList, lamps: lampList };
-  }, [plotWidth, plotDepth, plots.ownedParcels, corridor]);
+    // Never hand <Instances> more than its fixed buffer can hold.
+    if (treeList.length > MAX_TREES || bushList.length > MAX_BUSHES) {
+      console.warn(
+        `[Scenery] Instance tavanı aşıldı (ağaç ${treeList.length}/${MAX_TREES}, ` +
+          `çalı ${bushList.length}/${MAX_BUSHES}); fazlası çizilmeyecek.`
+      );
+    }
+
+    return {
+      trees: treeList.slice(0, MAX_TREES),
+      bushes: bushList.slice(0, MAX_BUSHES),
+      lamps: lampList.slice(0, MAX_LAMPS)
+    };
+  }, [plots.ownedParcels, corridor]);
 
   return (
     <group>
       {/* Trunks */}
-      <Instances limit={trees.length} range={trees.length}>
+      <Instances limit={MAX_TREES} range={trees.length}>
         <cylinderGeometry args={[0.24, 0.34, 2.8, 5]} />
         <meshStandardMaterial color="#5b4534" roughness={1} />
         {trees.map((t, i) => (
@@ -135,7 +173,7 @@ export const SceneryProps: React.FC = () => {
       </Instances>
 
       {/* Canopies */}
-      <Instances limit={trees.length} range={trees.length}>
+      <Instances limit={MAX_TREES} range={trees.length}>
         <icosahedronGeometry args={[1.9, 0]} />
         <meshStandardMaterial color="#41802f" roughness={0.95} flatShading />
         {trees.map((t, i) => (
@@ -149,7 +187,7 @@ export const SceneryProps: React.FC = () => {
       </Instances>
 
       {/* Shrubs */}
-      <Instances limit={Math.max(1, bushes.length)} range={bushes.length}>
+      <Instances limit={MAX_BUSHES} range={bushes.length}>
         <icosahedronGeometry args={[1.0, 0]} />
         <meshStandardMaterial color="#4d8f3c" roughness={1} flatShading />
         {bushes.map((b, i) => (
@@ -163,7 +201,7 @@ export const SceneryProps: React.FC = () => {
       </Instances>
 
       {/* Street light columns */}
-      <Instances limit={lamps.length} range={lamps.length}>
+      <Instances limit={MAX_LAMPS} range={lamps.length}>
         <cylinderGeometry args={[0.16, 0.22, 6.8, 5]} />
         <meshStandardMaterial color="#64748b" roughness={0.6} metalness={0.4} />
         {lamps.map((l, i) => (
@@ -172,7 +210,7 @@ export const SceneryProps: React.FC = () => {
       </Instances>
 
       {/* Street light heads */}
-      <Instances limit={lamps.length} range={lamps.length}>
+      <Instances limit={MAX_LAMPS} range={lamps.length}>
         <boxGeometry args={[0.4, 0.25, 2.2]} />
         <meshStandardMaterial color="#475569" roughness={0.6} metalness={0.4} />
         {lamps.map((l, i) => (
