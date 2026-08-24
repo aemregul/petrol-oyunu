@@ -1,0 +1,119 @@
+import React, { useRef, useMemo } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { useGameStore } from '../store/gameStore';
+
+/** Sun colour and intensity through the 06:00-22:00 trading day. */
+const SUN_KEYFRAMES = [
+  { hour: 6, color: '#ffc590', intensity: 1.5, ambient: 0.62, sky: '#ffd4a8' },
+  { hour: 8, color: '#ffe9cc', intensity: 1.9, ambient: 0.72, sky: '#d3eaff' },
+  { hour: 12, color: '#fffdf8', intensity: 2.2, ambient: 0.82, sky: '#c6e7ff' },
+  { hour: 17, color: '#ffe2bc', intensity: 2.0, ambient: 0.76, sky: '#d0e7fb' },
+  { hour: 19.5, color: '#ffab70', intensity: 1.45, ambient: 0.6, sky: '#f7bb87' },
+  { hour: 21, color: '#8d9cd4', intensity: 0.95, ambient: 0.46, sky: '#5d6c96' },
+  { hour: 22, color: '#7684bc', intensity: 0.8, ambient: 0.42, sky: '#42507a' }
+];
+
+function sampleSun(hour: number) {
+  const first = SUN_KEYFRAMES[0];
+  const last = SUN_KEYFRAMES[SUN_KEYFRAMES.length - 1];
+  if (hour <= first.hour) return { ...first };
+  if (hour >= last.hour) return { ...last };
+
+  for (let i = 0; i < SUN_KEYFRAMES.length - 1; i++) {
+    const a = SUN_KEYFRAMES[i];
+    const b = SUN_KEYFRAMES[i + 1];
+    if (hour >= a.hour && hour <= b.hour) {
+      const t = (hour - a.hour) / (b.hour - a.hour);
+      return {
+        hour,
+        color: new THREE.Color(a.color).lerp(new THREE.Color(b.color), t).getStyle(),
+        intensity: a.intensity + (b.intensity - a.intensity) * t,
+        ambient: a.ambient + (b.ambient - a.ambient) * t,
+        sky: new THREE.Color(a.sky).lerp(new THREE.Color(b.sky), t).getStyle()
+      };
+    }
+  }
+  return { ...last };
+}
+
+/**
+ * Drives the sun, ambient fill and sky colour from the in-game clock and
+ * weather, so the forecourt reads as morning, midday or dusk.
+ */
+export const SceneLighting: React.FC = () => {
+  const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
+  const weather = useGameStore((s) => s.gameState.dayState.weather);
+  const quality = useGameStore((s) => s.gameState.settings.graphicsQuality);
+
+  const { scene } = useThree();
+  const sunRef = useRef<THREE.DirectionalLight>(null);
+  const ambientRef = useRef<THREE.AmbientLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+
+  const skyColor = useRef(new THREE.Color('#a8d8ff'));
+  const sunColor = useRef(new THREE.Color('#fff6e0'));
+
+  // Overcast flattens and cools the light; rain more so.
+  const weatherDamping = weather === 'RAIN' ? 0.55 : weather === 'OVERCAST' ? 0.78 : 1;
+
+  // Far enough out that it only softens the horizon, never the forecourt.
+  const fog = useMemo(() => new THREE.Fog('#a8d8ff', 190, 460), []);
+
+  useFrame((_, delta) => {
+    const sample = sampleSun(gameTime);
+    const ease = Math.min(1, delta * 2);
+
+    sunColor.current.lerp(new THREE.Color(sample.color), ease);
+    skyColor.current.lerp(new THREE.Color(sample.sky), ease);
+
+    if (sunRef.current) {
+      sunRef.current.color.copy(sunColor.current);
+      sunRef.current.intensity +=
+        (sample.intensity * weatherDamping - sunRef.current.intensity) * ease;
+
+      // Sweep the sun across the sky as the day advances.
+      const dayProgress = THREE.MathUtils.clamp((gameTime - 6) / 16, 0, 1);
+      const arc = Math.PI * dayProgress;
+      sunRef.current.position.set(
+        32 - Math.cos(arc) * 55,
+        12 + Math.sin(arc) * 48,
+        18 - Math.cos(arc) * 25
+      );
+    }
+
+    if (ambientRef.current) {
+      ambientRef.current.intensity +=
+        (sample.ambient * (weather === 'RAIN' ? 0.85 : 1) - ambientRef.current.intensity) * ease;
+    }
+
+    if (hemiRef.current) hemiRef.current.color.copy(skyColor.current);
+
+    scene.background = skyColor.current;
+    fog.color.copy(skyColor.current);
+    scene.fog = fog;
+  });
+
+  const shadowSize = quality === 'HIGH' ? 2048 : 1024;
+
+  return (
+    <>
+      <ambientLight ref={ambientRef} intensity={0.6} />
+      <directionalLight
+        ref={sunRef}
+        position={[35, 45, 25]}
+        intensity={1.8}
+        castShadow={quality !== 'LOW'}
+        shadow-mapSize={[shadowSize, shadowSize]}
+        shadow-camera-left={-60}
+        shadow-camera-right={60}
+        shadow-camera-top={60}
+        shadow-camera-bottom={-60}
+        shadow-camera-far={140}
+        shadow-bias={-0.0008}
+        shadow-normalBias={0.02}
+      />
+      <hemisphereLight ref={hemiRef} groundColor="#3f4a2e" intensity={0.45} />
+    </>
+  );
+};

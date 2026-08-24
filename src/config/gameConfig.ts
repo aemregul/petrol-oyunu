@@ -1,0 +1,849 @@
+import { MissionMetric } from '../domain/types/gameState';
+
+/**
+ * Project Highway - Master Versioned Game Configuration (v1.0.0)
+ * Sourced directly from Master GDD (Bölüm 10, 11, 15, 16, 18, 19, 20, 21, 22, Ek A, Ek B)
+ */
+
+export interface FuelConfig {
+  id: 'gasoline' | 'diesel' | 'lpg';
+  name: string;
+  shortName: string;
+  color: string;
+  baseWholesale: number; // TL/L
+  regionalRetail: number; // TL/L
+  targetMargin: number; // TL/L
+  avgFillLiters: number; // L
+  orderMinLiters: number; // 500 L
+  orderStepLiters: number; // 100 L
+  deliveryFee: number; // 450 TL
+  dailyVolatility: number; // 0.03
+  unlockLevel: number;
+}
+
+export interface BuildingCatalogItem {
+  type: string;
+  name: string;
+  category: 'pump' | 'tank' | 'structure' | 'service' | 'energy';
+  price: number;
+  dailyUpkeep: number;
+  size: [number, number]; // Grid cells (width, depth)
+  unlockLevel: number;
+  description: string;
+  icon?: string;
+  isUnderground?: boolean;
+}
+
+export interface BuildingUpgradeConfig {
+  type: string;
+  level: number;
+  cost: number;
+  effectsDescription: string;
+  flowRateLps?: number; // Litres per second for pumps
+  capacityLiters?: number; // For tanks
+  bonusCleanliness?: number;
+  bonusSpeed?: number;
+}
+
+export interface CustomerTypeConfig {
+  type: 'commuter' | 'family' | 'taxi' | 'courier' | 'commercial' | 'truck' | 'luxury' | 'ev';
+  name: string;
+  vehicleModel: string;
+  minDemand: number;
+  maxDemand: number;
+  basePatienceSeconds: number;
+  priceSensitivity: 'LOW' | 'MEDIUM' | 'HIGH';
+  preferredFuel: 'gasoline' | 'diesel' | 'lpg' | 'any';
+  marketBaseProbability: number;
+  marketAvgBasket: number;
+  tipChanceModifier: number;
+  specialBehavior: string;
+  /** Needs a charging unit rather than a fuel pump. */
+  requiresCharger?: boolean;
+}
+
+export interface EmployeeConfig {
+  role: 'PUMP_ATTENDANT' | 'MANAGER';
+  tierLevels: Array<{
+    level: number;
+    hireCost: number;
+    dailyWage: number;
+    speedMultiplier: number;
+    actionDelaySeconds: number;
+    maxConcurrentPumps: number;
+    unlockRequirement: string;
+    requiredServices?: number;
+  }>;
+}
+
+export interface LoanProductConfig {
+  id: string;
+  name: string;
+  principal: number;
+  totalCostRatio: number; // %10 -> 0.10
+  termDays: number;
+  dailyPayment: number;
+  minLevel: number;
+  minReputation: number;
+  requiredExpansion?: 'A' | 'B';
+}
+
+export interface LevelThresholdConfig {
+  level: number;
+  requiredTotalXp: number;
+  rewardCash: number;
+  unlockedFeatures: string;
+}
+
+export interface GameConfig {
+  version: '1.0.0';
+  fuels: Record<'gasoline' | 'diesel' | 'lpg', FuelConfig>;
+  buildings: Record<string, BuildingCatalogItem>;
+  buildingUpgrades: Record<string, Record<number, BuildingUpgradeConfig>>;
+  customerTypes: Record<string, CustomerTypeConfig>;
+  employees: {
+    pumpAttendant: EmployeeConfig;
+    manager: {
+      minLevel: number;
+      minOfficeLevel: number;
+      minReputation: number;
+      minActiveAttendants: number;
+      minProfitableDaysInLast3: number;
+      hireCost: number;
+      dailyWage: number;
+      defaultKasaReserve: number;
+    };
+  };
+  loans: LoanProductConfig[];
+  levels: LevelThresholdConfig[];
+  economy: {
+    initialCash: number;
+    initialReputation: number;
+    dayStartHour: number; // 06:00
+    dayEndHour: number; // 22:00
+    realSecondsPerDay: number; // 600s (10 min)
+    tutorialDaySeconds: number; // 720s (12 min)
+    minRepairCost: number;
+    siteCleanCost: number;
+    cleanDurationSeconds: number;
+    undoTimeoutSeconds: number;
+    refundRatio: number; // 0.55
+    moveFeeRatio: number; // 0.02
+    tankerSpeedSecondsMin: number;
+    tankerSpeedSecondsMax: number;
+    tankerUnloadSpeedLps: number;
+    tankerCancelRefundRatio: number;
+    overdraftLimit: number; // -5000 TL
+    defaultAutonomyBudgetReserve: number; // 8000 TL
+  };
+  grid: {
+    initialWidth: number;
+    initialHeight: number;
+    /** Expansion A widens the plot along the road. */
+    expansionAWidth: number;
+    /** Expansion B pushes the back boundary away from the road. */
+    expansionBDepth: number;
+    cellSizeMeters: number; // 2.0
+  };
+  tutorialTasks: Array<{
+    id: string;
+    description: string;
+    metric: MissionMetric;
+    target: number;
+    rewardCash: number;
+    rewardXp: number;
+  }>;
+}
+
+export const GAME_CONFIG: GameConfig = {
+  version: '1.0.0',
+  fuels: {
+    gasoline: {
+      id: 'gasoline',
+      name: 'Kurşunsuz Benzin 95',
+      shortName: 'Benzin',
+      color: '#22c55e',
+      baseWholesale: 36.40,
+      regionalRetail: 44.90,
+      targetMargin: 8.50,
+      avgFillLiters: 24,
+      orderMinLiters: 500,
+      orderStepLiters: 100,
+      deliveryFee: 450,
+      dailyVolatility: 0.03,
+      unlockLevel: 1,
+    },
+    diesel: {
+      id: 'diesel',
+      name: 'Ultra EuroDizel',
+      shortName: 'Dizel',
+      color: '#f97316',
+      baseWholesale: 35.60,
+      regionalRetail: 43.50,
+      targetMargin: 7.90,
+      avgFillLiters: 31,
+      orderMinLiters: 500,
+      orderStepLiters: 100,
+      deliveryFee: 450,
+      dailyVolatility: 0.03,
+      unlockLevel: 2,
+    },
+    lpg: {
+      id: 'lpg',
+      name: 'Otogaz LPG',
+      shortName: 'LPG',
+      color: '#3b82f6',
+      baseWholesale: 18.30,
+      regionalRetail: 24.90,
+      targetMargin: 6.60,
+      avgFillLiters: 22,
+      orderMinLiters: 500,
+      orderStepLiters: 100,
+      deliveryFee: 450,
+      dailyVolatility: 0.03,
+      unlockLevel: 4,
+    }
+  },
+  buildings: {
+    pump_standard: {
+      type: 'pump_standard',
+      name: 'Standart Akaryakıt Pompası',
+      category: 'pump',
+      price: 18000,
+      dailyUpkeep: 110,
+      size: [2, 3],
+      unlockLevel: 1,
+      description: '1 araç kapasiteli, 8 L/sn dolum hızında akaryakıt pompası.',
+      icon: 'Fuel'
+    },
+    tank_gasoline: {
+      type: 'tank_gasoline',
+      name: 'Benzin Tank Paketi',
+      category: 'tank',
+      price: 11000,
+      dailyUpkeep: 80,
+      size: [3, 3],
+      unlockLevel: 1,
+      description: 'Benzin depolama kapasitesine 1.500 L ekler.',
+      isUnderground: true,
+      icon: 'Database'
+    },
+    tank_diesel: {
+      type: 'tank_diesel',
+      name: 'Dizel Tank Paketi',
+      category: 'tank',
+      price: 12000,
+      dailyUpkeep: 80,
+      size: [3, 3],
+      unlockLevel: 2,
+      description: '1.500 L dizel yakıt depolama kapasitesi ekler.',
+      isUnderground: true,
+      icon: 'Database'
+    },
+    tank_lpg: {
+      type: 'tank_lpg',
+      name: 'LPG Tank Paketi',
+      category: 'tank',
+      price: 16000,
+      dailyUpkeep: 90,
+      size: [3, 3],
+      unlockLevel: 4,
+      description: '1.500 L LPG otogaz depolama kapasitesi ekler.',
+      isUnderground: true,
+      icon: 'Flame'
+    },
+    price_sign: {
+      type: 'price_sign',
+      name: 'Fiyat Totem Tabelası',
+      category: 'structure',
+      price: 4000,
+      dailyUpkeep: 20,
+      size: [1, 1],
+      unlockLevel: 1,
+      description: 'Ana yol sürücülerine güncel yakıt fiyatlarını gösterir.',
+      icon: 'Tag'
+    },
+    canopy: {
+      type: 'canopy',
+      name: 'Ada Sundurması (Canopy)',
+      category: 'structure',
+      price: 9000,
+      dailyUpkeep: 50,
+      size: [3, 5],
+      unlockLevel: 5,
+      description: 'Altındaki pompalarda +%5 dolum hızı ve temizlik koruması sağlar.',
+      icon: 'Umbrella'
+    },
+    office: {
+      type: 'office',
+      name: 'Yönetim Ofisi S2',
+      category: 'structure',
+      price: 18000,
+      dailyUpkeep: 120,
+      size: [5, 5],
+      unlockLevel: 5,
+      description: 'Gelişmiş finansal raporlama ve istasyon müdürü çalışma alanı.',
+      icon: 'Building2'
+    },
+    mini_market: {
+      type: 'mini_market',
+      name: 'Mini Market S1',
+      category: 'service',
+      price: 28000,
+      dailyUpkeep: 180,
+      size: [5, 5],
+      unlockLevel: 6,
+      description: 'Yakıt alan müşterilere sepet satışı yaparak yan gelir üretir.',
+      icon: 'ShoppingBag'
+    },
+    toilet: {
+      type: 'toilet',
+      name: 'Müşteri WC / Lavabo',
+      category: 'service',
+      price: 8000,
+      dailyUpkeep: 100,
+      size: [2, 2],
+      unlockLevel: 6,
+      description: 'Aile ve uzun yol müşterilerinin memnuniyetini +%8 artırır.',
+      icon: 'Bath'
+    },
+    light_pole: {
+      type: 'light_pole',
+      name: 'Aydınlatma Direği',
+      category: 'structure',
+      price: 1500,
+      dailyUpkeep: 25,
+      size: [1, 1],
+      unlockLevel: 3,
+      description: 'Gece saatlerinde istasyon görüşünü ve güvenlik hissini artırır.',
+      icon: 'Lightbulb'
+    },
+    trash_can: {
+      type: 'trash_can',
+      name: 'Çöp Kutusu',
+      category: 'structure',
+      price: 600,
+      dailyUpkeep: 0,
+      size: [1, 1],
+      unlockLevel: 2,
+      description: 'Çevredeki kirlenme hızını %30 azaltır.',
+      icon: 'Trash2'
+    },
+    air_water: {
+      type: 'air_water',
+      name: 'Hava & Su Ünitesi',
+      category: 'service',
+      price: 6000,
+      dailyUpkeep: 40,
+      size: [1, 2],
+      unlockLevel: 3,
+      description: 'Lastik havası ve su ikmali; kısa duraklamalarda memnuniyeti artırır.',
+      icon: 'Wind'
+    },
+    car_park: {
+      type: 'car_park',
+      name: 'Otopark (4 Araçlık)',
+      category: 'service',
+      price: 9000,
+      dailyUpkeep: 30,
+      size: [5, 3],
+      unlockLevel: 4,
+      description: 'Dört araçlık park alanı. Birden fazla alan kurarak kapasiteyi artırabilirsiniz.',
+      icon: 'SquareParking'
+    },
+    truck_park: {
+      type: 'truck_park',
+      name: 'TIR Parkı (3 Araçlık)',
+      category: 'service',
+      price: 20000,
+      dailyUpkeep: 60,
+      size: [6, 4],
+      unlockLevel: 7,
+      description: 'Üç ağır vasıta kapasiteli park alanı. Uzun yol şoförlerini istasyona çeker.',
+      icon: 'Truck'
+    },
+    car_wash: {
+      type: 'car_wash',
+      name: 'Oto Yıkama',
+      category: 'service',
+      price: 32000,
+      dailyUpkeep: 200,
+      size: [3, 4],
+      unlockLevel: 6,
+      description: 'Tünel tipi otomatik yıkama hattı.',
+      icon: 'Droplets'
+    },
+    oil_change: {
+      type: 'oil_change',
+      name: 'Yağ Değişim İstasyonu',
+      category: 'service',
+      price: 26000,
+      dailyUpkeep: 160,
+      size: [3, 3],
+      unlockLevel: 6,
+      description: 'Çift kanallı yağ ve filtre değişim servisi.',
+      icon: 'Wrench'
+    },
+    tyre_service: {
+      type: 'tyre_service',
+      name: 'Lastik Servisi',
+      category: 'service',
+      price: 24000,
+      dailyUpkeep: 150,
+      size: [3, 3],
+      unlockLevel: 5,
+      description: 'Lastik değişimi, balans ve rot ayarı yapılan servis birimi.',
+      icon: 'CircleDot'
+    },
+    cafe: {
+      type: 'cafe',
+      name: 'Kahveci',
+      category: 'service',
+      price: 22000,
+      dailyUpkeep: 140,
+      size: [3, 3],
+      unlockLevel: 5,
+      description: 'Yol kahvesi ve atıştırmalık satan küçük büfe.',
+      icon: 'Coffee'
+    },
+    restaurant: {
+      type: 'restaurant',
+      name: 'Restoran',
+      category: 'service',
+      price: 45000,
+      dailyUpkeep: 320,
+      size: [6, 6],
+      unlockLevel: 8,
+      description: 'Oturmalı yol restoranı; uzun yol yolcularını uzun süre tutar.',
+      icon: 'UtensilsCrossed'
+    },
+    rest_complex: {
+      type: 'rest_complex',
+      name: 'Dinlenme Tesisi',
+      category: 'service',
+      price: 150000,
+      dailyUpkeep: 900,
+      size: [12, 6],
+      unlockLevel: 10,
+      description: 'Market, restoran, kahveci ve WC birimlerini tek çatı altında toplayan büyük tesis.',
+      icon: 'Building'
+    },
+    decoration: {
+      type: 'decoration',
+      name: 'Peyzaj & Dekorasyon',
+      category: 'structure',
+      price: 5000,
+      dailyUpkeep: 20,
+      size: [2, 2],
+      unlockLevel: 3,
+      description: 'Yeşil alan, saksı ve bank düzenlemesi; sahanın görünümünü iyileştirir.',
+      icon: 'Trees'
+    },
+    wide_entry: {
+      type: 'wide_entry',
+      name: 'Geniş Giriş Rampası',
+      category: 'structure',
+      price: 18000,
+      dailyUpkeep: 30,
+      size: [4, 3],
+      unlockLevel: 6,
+      description: 'Çift şeritli giriş rampası; araçlar kuyruk oluşturmadan ikişerli girer.',
+      icon: 'ArrowRight'
+    },
+    wide_exit: {
+      type: 'wide_exit',
+      name: 'Geniş Çıkış Rampası',
+      category: 'structure',
+      price: 18000,
+      dailyUpkeep: 30,
+      size: [4, 3],
+      unlockLevel: 6,
+      description: 'Çift şeritli çıkış rampası; ayrılan araçlar birbirini beklemez.',
+      icon: 'ArrowLeft'
+    },
+    hotel: {
+      type: 'hotel',
+      name: 'Yol Oteli',
+      category: 'service',
+      price: 95000,
+      dailyUpkeep: 600,
+      size: [6, 7],
+      unlockLevel: 9,
+      description: 'Uzun yol yolcuları için konaklama; geceleyen müşteri akışı yaratır.',
+      icon: 'BedDouble'
+    },
+    ev_substation: {
+      type: 'ev_substation',
+      name: 'Elektrik Altyapısı',
+      category: 'energy',
+      price: 40000,
+      dailyUpkeep: 250,
+      size: [2, 2],
+      unlockLevel: 7,
+      description: 'Trafo ve dağıtım panosu. Şarj ünitesi kurabilmenin ön koşuludur.',
+      icon: 'Zap'
+    },
+    ev_storage: {
+      type: 'ev_storage',
+      name: 'Enerji Depolama',
+      category: 'energy',
+      price: 35000,
+      dailyUpkeep: 180,
+      size: [3, 3],
+      unlockLevel: 8,
+      description: 'Batarya bankası; yoğun saatlerde şarj kapasitesini destekler.',
+      icon: 'BatteryCharging'
+    },
+    ev_charger_ac: {
+      type: 'ev_charger_ac',
+      name: 'AC Şarj Ünitesi',
+      category: 'energy',
+      price: 18000,
+      dailyUpkeep: 90,
+      size: [2, 3],
+      unlockLevel: 7,
+      description: 'Yavaş şarj ünitesi. Altyapı kapasitesinden pay tüketir.',
+      icon: 'Plug'
+    },
+    ev_charger_dc: {
+      type: 'ev_charger_dc',
+      name: 'DC Hızlı Şarj',
+      category: 'energy',
+      price: 45000,
+      dailyUpkeep: 220,
+      size: [2, 3],
+      unlockLevel: 9,
+      description: 'Yüksek güçlü hızlı şarj ünitesi. Altyapıdan yüksek pay tüketir.',
+      icon: 'Zap'
+    },
+  },
+  buildingUpgrades: {
+    pump_standard: {
+      2: {
+        type: 'pump_standard',
+        level: 2,
+        cost: 10000,
+        flowRateLps: 10,
+        bonusSpeed: 0.10,
+        effectsDescription: '10 L/sn dolum hızı, -%10 servis gecikmesi, dijital sayaç ekranı.'
+      },
+      3: {
+        type: 'pump_standard',
+        level: 3,
+        cost: 22000,
+        flowRateLps: 13,
+        bonusSpeed: 0.25,
+        effectsDescription: '13 L/sn ultra hızlı dolum, arıza riski -%25, premium gövde tasarımı.'
+      }
+    },
+    tank: {
+      2: {
+        type: 'tank',
+        level: 2,
+        cost: 20000,
+        capacityLiters: 3000,
+        effectsDescription: 'Depolama kapasitesini 3.000 L seviyesine çıkarır.'
+      },
+      3: {
+        type: 'tank',
+        level: 3,
+        cost: 45000,
+        capacityLiters: 6000,
+        effectsDescription: 'Büyük Tank: Depolama kapasitesini 6.000 L seviyesine çıkarır.'
+      }
+    },
+    office: {
+      2: {
+        type: 'office',
+        level: 2,
+        cost: 18000,
+        effectsDescription: 'Gelişmiş günlük faaliyet raporu ve İstasyon Müdürü çalışma alanı.'
+      },
+      3: {
+        type: 'office',
+        level: 3,
+        cost: 40000,
+        effectsDescription: 'Modern kurumsal bina, personel eğitim merkezi altyapısı.'
+      }
+    },
+    mini_market: {
+      2: {
+        type: 'mini_market',
+        level: 2,
+        cost: 22000,
+        effectsDescription: 'Müşteri sepet tutarı +%20 artar, vitrin ve iç aydınlatma büyür.'
+      },
+      3: {
+        type: 'mini_market',
+        level: 3,
+        cost: 50000,
+        effectsDescription: 'Süpermarket raf düzeni, sepet harcama çarpanı +%45 artar.'
+      }
+    },
+    price_sign: {
+      2: {
+        type: 'price_sign',
+        level: 2,
+        cost: 7000,
+        effectsDescription: 'LED Dijital Fiyat Paneli; uzaktan talep çekiciliği +%5 artar.'
+      },
+      3: {
+        type: 'price_sign',
+        level: 3,
+        cost: 15000,
+        effectsDescription: 'Büyük Dijital Pylon; promosyon ışıklandırması ve yüksek görünürlük.'
+      }
+    }
+  },
+  customerTypes: {
+    commuter: {
+      type: 'commuter',
+      name: 'İşe Giden',
+      vehicleModel: 'sedan_standard',
+      minDemand: 18,
+      maxDemand: 35,
+      basePatienceSeconds: 90,
+      priceSensitivity: 'MEDIUM',
+      preferredFuel: 'gasoline',
+      marketBaseProbability: 0.18,
+      marketAvgBasket: 110,
+      tipChanceModifier: 1.0,
+      specialBehavior: 'Hızlı hizmet bekler.'
+    },
+    family: {
+      type: 'family',
+      name: 'Aile',
+      vehicleModel: 'suv_standard',
+      minDemand: 25,
+      maxDemand: 50,
+      basePatienceSeconds: 120,
+      priceSensitivity: 'MEDIUM',
+      preferredFuel: 'gasoline',
+      marketBaseProbability: 0.42,
+      marketAvgBasket: 180,
+      tipChanceModifier: 1.0,
+      specialBehavior: 'Markete ve tuvalete girme olasılığı yüksektir.'
+    },
+    taxi: {
+      type: 'taxi',
+      name: 'Taksi',
+      vehicleModel: 'sedan_taxi',
+      minDemand: 15,
+      maxDemand: 40,
+      basePatienceSeconds: 65,
+      priceSensitivity: 'HIGH',
+      preferredFuel: 'lpg',
+      marketBaseProbability: 0.10,
+      marketAvgBasket: 90,
+      tipChanceModifier: 0.8,
+      specialBehavior: 'Kısa kuyruk arar, sabırsızdır.'
+    },
+    courier: {
+      type: 'courier',
+      name: 'Kurye / Motosiklet',
+      vehicleModel: 'courier_van',
+      minDemand: 8,
+      maxDemand: 28,
+      basePatienceSeconds: 55,
+      priceSensitivity: 'HIGH',
+      preferredFuel: 'gasoline',
+      marketBaseProbability: 0.08,
+      marketAvgBasket: 80,
+      tipChanceModifier: 1.2,
+      specialBehavior: 'Hızlı hizmette ekstra hız bonusu bahşişi bırakır.'
+    },
+    commercial: {
+      type: 'commercial',
+      name: 'Ticari Van / Minibüs',
+      vehicleModel: 'van_cargo',
+      minDemand: 35,
+      maxDemand: 75,
+      basePatienceSeconds: 110,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'diesel',
+      marketBaseProbability: 0.22,
+      marketAvgBasket: 150,
+      tipChanceModifier: 1.0,
+      specialBehavior: 'Dizel ağırlıklıdır, yüksek hacimli yakıt alır.'
+    },
+    truck: {
+      type: 'truck',
+      name: 'Ağır Kamyon',
+      vehicleModel: 'truck_heavy',
+      minDemand: 80,
+      maxDemand: 180,
+      basePatienceSeconds: 150,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'diesel',
+      marketBaseProbability: 0.35,
+      marketAvgBasket: 200,
+      tipChanceModifier: 1.1,
+      specialBehavior: 'Büyük dolum yapar, sabrı uzundur.'
+    },
+    ev: {
+      type: 'ev',
+      name: 'Elektrikli Araç',
+      vehicleModel: 'hatchback_ev',
+      minDemand: 20,
+      maxDemand: 55,
+      basePatienceSeconds: 130,
+      priceSensitivity: 'MEDIUM',
+      preferredFuel: 'any',
+      marketBaseProbability: 0.38,
+      marketAvgBasket: 190,
+      tipChanceModifier: 1.3,
+      specialBehavior: 'Şarj süresi uzundur; beklerken tesisleri kullanır.',
+      requiresCharger: true
+    },
+    luxury: {
+      type: 'luxury',
+      name: 'Lüks / Spor',
+      vehicleModel: 'sport_luxury',
+      minDemand: 30,
+      maxDemand: 60,
+      basePatienceSeconds: 75,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'gasoline',
+      marketBaseProbability: 0.25,
+      marketAvgBasket: 220,
+      tipChanceModifier: 2.2,
+      specialBehavior: 'Temiz sahada ve yüksek puanda yüklü bahşiş verir.'
+    }
+  },
+  employees: {
+    pumpAttendant: {
+      role: 'PUMP_ATTENDANT',
+      tierLevels: [
+        {
+          level: 1,
+          hireCost: 7500,
+          dailyWage: 650,
+          speedMultiplier: 0.75,
+          actionDelaySeconds: 5.0,
+          maxConcurrentPumps: 1,
+          unlockRequirement: 'Seviye 3'
+        },
+        {
+          level: 2,
+          hireCost: 4000,
+          dailyWage: 800,
+          speedMultiplier: 0.90,
+          actionDelaySeconds: 3.0,
+          maxConcurrentPumps: 1,
+          unlockRequirement: '40 Hizmet Tamamla',
+          requiredServices: 40
+        },
+        {
+          level: 3,
+          hireCost: 9000,
+          dailyWage: 1050,
+          speedMultiplier: 1.10,
+          actionDelaySeconds: 1.5,
+          maxConcurrentPumps: 2,
+          unlockRequirement: '160 Hizmet Tamamla',
+          requiredServices: 160
+        }
+      ]
+    },
+    manager: {
+      minLevel: 10,
+      minOfficeLevel: 2,
+      minReputation: 4.00,
+      minActiveAttendants: 2,
+      minProfitableDaysInLast3: 2,
+      hireCost: 45000,
+      dailyWage: 2800,
+      defaultKasaReserve: 8000
+    }
+  },
+  loans: [
+    {
+      id: 'loan_micro',
+      name: 'İşletme Sermayesi Kredisi',
+      principal: 10000,
+      totalCostRatio: 0.10,
+      termDays: 5,
+      dailyPayment: 2200,
+      minLevel: 5,
+      minReputation: 3.00
+    },
+    {
+      id: 'loan_growth',
+      name: 'Büyüme & Yatırım Kredisi',
+      principal: 35000,
+      totalCostRatio: 0.14,
+      termDays: 10,
+      dailyPayment: 3990,
+      minLevel: 5,
+      minReputation: 3.50
+    },
+    {
+      id: 'loan_expansion',
+      name: 'Arsa & Genişleme Kredisi',
+      principal: 90000,
+      totalCostRatio: 0.18,
+      termDays: 18,
+      dailyPayment: 5900,
+      minLevel: 6,
+      minReputation: 4.00,
+      requiredExpansion: 'A'
+    },
+    {
+      id: 'loan_corporate',
+      name: 'Kurumsal Ölçeklendirme Kredisi',
+      principal: 200000,
+      totalCostRatio: 0.25,
+      termDays: 30,
+      dailyPayment: 8333,
+      minLevel: 10,
+      minReputation: 4.50
+    }
+  ],
+  levels: [
+    { level: 1, requiredTotalXp: 0, rewardCash: 0, unlockedFeatures: 'Benzin, Manuel Dolum, Tanker Siparişi' },
+    { level: 2, requiredTotalXp: 300, rewardCash: 1500, unlockedFeatures: 'Dizel Tank Paketi, 2x Oyun Hızı, Çöp Kutusu' },
+    { level: 3, requiredTotalXp: 800, rewardCash: 0, unlockedFeatures: 'Pompacı İşe Alma, Pompa S2 Yükseltmesi, Aydınlatma Direği' },
+    { level: 4, requiredTotalXp: 1600, rewardCash: 2500, unlockedFeatures: 'LPG Tank Paketi, Orta Boy Tank (3.000 L)' },
+    { level: 5, requiredTotalXp: 2800, rewardCash: 0, unlockedFeatures: 'Banka Kredileri, Yapı Bakımı & Tamir, Ofis S2' },
+    { level: 6, requiredTotalXp: 4500, rewardCash: 3000, unlockedFeatures: 'Mini Market, Arsa A Genişlemesi, Tuvalet, 4x Hız' },
+    { level: 7, requiredTotalXp: 6500, rewardCash: 0, unlockedFeatures: 'Ada Sundurması (Canopy), Dijital LED Tabela' },
+    { level: 8, requiredTotalXp: 9000, rewardCash: 0, unlockedFeatures: 'Büyük Tank (6.000 L), Pompa S3, Detaylı Finansal Rapor' },
+    { level: 9, requiredTotalXp: 12000, rewardCash: 5000, unlockedFeatures: 'Arsa B Genişlemesi, 3. Pompacı Yuvası' },
+    { level: 10, requiredTotalXp: 15500, rewardCash: 0, unlockedFeatures: 'İstasyon Müdürü Otomasyonu, V1 Final Hedefi' }
+  ],
+  economy: {
+    initialCash: 15000,
+    initialReputation: 3.00,
+    dayStartHour: 6,
+    dayEndHour: 22,
+    realSecondsPerDay: 600,
+    tutorialDaySeconds: 720,
+    minRepairCost: 250,
+    siteCleanCost: 300,
+    cleanDurationSeconds: 30,
+    undoTimeoutSeconds: 10,
+    refundRatio: 0.55,
+    moveFeeRatio: 0.02,
+    tankerSpeedSecondsMin: 90,
+    tankerSpeedSecondsMax: 150,
+    tankerUnloadSpeedLps: 100,
+    tankerCancelRefundRatio: 0.85,
+    overdraftLimit: -5000,
+    defaultAutonomyBudgetReserve: 8000
+  },
+  grid: {
+    initialWidth: 16,
+    initialHeight: 14,
+    expansionAWidth: 8,
+    expansionBDepth: 8,
+    cellSizeMeters: 2.0
+  },
+  tutorialTasks: [
+    { id: 'T1', description: 'İlk gelen araca benzin doldur ve ödemeyi al', metric: 'CUSTOMERS_SERVED', target: 1, rewardCash: 500, rewardXp: 50 },
+    { id: 'T2', description: '3 müşteriye eksiksiz hizmet vererek istasyonu işlet', metric: 'CUSTOMERS_SERVED', target: 3, rewardCash: 500, rewardXp: 50 },
+    { id: 'T3', description: 'Tedarik panelinden 500 L benzin tankeri siparişi ver', metric: 'ORDERS_PLACED', target: 1, rewardCash: 450, rewardXp: 75 },
+    { id: 'T4', description: 'Fiyatlandırma paneline girerek satış fiyatını ayarla', metric: 'PRICE_SET', target: 1, rewardCash: 500, rewardXp: 50 },
+    { id: 'T5', description: 'İnşaat modunda bir yapıyı taşı veya yeni bir tabela yerleştir', metric: 'BUILD_PLACED', target: 1, rewardCash: 0, rewardXp: 50 },
+    { id: 'T6', description: 'Günü tamamla ve Gün Sonu Faaliyet Raporunu incele', metric: 'DAYS_COMPLETED', target: 1, rewardCash: 1000, rewardXp: 100 }
+  ]
+};

@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Local env / editor
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Vite cache
+.vite/
+
+# Playwright
+/test-results/
+/playwright-report/

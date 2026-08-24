@@ -1,0 +1,307 @@
+import React, { useState, Suspense } from 'react';
+import { Html } from '@react-three/drei';
+import { BuildingEntity } from '../domain/types/gameState';
+import { useGameStore } from '../store/gameStore';
+import { BuildingModel } from './models/BuildingModel';
+import { hasBuildingModel } from './models/buildingModels';
+import { ModelErrorBoundary } from './models/ModelErrorBoundary';
+import { PriceTotem } from './PriceTotem';
+import { LightPole } from './LightPole';
+import {
+  CarPark,
+  TruckPark,
+  CarWash,
+  OilChange,
+  TyreService,
+  AirWater,
+  EnergyStorage,
+  EvCharger,
+  Decoration,
+  WideEntry,
+  WideExit,
+  EvSubstation,
+  Restaurant,
+  RestComplex
+} from './FacilityMeshes';
+
+/** Facilities drawn by hand rather than loaded from an asset kit. */
+const CUSTOM_FACILITIES: Record<string, React.FC<{ building: BuildingEntity }>> = {
+  car_park: CarPark,
+  truck_park: TruckPark,
+  car_wash: CarWash,
+  oil_change: OilChange,
+  tyre_service: TyreService,
+  air_water: AirWater,
+  ev_storage: EnergyStorage,
+  ev_charger_ac: (props) => <EvCharger {...props} />,
+  ev_charger_dc: (props) => <EvCharger {...props} fast />,
+  decoration: Decoration,
+  wide_entry: WideEntry,
+  wide_exit: WideExit,
+  ev_substation: EvSubstation,
+  restaurant: Restaurant,
+  rest_complex: RestComplex
+};
+
+interface BuildingMeshProps {
+  building: BuildingEntity;
+}
+
+/**
+ * Blocky stand-in used while a model loads, if one fails to load, and for the
+ * pieces the asset kits do not cover.
+ */
+const FallbackGeometry: React.FC<{ building: BuildingEntity }> = ({ building }) => {
+  const [width, depth] = building.size;
+  const w = width * 2;
+  const d = depth * 2;
+
+  switch (building.type) {
+    case 'light_pole':
+      return (
+        <mesh position={[0, 3.5, 0]} castShadow>
+          <cylinderGeometry args={[0.08, 0.12, 7, 10]} />
+          <meshStandardMaterial color="#64748b" metalness={0.4} />
+        </mesh>
+      );
+    case 'trash_can':
+      return (
+        <mesh position={[0, 0.5, 0]} castShadow>
+          <cylinderGeometry args={[0.3, 0.25, 1, 12]} />
+          <meshStandardMaterial color="#059669" />
+        </mesh>
+      );
+    default:
+      return (
+        <mesh position={[0, 1.6, 0]} castShadow receiveShadow>
+          <boxGeometry args={[w * 0.8, 3.2, d * 0.8]} />
+          <meshStandardMaterial color="#334155" roughness={0.7} />
+        </mesh>
+      );
+  }
+};
+
+/** The island roof: hand-built, since no CC0 kit ships a forecourt canopy. */
+const Canopy: React.FC<{ building: BuildingEntity }> = ({ building }) => {
+  const w = building.size[0] * 2;
+  const d = building.size[1] * 2;
+  const height = 6.2;
+  const pillarX = w / 2 - 1;
+  const pillarZ = d / 2 - 1;
+
+  return (
+    <group>
+      {[
+        [-pillarX, -pillarZ],
+        [pillarX, -pillarZ],
+        [-pillarX, pillarZ],
+        [pillarX, pillarZ]
+      ].map(([x, z]) => (
+        <mesh key={`${x},${z}`} position={[x, height / 2, z]} castShadow>
+          <cylinderGeometry args={[0.22, 0.26, height, 12]} />
+          <meshStandardMaterial color="#cbd5e1" metalness={0.35} roughness={0.5} />
+        </mesh>
+      ))}
+
+      {/* Roof slab with a coloured fascia band around all four sides */}
+      <mesh position={[0, height + 0.45, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, 0.5, d]} />
+        <meshStandardMaterial color="#94a3b8" roughness={0.65} metalness={0.15} />
+      </mesh>
+      <mesh position={[0, height + 0.05, 0]}>
+        <boxGeometry args={[w + 0.25, 0.42, d + 0.25]} />
+        <meshStandardMaterial
+          color="#0284c7"
+          emissive="#0284c7"
+          emissiveIntensity={0.45}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* Recessed downlights so the island reads as lit from above */}
+      {[-w / 4, w / 4].map((x) =>
+        [-d / 4, d / 4].map((z) => (
+          <mesh key={`${x}_${z}`} position={[x, height - 0.16, z]} rotation={[Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.42, 12]} />
+            <meshStandardMaterial
+              color="#fff8e1"
+              emissive="#ffedb8"
+              emissiveIntensity={1.6}
+              toneMapped={false}
+            />
+          </mesh>
+        ))
+      )}
+    </group>
+  );
+};
+
+/**
+ * Surface fittings for a buried fuel tank: the concrete lid, its filler caps
+ * and the vent stack. The tank itself is underground, so this is all the
+ * player ever sees of it.
+ */
+const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
+  const TANK_ACCENTS: Record<string, string> = {
+    tank_gasoline: '#22c55e',
+    tank_diesel: '#f97316',
+    tank_lpg: '#3b82f6'
+  };
+  const accent = TANK_ACCENTS[building.type] || '#94a3b8';
+  const w = building.size[0] * 2;
+  const d = building.size[1] * 2;
+
+  return (
+    <group>
+      {/* Concrete access slab, sunk almost flush with the apron */}
+      <mesh position={[0, 0.06, 0]} receiveShadow>
+        <boxGeometry args={[w * 0.85, 0.12, d * 0.85]} />
+        <meshStandardMaterial color="#7c8798" roughness={0.9} />
+      </mesh>
+
+      {/* Painted border in the fuel's colour so the grade is obvious */}
+      <mesh position={[0, 0.13, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[w * 0.36, w * 0.42, 4]} />
+        <meshBasicMaterial color={accent} transparent opacity={0.75} />
+      </mesh>
+
+      {/* Two filler caps */}
+      {[-w * 0.18, w * 0.18].map((x) => (
+        <group key={x} position={[x, 0.12, 0]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.42, 0.46, 0.22, 16]} />
+            <meshStandardMaterial color="#4b5563" metalness={0.7} roughness={0.4} />
+          </mesh>
+          <mesh position={[0, 0.13, 0]}>
+            <cylinderGeometry args={[0.3, 0.3, 0.06, 16]} />
+            <meshStandardMaterial
+              color={accent}
+              emissive={accent}
+              emissiveIntensity={0.25}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Vent stack at the back corner */}
+      <group position={[w * 0.34, 0, -d * 0.32]}>
+        <mesh position={[0, 1.5, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.13, 3, 10]} />
+          <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
+        </mesh>
+        <mesh position={[0, 3.05, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.11, 0.11, 0.5, 10]} />
+          <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
+        </mesh>
+      </group>
+    </group>
+  );
+};
+
+const SIGNAGE: Record<string, { text: string; height: number; className: string }> = {
+  office: {
+    text: 'YÖNETİM OFİSİ',
+    height: 5,
+    className: 'bg-slate-900/85 text-white'
+  },
+  mini_market: {
+    text: 'MİNİ MARKET',
+    height: 6,
+    className: 'bg-amber-600 text-white'
+  },
+  toilet: { text: 'WC 🚻', height: 3.6, className: 'bg-slate-900/85 text-white' },
+  restaurant: { text: 'RESTORAN', height: 7.4, className: 'bg-red-600 text-white' },
+  cafe: { text: 'KAHVE', height: 5, className: 'bg-amber-700 text-white' },
+  rest_complex: { text: 'DİNLENME TESİSİ', height: 8.2, className: 'bg-sky-600 text-white' },
+  car_wash: { text: 'OTO YIKAMA', height: 5.8, className: 'bg-sky-600 text-white' },
+  oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, className: 'bg-amber-600 text-white' },
+  tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, className: 'bg-sky-700 text-white' },
+  air_water: { text: 'HAVA & SU', height: 3.4, className: 'bg-slate-900/85 text-white' },
+  car_park: { text: 'OTOPARK', height: 1.6, className: 'bg-slate-900/85 text-white' },
+  truck_park: { text: 'TIR PARKI', height: 3.4, className: 'bg-amber-600 text-white' },
+  ev_substation: { text: '⚡ ALTYAPI', height: 8.6, className: 'bg-yellow-500 text-slate-950' },
+  hotel: { text: 'OTEL', height: 9, className: 'bg-indigo-600 text-white' },
+  ev_storage: { text: 'ENERJİ DEPOLAMA', height: 3.6, className: 'bg-emerald-600 text-white' },
+  ev_charger_ac: { text: 'AC ŞARJ', height: 3, className: 'bg-emerald-600 text-white' },
+  ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, className: 'bg-orange-600 text-white' }
+};
+
+export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
+  const [hovered, setHovered] = useState(false);
+  const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
+  const selectBuilding = useGameStore((s) => s.selectBuilding);
+  const setActiveModal = useGameStore((s) => s.setActiveModal);
+
+  const isSelected = selectedBuildingId === building.id;
+  const posX = building.position[0] * 2;
+  const posZ = building.position[1] * 2;
+
+  const handleClick = (e: any) => {
+    e.stopPropagation();
+    selectBuilding(building.id);
+    if (building.type === 'office') setActiveModal('OFFICE');
+    else if (building.type === 'price_sign') setActiveModal('PRICING');
+  };
+
+  const signage = SIGNAGE[building.type];
+  const ringRadius = Math.max(building.size[0], building.size[1]) + 0.4;
+
+  const CustomFacility = CUSTOM_FACILITIES[building.type];
+
+  const body = CustomFacility ? (
+    <CustomFacility building={building} />
+  ) : hasBuildingModel(building.type) ? (
+    <ModelErrorBoundary fallback={<FallbackGeometry building={building} />}>
+      <Suspense fallback={<FallbackGeometry building={building} />}>
+        <BuildingModel type={building.type} footprint={building.size} />
+      </Suspense>
+    </ModelErrorBoundary>
+  ) : building.type === 'canopy' ? (
+    <Canopy building={building} />
+  ) : building.type === 'price_sign' ? (
+    <PriceTotem level={building.level} />
+  ) : building.type === 'light_pole' ? (
+    <LightPole />
+  ) : building.type.startsWith('tank_') ? (
+    <TankFixtures building={building} />
+  ) : (
+    <FallbackGeometry building={building} />
+  );
+
+  return (
+    <group
+      position={[posX, 0, posZ]}
+      rotation={[0, (building.rotation * Math.PI) / 180, 0]}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
+      onPointerOut={() => setHovered(false)}
+    >
+      {body}
+
+      {signage && (
+        <Html position={[0, signage.height, 0]} center distanceFactor={26} zIndexRange={[5, 0]}>
+          <div
+            className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow whitespace-nowrap ${signage.className}`}
+          >
+            {signage.text}
+          </div>
+        </Html>
+      )}
+
+      {(hovered || isSelected) && (
+        <mesh position={[0, 0.07, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[ringRadius, ringRadius + 0.3, 32]} />
+          <meshBasicMaterial
+            color={isSelected ? '#38bdf8' : '#e2e8f0'}
+            opacity={0.8}
+            transparent
+          />
+        </mesh>
+      )}
+    </group>
+  );
+};
