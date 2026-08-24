@@ -32,7 +32,7 @@ import {
 } from '../domain/services/simulationEngine';
 import { evaluatePlacement } from '../domain/services/placement';
 import {
-  ownedBounds,
+  stationBounds,
   parcelKey,
   isBuyable,
   parcelPrice,
@@ -196,6 +196,12 @@ interface GameStore {
  * forward but resetting.
  */
 function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveModalType } {
+  // Older saves measured the plot across both sides of the highway, which
+  // dragged the exit driveway off the forecourt as the far side grew.
+  const bounds = stationBounds(loaded.station.plots.ownedParcels);
+  loaded.station.plots.width = bounds.width;
+  loaded.station.plots.height = bounds.height;
+
   // Day one should open with its daily goals already posted.
   if (!loaded.missions.some((m) => m.type !== 'TUTORIAL')) {
     generateDailyMissions(loaded);
@@ -637,7 +643,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     // Land arrives bare and fenced; concrete is a separate job.
     state.station.plots.ownedParcels.push(parcelKey(col, row));
-    const bounds = ownedBounds(state.station.plots.ownedParcels);
+    const bounds = stationBounds(state.station.plots.ownedParcels);
     state.station.plots.width = bounds.width;
     state.station.plots.height = bounds.height;
 

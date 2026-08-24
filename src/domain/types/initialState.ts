@@ -1,6 +1,6 @@
 import { GameState } from './gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { ownedBounds, STARTING_PARCELS } from '../services/land';
+import { stationBounds, STARTING_PARCELS } from '../services/land';
 
 export function createInitialGameState(): GameState {
   const now = Date.now();
@@ -34,8 +34,8 @@ export function createInitialGameState(): GameState {
       open: true,
       cleanliness: 95,
       plots: {
-        width: ownedBounds(STARTING_PARCELS).width,
-        height: ownedBounds(STARTING_PARCELS).height,
+        width: stationBounds(STARTING_PARCELS).width,
+        height: stationBounds(STARTING_PARCELS).height,
         ownedParcels: [...STARTING_PARCELS],
         // The starting block comes ready to trade on.
         pavedParcels: [...STARTING_PARCELS]

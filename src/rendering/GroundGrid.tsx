@@ -356,7 +356,33 @@ export const GroundGrid: React.FC = () => {
     );
   }, [buildings, pumps]);
 
-  const farDriveways = hasFarSideBuilding ? nearDriveways : [];
+  /**
+   * The strip of far-side concrete that meets the road, as a world-x span.
+   * The mouths are pulled inside it so a ramp never ends in the grass when
+   * the block across the road sits over different columns to the station.
+   */
+  const farFrontage = useMemo(() => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const key of plots.pavedParcels) {
+      const { col, row } = parseParcelKey(key);
+      if (row !== -1) continue;
+      const b = parcelBounds(col, row);
+      min = Math.min(min, b.minX * S);
+      max = Math.max(max, b.maxX * S);
+    }
+    return min < max ? { min, max } : null;
+  }, [plots.pavedParcels]);
+
+  const farDriveways =
+    hasFarSideBuilding && farFrontage
+      ? nearDriveways.map((x) => {
+          const half = DRIVEWAY_WIDTH / 2;
+          const lo = farFrontage.min + half;
+          const hi = farFrontage.max - half;
+          return hi < lo ? (farFrontage.min + farFrontage.max) / 2 : Math.min(Math.max(x, lo), hi);
+        })
+      : [];
 
   /**
    * World-space z span of a parcel, held clear of the carriageway. Near-side
@@ -504,12 +530,18 @@ export const GroundGrid: React.FC = () => {
           }
         ];
 
-        // Edge that looks onto the highway, cut open at the driveways.
+        // Edge that looks onto the highway. Only rows 0 and -1 actually front
+        // it, and they face each other across the carriageways rather than
+        // touching — so neither may swallow the other's kerb. Deeper rows just
+        // butt onto the parcel in front of them and need no mouths cut.
         const roadEdgeZ = row < 0 ? back : front;
-        const neighbourTowardRoad = row < 0 ? `${col},${row + 1}` : `${col},${row - 1}`;
-        const roadEdgePieces = plots.pavedParcels.includes(neighbourTowardRoad)
-          ? []
-          : kerbSegments(left, right, row < 0 ? farDriveways : nearDriveways);
+        const frontsHighway = row === 0 || row === -1;
+        const parcelInFront = row < 0 ? `${col},${row + 1}` : `${col},${row - 1}`;
+        const roadEdgePieces: Array<[number, number]> = frontsHighway
+          ? kerbSegments(left, right, row < 0 ? farDriveways : nearDriveways)
+          : plots.pavedParcels.includes(parcelInFront)
+            ? []
+            : [[left, right]];
 
         return (
           <group key={`kerb_${key}`}>
@@ -553,10 +585,10 @@ export const GroundGrid: React.FC = () => {
       />
 
       {/* Once the far side is developed it needs its own mouths */}
-      {hasFarSideBuilding && (
+      {farDriveways.length === 2 && (
         <>
           <Driveway
-            x={layout.entryX * S}
+            x={farDriveways[0]}
             apronFront={farApronFront}
             halfWidth={roadHalfWidth}
             roadCentreZ={farRoadZ}
@@ -564,7 +596,7 @@ export const GroundGrid: React.FC = () => {
             far
           />
           <Driveway
-            x={layout.exitX * S}
+            x={farDriveways[1]}
             apronFront={farApronFront}
             halfWidth={roadHalfWidth}
             roadCentreZ={farRoadZ}

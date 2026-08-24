@@ -8,6 +8,7 @@ import {
   buyableParcels,
   parcelPrice,
   ownedBounds,
+  stationBounds,
   isFootprintOnOwnedLand,
   paveCost,
   PARCEL
@@ -177,5 +178,24 @@ describe('land — bounds drive the build area', () => {
     const bounds = ownedBounds([...STARTING_PARCELS, '-1,0']);
     expect(bounds.minX).toBe(parcelBounds(-1, 0).minX);
     expect(bounds.minX).toBeLessThan(0);
+  });
+
+  it('keeps the station block clear of land bought across the road', () => {
+    const owned = [...STARTING_PARCELS, '2,-1', '3,-1'];
+
+    // The far block reaches further right than the station does.
+    expect(ownedBounds(owned).width).toBeGreaterThan(stationBounds(owned).width);
+    expect(stationBounds(owned).width).toBe(ownedBounds(STARTING_PARCELS).width);
+  });
+
+  it('keeps the exit driveway on the forecourt when the far side grows', () => {
+    const owned = [...STARTING_PARCELS, '2,-1', '3,-1'];
+    const plots = stationBounds(owned);
+    const layout = getLayout({ station: { plots } });
+
+    // The mouth is three grid units wide either side of its centre; it has to
+    // sit on concrete, not out in the verge past the last owned parcel.
+    expect(layout.exitX + 3).toBeLessThanOrEqual(plots.width);
+    expect(layout.entryX - 3).toBeGreaterThanOrEqual(0);
   });
 });

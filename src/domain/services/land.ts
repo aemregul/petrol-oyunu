@@ -120,6 +120,17 @@ export function ownedBounds(owned: string[]): {
   return { minX, minZ, width: maxX, height: maxZ };
 }
 
+/**
+ * Bounds of the station block itself — only the land on this side of the
+ * highway. Lane positions and the apron clamp describe where the station's
+ * own traffic drives, so a parcel bought across the road must not stretch
+ * them: that would drag the exit driveway off the forecourt and into the
+ * verge. Use `ownedBounds` for anything that spans both sides.
+ */
+export function stationBounds(owned: string[]): ReturnType<typeof ownedBounds> {
+  return ownedBounds(owned.filter((key) => !isFarSide(parseParcelKey(key).row)));
+}
+
 /** True when every corner of a footprint sits on land the player owns. */
 export function isFootprintOnOwnedLand(
   owned: string[],
