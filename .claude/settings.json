@@ -76,7 +76,10 @@
       "Bash(git add *)",
       "Bash(xargs -I{} du -k \"{}\")",
       "Bash(awk '{s+=$1} END {printf \"%.1f MB\\\\n\", s/1024}')",
-      "Bash(git -c commit.gpgsign=false commit -q -m ' *)"
+      "Bash(git -c commit.gpgsign=false commit -q -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git ls-tree *)"
     ]
   }
 }

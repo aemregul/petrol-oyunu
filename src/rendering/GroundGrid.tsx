@@ -13,7 +13,7 @@ const roadHalfWidth = LAYOUT.roadHalfWidth * S;
 const KERB = { width: 0.34, height: 0.16 };
 
 /** Gap between the road kerb and the forecourt, bridged by the driveways. */
-const VERGE_DEPTH = 2.0;
+const VERGE_DEPTH = 3.2;
 
 /** Width of a driveway mouth, and the gap it needs in both kerb lines. */
 const DRIVEWAY_WIDTH = 6;
@@ -81,16 +81,29 @@ const Driveway: React.FC<{ x: number; apronFront: number; entering: boolean }> =
         <meshStandardMaterial color="#2b3340" roughness={0.8} />
       </mesh>
 
-      {/* Painted arrow showing which way this mouth runs */}
+      {/* Painted arrow, sized from the mouth so it never runs off the tarmac */}
       <group position={[0, 0.034, midZ]} rotation={[-Math.PI / 2, 0, entering ? 0 : Math.PI]}>
-        <mesh position={[0, -depth * 0.16, 0]}>
-          <planeGeometry args={[0.7, depth * 0.42]} />
-          <meshBasicMaterial color="#f1f5f9" />
-        </mesh>
-        <mesh position={[0, depth * 0.22, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <circleGeometry args={[0.95, 3]} />
-          <meshBasicMaterial color="#f1f5f9" />
-        </mesh>
+        {(() => {
+          // Fit the arrow inside the shorter of the two dimensions.
+          const total = Math.min(depth * 0.78, DRIVEWAY_WIDTH * 0.5);
+          // An equilateral triangle of circumradius r spans 1.5r along its
+          // axis, from -r/2 (base) to +r (apex).
+          const r = Math.min((total * 0.45) / 1.5, (DRIVEWAY_WIDTH * 0.42) / 1.73);
+          const shaftLength = Math.max(0.1, total - 1.5 * r);
+
+          return (
+            <>
+              <mesh position={[0, -0.75 * r, 0]}>
+                <planeGeometry args={[r * 0.62, shaftLength]} />
+                <meshBasicMaterial color="#f1f5f9" />
+              </mesh>
+              <mesh position={[0, total / 2 - r, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <circleGeometry args={[r, 3]} />
+                <meshBasicMaterial color="#f1f5f9" />
+              </mesh>
+            </>
+          );
+        })()}
       </group>
     </group>
   );
