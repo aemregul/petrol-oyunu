@@ -131,6 +131,30 @@ export function stationBounds(owned: string[]): ReturnType<typeof ownedBounds> {
   return ownedBounds(owned.filter((key) => !isFarSide(parseParcelKey(key).row)));
 }
 
+/**
+ * Grid x span of the paved parcels fronting the highway on one side of it —
+ * row 0 on the station's side, row -1 across the road. Anything that has to
+ * meet the carriageway, a driveway mouth above all, has to sit inside this or
+ * it opens onto bare ground.
+ */
+export function pavedFrontage(
+  paved: string[],
+  row: 0 | -1 = 0
+): { minX: number; maxX: number } | null {
+  let minX = Infinity;
+  let maxX = -Infinity;
+
+  for (const key of paved) {
+    const parcel = parseParcelKey(key);
+    if (parcel.row !== row) continue;
+    const b = parcelBounds(parcel.col, parcel.row);
+    minX = Math.min(minX, b.minX);
+    maxX = Math.max(maxX, b.maxX);
+  }
+
+  return minX < maxX ? { minX, maxX } : null;
+}
+
 /** True when every corner of a footprint sits on land the player owns. */
 export function isFootprintOnOwnedLand(
   owned: string[],

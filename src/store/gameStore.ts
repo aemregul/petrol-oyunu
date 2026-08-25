@@ -28,9 +28,12 @@ import {
   getWholesaleEventModifier,
   applyLevelProgression,
   releasePump,
-  setPumpState
+  setPumpState,
+  drivewayRole,
+  getLayout,
+  DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
-import { evaluatePlacement } from '../domain/services/placement';
+import { evaluatePlacement, snapPlacement } from '../domain/services/placement';
 import {
   stationBounds,
   parcelKey,
@@ -202,6 +205,24 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   loaded.station.plots.width = bounds.width;
   loaded.station.plots.height = bounds.height;
 
+  // Wide ramps used to be ordinary structures and could be dropped anywhere,
+  // which left them stranded on the forecourt or out in the road. Pull each
+  // one back onto the verge and keep only one per mouth.
+  const seenRoles = new Set<string>();
+  for (const building of Object.values(loaded.buildings)) {
+    const role = drivewayRole(building.type);
+    if (!role) continue;
+
+    if (seenRoles.has(role)) {
+      delete loaded.buildings[building.id];
+      continue;
+    }
+    seenRoles.add(role);
+
+    building.position = snapPlacement(loaded, building.type, building.position);
+    building.size = GAME_CONFIG.buildings[building.type]?.size ?? building.size;
+  }
+
   // Day one should open with its daily goals already posted.
   if (!loaded.missions.some((m) => m.type !== 'TUTORIAL')) {
     generateDailyMissions(loaded);
@@ -340,17 +361,26 @@ export const useGameStore = create<GameStore>((set, get) => {
   // BUILD MODE
   enterBuildMode: (buildingType) => {
     sounds.playClick();
-    const position: [number, number] = [12, 12];
-    set((state) => ({
-      buildMode: {
-        active: true,
-        buildingType,
-        position,
-        rotation: 0,
-        isValid: evaluatePlacement(state.gameState, buildingType, position, 0).valid
-      },
-      activeModal: 'NONE'
-    }));
+    set((state) => {
+      // A ramp opens where the mouth it replaces already is, so the preview
+      // starts on a spot that is legal and shows what it is about to change.
+      const role = drivewayRole(buildingType);
+      const layout = getLayout(state.gameState);
+      const start: [number, number] = role
+        ? [role === 'entry' ? layout.entryX : layout.exitX, DRIVEWAY_Z]
+        : [12, 12];
+      const position = snapPlacement(state.gameState, buildingType, start);
+      return {
+        buildMode: {
+          active: true,
+          buildingType,
+          position,
+          rotation: 0,
+          isValid: evaluatePlacement(state.gameState, buildingType, position, 0).valid
+        },
+        activeModal: 'NONE'
+      };
+    });
   },
 
   exitBuildMode: () => {
@@ -369,16 +399,23 @@ export const useGameStore = create<GameStore>((set, get) => {
   setBuildPreviewPos: (pos) => {
     set((state) => {
       const { buildingType, rotation } = state.buildMode;
-      const isValid = buildingType
-        ? evaluatePlacement(state.gameState, buildingType, pos, rotation).valid
-        : false;
-      return { buildMode: { ...state.buildMode, position: pos, isValid } };
+      if (!buildingType) return { buildMode: { ...state.buildMode, position: pos, isValid: false } };
+
+      // A driveway ramp ignores the pointer's z entirely and rides the verge.
+      const snapped = snapPlacement(state.gameState, buildingType, pos);
+      const isValid = evaluatePlacement(state.gameState, buildingType, snapped, rotation).valid;
+      return { buildMode: { ...state.buildMode, position: snapped, isValid } };
     });
   },
 
   rotateBuildPreview: () => {
     sounds.playClick();
     set((state) => {
+      // A ramp only makes sense pointing across the verge, so it does not turn.
+      if (state.buildMode.buildingType && drivewayRole(state.buildMode.buildingType)) {
+        return { buildMode: state.buildMode };
+      }
+
       const rot = ((state.buildMode.rotation + 90) % 360) as 0 | 90 | 180 | 270;
       const { buildingType, position } = state.buildMode;
       const isValid = buildingType
@@ -476,6 +513,15 @@ export const useGameStore = create<GameStore>((set, get) => {
         flowRateLps: 8
       };
     } else {
+      // A wide ramp replaces the mouth it stands in for rather than adding a
+      // second one beside it, so the ramp it supersedes is torn out first.
+      const role = drivewayRole(buildMode.buildingType);
+      if (role) {
+        for (const existing of Object.values(state.buildings)) {
+          if (drivewayRole(existing.type) === role) delete state.buildings[existing.id];
+        }
+      }
+
       const bId = 'bld_' + Math.random().toString(36).substring(2, 7);
       state.buildings[bId] = {
         id: bId,

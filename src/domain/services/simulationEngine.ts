@@ -130,6 +130,8 @@ export const LAYOUT = {
   roadHalfWidth: 2.2,
   /** Landscaped central reservation between the two carriageways. */
   medianWidth: 2.6,
+  /** Grass between the road kerb and the forecourt, bridged by the driveways. */
+  vergeDepth: 1.6,
   /** Where cars appear and disappear along the highway. */
   roadStartX: -12,
   /** Wide enough that a truck in the queue does not overlap the car behind. */
@@ -142,6 +144,59 @@ export const LAYOUT = {
 } as const;
 
 /**
+ * A driveway belongs to the road layout, not to the forecourt: it has to meet
+ * the carriageway at one end and the concrete at the other, so it can only
+ * ever sit on the verge between them. The wide ramps the player can buy are
+ * therefore not free-standing structures — each one *replaces* one of the two
+ * default mouths, and slides along the frontage rather than being dropped
+ * anywhere on the plot.
+ */
+export type DrivewayRole = 'entry' | 'exit';
+
+const WIDE_RAMPS: Record<string, DrivewayRole> = {
+  wide_entry: 'entry',
+  wide_exit: 'exit'
+};
+
+/** Which mouth a building type stands in for, or null if it is not a ramp. */
+export function drivewayRole(buildingType: string): DrivewayRole | null {
+  return WIDE_RAMPS[buildingType] ?? null;
+}
+
+/** Mouth widths in grid units: the default cut, and the widened one. */
+export const DRIVEWAY_WIDTH = 3;
+export const WIDE_DRIVEWAY_WIDTH = 4;
+
+/**
+ * The one row a driveway may sit on — the middle of the verge. Ramps move
+ * along the frontage, never towards or away from the road.
+ */
+export const DRIVEWAY_Z =
+  Math.round((LAYOUT.roadZ + LAYOUT.roadHalfWidth + LAYOUT.vergeDepth / 2) * 1000) / 1000;
+
+interface PlacedRamp {
+  type: string;
+  position: [number, number];
+}
+
+/** The wide ramp standing in for each default mouth, where one was built. */
+export function wideRamps(
+  buildings?: Record<string, PlacedRamp>
+): Partial<Record<DrivewayRole, PlacedRamp>> {
+  const out: Partial<Record<DrivewayRole, PlacedRamp>> = {};
+  for (const building of Object.values(buildings ?? {})) {
+    const role = drivewayRole(building.type);
+    if (role) out[role] = building;
+  }
+  return out;
+}
+
+/** Where a mouth sits when the player has not moved it. */
+export function defaultDrivewayX(role: DrivewayRole, plotWidth: number): number {
+  return role === 'entry' ? 3 : Math.max(6, plotWidth - 3);
+}
+
+/**
  * Lane and driveway positions, derived from the plot the player owns rather
  * than hard-coded. Buying land therefore moves the exit and lengthens the
  * queue without anything else needing to know.
@@ -149,6 +204,11 @@ export const LAYOUT = {
 export interface PlotLayout {
   entryX: number;
   exitX: number;
+  /** How wide each mouth is cut, which a wide ramp doubles. */
+  entryWidth: number;
+  exitWidth: number;
+  /** Centre of the verge: every driveway sits on this line. */
+  drivewayZ: number;
   laneZ: number;
   exitLaneZ: number;
   queueHeadX: number;
@@ -163,8 +223,11 @@ export interface PlotLayout {
 
 export function getLayout(state: {
   station: { plots: { width: number; height: number } };
+  /** Optional so the renderer can ask for a layout before anything is built. */
+  buildings?: Record<string, PlacedRamp>;
 }): PlotLayout {
   const { width, height } = state.station.plots;
+  const wide = wideRamps(state.buildings);
 
   // Upgrading mirrors the existing carriageway across a landscaped median
   // rather than widening it, so the near lane never moves and the station
@@ -177,8 +240,13 @@ export function getLayout(state: {
     roadHalfWidth,
     roadLaneZ,
     farRoadLaneZ,
-    entryX: 3,
-    exitX: Math.max(6, width - 3),
+    // A wide ramp takes over its mouth entirely: cars aim at it, the kerb
+    // opens for it, and the default ramp is no longer drawn.
+    entryX: wide.entry ? wide.entry.position[0] : defaultDrivewayX('entry', width),
+    exitX: wide.exit ? wide.exit.position[0] : defaultDrivewayX('exit', width),
+    entryWidth: wide.entry ? WIDE_DRIVEWAY_WIDTH : DRIVEWAY_WIDTH,
+    exitWidth: wide.exit ? WIDE_DRIVEWAY_WIDTH : DRIVEWAY_WIDTH,
+    drivewayZ: DRIVEWAY_Z,
     // The circulation lane hugs the road; the return lane runs along the back.
     laneZ: 4,
     exitLaneZ: Math.max(7, height - 3),

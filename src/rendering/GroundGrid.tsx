@@ -1,6 +1,11 @@
 import React, { useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { LAYOUT, getLayout } from '../domain/services/simulationEngine';
+import {
+  LAYOUT,
+  getLayout,
+  wideRamps,
+  DRIVEWAY_WIDTH as DRIVEWAY_WIDTH_GRID
+} from '../domain/services/simulationEngine';
 import { PARCEL, parseParcelKey, parcelBounds, isOwned } from '../domain/services/land';
 
 /** Grid units to world units; every mesh below shares this scale. */
@@ -13,25 +18,33 @@ const roadHalfWidth = LAYOUT.roadHalfWidth * S;
 const KERB = { width: 0.34, height: 0.16 };
 
 /** Gap between the road kerb and the forecourt, bridged by the driveways. */
-const VERGE_DEPTH = 3.2;
+const VERGE_DEPTH = LAYOUT.vergeDepth * S;
 
-/** Width of a driveway mouth, and the gap it needs in both kerb lines. */
-const DRIVEWAY_WIDTH = 6;
+/** Default width of a driveway mouth; a wide ramp opens a broader one. */
+const DRIVEWAY_WIDTH = DRIVEWAY_WIDTH_GRID * S;
+
+/**
+ * One opening in the kerb line: where it is and how much of the kerb it eats.
+ * Widths vary now that a mouth can be upgraded, so they travel together.
+ */
+interface Mouth {
+  x: number;
+  width: number;
+}
 
 /**
  * Splits a kerb or edge-line run into the pieces that survive after the
  * driveways cut through it. Vehicles must never have to cross a raised kerb.
  */
-function kerbSegments(from: number, to: number, gapCentres: number[]): Array<[number, number]> {
-  const half = DRIVEWAY_WIDTH / 2;
-  const cuts = [...gapCentres].sort((a, b) => a - b);
+function kerbSegments(from: number, to: number, mouths: Mouth[]): Array<[number, number]> {
+  const cuts = [...mouths].sort((a, b) => a.x - b.x);
 
   const out: Array<[number, number]> = [];
   let cursor = from;
 
-  for (const centre of cuts) {
-    const gapStart = centre - half;
-    const gapEnd = centre + half;
+  for (const mouth of cuts) {
+    const gapStart = mouth.x - mouth.width / 2;
+    const gapEnd = mouth.x + mouth.width / 2;
     if (gapEnd < from || gapStart > to) continue;
     if (gapStart > cursor) out.push([cursor, Math.min(gapStart, to)]);
     cursor = Math.max(cursor, gapEnd);
@@ -115,15 +128,15 @@ const Driveway: React.FC<{
 const Carriageway: React.FC<{
   centreX: number;
   centreZ: number;
-  /** World x of each driveway that meets this carriageway. */
-  driveways: number[];
+  /** Each driveway mouth that meets this carriageway, in world units. */
+  mouths: Mouth[];
   /**
    * Which edge those driveways are on: +1 for the +z side, -1 for -z. That
    * edge is broken into dashes where a mouth crosses it, the way a real road
    * marks a place traffic may leave the carriageway.
    */
   drivewaySide: 1 | -1;
-}> = ({ centreX, centreZ, driveways, drivewaySide }) => {
+}> = ({ centreX, centreZ, mouths, drivewaySide }) => {
   const laneDashes = useMemo(
     () => Array.from({ length: 90 }, (_, i) => -260 + i * 6),
     []
@@ -133,11 +146,11 @@ const Carriageway: React.FC<{
   const to = centreX + 300;
 
   /** Short dashes filling one driveway mouth. */
-  const crossingDashes = (centre: number) => {
-    const half = DRIVEWAY_WIDTH / 2;
+  const crossingDashes = (mouth: Mouth) => {
+    const half = mouth.width / 2;
     const step = 1.6;
     const out: number[] = [];
-    for (let x = centre - half + step / 2; x < centre + half; x += step) out.push(x);
+    for (let x = mouth.x - half + step / 2; x < mouth.x + half; x += step) out.push(x);
     return out;
   };
 
@@ -168,7 +181,7 @@ const Carriageway: React.FC<{
 
         return (
           <group key={`edge${side}`}>
-            {kerbSegments(from, to, driveways).map(([a, b]) => (
+            {kerbSegments(from, to, mouths).map(([a, b]) => (
               <mesh
                 key={`solid${a}`}
                 rotation={[-Math.PI / 2, 0, 0]}
@@ -179,10 +192,10 @@ const Carriageway: React.FC<{
               </mesh>
             ))}
 
-            {driveways.flatMap((centre) =>
-              crossingDashes(centre).map((x) => (
+            {mouths.flatMap((mouth) =>
+              crossingDashes(mouth).map((x) => (
                 <mesh
-                  key={`cross${centre}_${x}`}
+                  key={`cross${mouth.x}_${x}`}
                   rotation={[-Math.PI / 2, 0, 0]}
                   position={[x - centreX, 0.02, z]}
                 >
@@ -317,13 +330,24 @@ export const GroundGrid: React.FC = () => {
 
   // Derived from the plot rather than selected: returning a fresh object from
   // a zustand selector would re-render on every store write.
-  const layout = useMemo(() => getLayout({ station: { plots } }), [plots]);
+  const layout = useMemo(
+    () => getLayout({ station: { plots }, buildings }),
+    [plots, buildings]
+  );
 
   const farRoadZ = layout.farRoadLaneZ * S;
 
   // A mouth only exists where a ramp is actually drawn, so the kerb and the
-  // edge line are cut in exactly the same places and nowhere else.
-  const nearDriveways = [layout.entryX * S, layout.exitX * S];
+  // edge line are cut in exactly the same places and nowhere else. A wide ramp
+  // takes its mouth over: it is drawn as the building the player bought, so
+  // only the opening it needs is cut here.
+  const nearMouths: Mouth[] = [
+    { x: layout.entryX * S, width: layout.entryWidth * S },
+    { x: layout.exitX * S, width: layout.exitWidth * S }
+  ];
+
+  /** Mouths the player has not upgraded still need their default ramp drawn. */
+  const wide = useMemo(() => wideRamps(buildings), [buildings]);
 
   const plotWidth = plots.width * S;
   const plotDepth = plots.height * S;
@@ -374,13 +398,16 @@ export const GroundGrid: React.FC = () => {
     return min < max ? { min, max } : null;
   }, [plots.pavedParcels]);
 
-  const farDriveways =
+  // The far block gets its own pair of mouths straight across from the near
+  // ones, always the default width: wide ramps are a forecourt upgrade.
+  const farMouths: Mouth[] =
     isDualCarriageway && hasFarSideBuilding && farFrontage
-      ? nearDriveways.map((x) => {
+      ? nearMouths.map(({ x }) => {
           const half = DRIVEWAY_WIDTH / 2;
           const lo = farFrontage.min + half;
           const hi = farFrontage.max - half;
-          return hi < lo ? (farFrontage.min + farFrontage.max) / 2 : Math.min(Math.max(x, lo), hi);
+          const centre = hi < lo ? (farFrontage.min + farFrontage.max) / 2 : Math.min(Math.max(x, lo), hi);
+          return { x: centre, width: DRIVEWAY_WIDTH };
         })
       : [];
 
@@ -409,7 +436,7 @@ export const GroundGrid: React.FC = () => {
       <Carriageway
         centreX={plotWidth / 2}
         centreZ={roadZ}
-        driveways={nearDriveways}
+        mouths={nearMouths}
         drivewaySide={1}
       />
 
@@ -419,7 +446,7 @@ export const GroundGrid: React.FC = () => {
           <Carriageway
             centreX={plotWidth / 2}
             centreZ={farRoadZ}
-            driveways={farDriveways}
+            mouths={farMouths}
             drivewaySide={-1}
           />
 
@@ -442,12 +469,12 @@ export const GroundGrid: React.FC = () => {
       {/* Shoulder kerb. Only the edge a driveway actually meets is broken —
           the other side stays continuous, so no phantom mouths appear. */}
       {[
-        { z: roadZ, offset: roadHalfWidth, gaps: nearDriveways },
-        { z: roadZ, offset: -roadHalfWidth, gaps: [] as number[] },
+        { z: roadZ, offset: roadHalfWidth, gaps: nearMouths },
+        { z: roadZ, offset: -roadHalfWidth, gaps: [] as Mouth[] },
         ...(isDualCarriageway
           ? [
-              { z: farRoadZ, offset: -roadHalfWidth, gaps: farDriveways },
-              { z: farRoadZ, offset: roadHalfWidth, gaps: [] as number[] }
+              { z: farRoadZ, offset: -roadHalfWidth, gaps: farMouths },
+              { z: farRoadZ, offset: roadHalfWidth, gaps: [] as Mouth[] }
             ]
           : [])
       ].map(({ z, offset, gaps }) =>
@@ -538,7 +565,7 @@ export const GroundGrid: React.FC = () => {
         const frontsHighway = row === 0 || row === -1;
         const parcelInFront = row < 0 ? `${col},${row + 1}` : `${col},${row - 1}`;
         const roadEdgePieces: Array<[number, number]> = frontsHighway
-          ? kerbSegments(left, right, row < 0 ? farDriveways : nearDriveways)
+          ? kerbSegments(left, right, row < 0 ? farMouths : nearMouths)
           : plots.pavedParcels.includes(parcelInFront)
             ? []
             : [[left, right]];
@@ -568,27 +595,33 @@ export const GroundGrid: React.FC = () => {
         );
       })}
 
-      {/* Driveway ramps */}
-      <Driveway
-        x={layout.entryX * S}
-        apronFront={apronFront}
-        halfWidth={roadHalfWidth}
-        roadCentreZ={roadZ}
-        entering
-      />
-      <Driveway
-        x={layout.exitX * S}
-        apronFront={apronFront}
-        halfWidth={roadHalfWidth}
-        roadCentreZ={roadZ}
-        entering={false}
-      />
+      {/* Default driveway ramps. A mouth the player has widened is drawn by
+          the ramp they bought instead, so the old one is not left underneath
+          it — that is the same mouth, not a second one. */}
+      {!wide.entry && (
+        <Driveway
+          x={layout.entryX * S}
+          apronFront={apronFront}
+          halfWidth={roadHalfWidth}
+          roadCentreZ={roadZ}
+          entering
+        />
+      )}
+      {!wide.exit && (
+        <Driveway
+          x={layout.exitX * S}
+          apronFront={apronFront}
+          halfWidth={roadHalfWidth}
+          roadCentreZ={roadZ}
+          entering={false}
+        />
+      )}
 
       {/* Once the far side is developed it needs its own mouths */}
-      {farDriveways.length === 2 && (
+      {farMouths.length === 2 && (
         <>
           <Driveway
-            x={farDriveways[0]}
+            x={farMouths[0].x}
             apronFront={farApronFront}
             halfWidth={roadHalfWidth}
             roadCentreZ={farRoadZ}
@@ -596,7 +629,7 @@ export const GroundGrid: React.FC = () => {
             far
           />
           <Driveway
-            x={farDriveways[1]}
+            x={farMouths[1].x}
             apronFront={farApronFront}
             halfWidth={roadHalfWidth}
             roadCentreZ={farRoadZ}

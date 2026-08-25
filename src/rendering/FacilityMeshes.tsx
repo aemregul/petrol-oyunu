@@ -506,17 +506,32 @@ const OneWayRamp: React.FC<FacilityProps & { entering: boolean }> = ({
         </mesh>
       ))}
 
-      {/* Both lanes point the same direction */}
-      {[-w / 4, w / 4].map((x) => (
-        <mesh
-          key={x}
-          rotation={[-Math.PI / 2, 0, entering ? 0 : Math.PI]}
-          position={[x, 0.02, 0]}
-        >
-          <planeGeometry args={[w * 0.22, d * 0.5]} />
-          <meshBasicMaterial color={accent} transparent opacity={0.5} />
-        </mesh>
-      ))}
+      {/* Both lanes point the same way, painted the same as the mouth this
+          ramp replaces. Laid flat, the group's local +y points to world -z, so
+          traffic heading onto the forecourt needs the extra half turn. */}
+      {[-w / 4, w / 4].map((x) => {
+        const total = Math.min(d * 0.72, w * 0.3);
+        // An equilateral triangle of circumradius r spans 1.5r along its axis.
+        const r = Math.min((total * 0.45) / 1.5, (w * 0.2) / 1.73);
+        const shaftLength = Math.max(0.1, total - 1.5 * r);
+
+        return (
+          <group
+            key={x}
+            position={[x, 0.02, 0]}
+            rotation={[-Math.PI / 2, 0, entering ? Math.PI : 0]}
+          >
+            <mesh position={[0, -0.75 * r, 0]}>
+              <planeGeometry args={[r * 0.62, shaftLength]} />
+              <meshBasicMaterial color={accent} />
+            </mesh>
+            <mesh position={[0, total / 2 - r, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <circleGeometry args={[r, 3]} />
+              <meshBasicMaterial color={accent} />
+            </mesh>
+          </group>
+        );
+      })}
 
       {/* Gate posts with a direction plate */}
       {[-w / 2 + 0.4, w / 2 - 0.4].map((x) => (
