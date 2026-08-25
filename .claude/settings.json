@@ -112,7 +112,22 @@
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/fix2.png 225 2 24 -16)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/fix3.png 45 2 24 -16)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/kerb_old.png 45 2 24 -16)",
-      "Bash(pkill -f vite)"
+      "Bash(pkill -f vite)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/lamp_day.png 225 2 24 -16 10 2)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/lamp_night.png 225 3 24 -12 21 2)",
+      "Bash(sips -c 260 300 --cropOffset 140 380 lamp_day.png --out p1.png)",
+      "Bash(sips -c 260 300 --cropOffset 340 720 lamp_day.png --out p2.png)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/lamp_wide.png 225 1 40 -12 10 2)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/lamp_l1.png 225 2 20 0 10 1)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/final.png 225 2 24 -16 10 2)",
+      "Bash(sed -i '' \"s|import { lampsAreLit } from './LightPole';|import { lampsAreLit } from './LightPole';\\\\nimport { LampGlow } from './LampGlow';|\" src/rendering/SceneryProps.tsx)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/glow1.png 225 4 16 -2 21.5)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/ab_noroadglow.png 225 4 16 -2 21.5)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/ab_noforeglow.png 225 4 16 -2 21.5)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/glow3.png 225 3 20 -8 21.5)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/glow4.png 225 3 20 -8 21.5)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/day_check.png 225 3 20 -8 12)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/final_night.png 225 5 14 4 21)"
     ]
   }
 }

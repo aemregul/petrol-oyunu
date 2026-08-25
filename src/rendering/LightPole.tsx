@@ -1,9 +1,25 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { LampGlow } from './LampGlow';
 
 /** Full darkness before this hour and after DUSK; lamps burn between them. */
 const DAWN = 7.5;
 const DUSK = 18.5;
+
+/**
+ * The photocell every lamp in the game shares: overcast skies bring them on
+ * early, as real ones do. Exported so the highway columns switch on at the
+ * same moment as the forecourt lamps.
+ */
+export function lampsAreLit(
+  gameTime: number,
+  weather: 'SUNNY' | 'OVERCAST' | 'RAIN'
+): boolean {
+  const dawn = weather === 'SUNNY' ? DAWN : DAWN + 0.8;
+  const dusk = weather === 'SUNNY' ? DUSK : DUSK - 0.8;
+  return gameTime < dawn || gameTime > dusk;
+}
 
 /**
  * A forecourt lamp post. Hand-built rather than a kit model, and it casts a
@@ -15,10 +31,12 @@ export const LightPole: React.FC = () => {
   const weather = useGameStore((s) => s.gameState.dayState.weather);
   const quality = useGameStore((s) => s.gameState.settings.graphicsQuality);
 
-  // Overcast skies bring the lamps on early, as real photocells do.
-  const dawn = weather === 'SUNNY' ? DAWN : DAWN + 0.8;
-  const dusk = weather === 'SUNNY' ? DUSK : DUSK - 0.8;
-  const isDark = gameTime < dawn || gameTime > dusk;
+  const isDark = lampsAreLit(gameTime, weather);
+
+  // The spot needs something in the scene graph to aim at; a bare Object3D
+  // parented beside it keeps the aim in the pole's own space, so a rotated
+  // pole still lights the ground under its own arm.
+  const target = useMemo(() => new THREE.Object3D(), []);
 
   // Fade rather than snap, so switch-on reads as a dimming lamp warming up.
   const glow = isDark ? 1 : 0.08;
@@ -60,16 +78,31 @@ export const LightPole: React.FC = () => {
         </mesh>
       </group>
 
-      {/* The actual light. Kept off in daylight so it costs nothing then. */}
+      {/* The pool, shaft and flare that make the lamp read as lit. */}
+      <LampGlow position={[1.15, 7.05, 0]} reach={5.4} lit={isDark} />
+
+      {/* The actual light. A spot aimed at the apron rather than a bare point:
+          hung this high a point light spreads its falloff over the whole
+          forecourt and lands as a faint wash, while a cone puts the light
+          where the lamp is pointing and gives the pool an edge. Kept off in
+          daylight so it costs nothing then. */}
       {isDark && (
-        <pointLight
-          position={[1.15, 7, 0]}
-          intensity={26}
-          distance={26}
-          decay={2}
-          color="#ffe6a8"
-          castShadow={quality === 'HIGH'}
-        />
+        <>
+          <primitive object={target} position={[1.15, 0, 0]} />
+          <spotLight
+            position={[1.15, 7, 0]}
+            target={target}
+            angle={0.62}
+            penumbra={0.55}
+            intensity={520}
+            distance={30}
+            decay={2}
+            color="#ffe0ae"
+            castShadow={quality === 'HIGH'}
+            shadow-mapSize={[512, 512]}
+            shadow-bias={-0.002}
+          />
+        </>
       )}
     </group>
   );

@@ -9,6 +9,8 @@ import {
   LAND_BOUNDS,
   FAR_SIDE_FRONT
 } from '../domain/services/land';
+import { lampsAreLit } from './LightPole';
+import { LampGlow } from './LampGlow';
 
 const S = 2;
 const roadZ = LAYOUT.roadZ * S;
@@ -43,6 +45,22 @@ const MAX_TREES = 400;
 const MAX_BUSHES = 400;
 const MAX_LAMPS = 32;
 
+/** Lighting columns: a regular run either side of the plot, motorway-spaced. */
+const LAMP_SPACING = 26;
+const LAMP_COUNT = 13;
+const LAMP_FIRST_X = -60;
+
+/**
+ * How far the arm reaches from the column. The forecourt lamp only has to
+ * clear its own base, but a column standing in the central reservation has to
+ * get its lens out over the kerb or it lights nothing but the grass it stands
+ * on — which is exactly what a short arm did.
+ */
+const LAMP_ARM = 2.6;
+/** Length and tilt of the arm that spans it, from column top to lens. */
+const LAMP_ARM_LENGTH = Math.hypot(LAMP_ARM, 0.5);
+const LAMP_ARM_TILT = -Math.atan2(LAMP_ARM, 0.5);
+
 /** Deterministic pseudo-random so scenery never reshuffles between frames. */
 function seeded(seed: number): () => number {
   let value = seed;
@@ -66,6 +84,10 @@ interface Placement {
 export const SceneryProps: React.FC = () => {
   const plots = useGameStore((s) => s.gameState.station.plots);
   const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+  const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
+  const weather = useGameStore((s) => s.gameState.dayState.weather);
+
+  const isDark = lampsAreLit(gameTime, weather);
 
   const layout = useMemo(() => getLayout({ station: { plots } }), [plots]);
   const roadHalfWidth = layout.roadHalfWidth * S;
@@ -83,7 +105,7 @@ export const SceneryProps: React.FC = () => {
     [roadLevel, farRoadZ, roadHalfWidth]
   );
 
-  const { trees, bushes, lamps } = useMemo(() => {
+  const { trees, bushes } = useMemo(() => {
     const rand = seeded(20240822);
     const treeList: Placement[] = [];
     const bushList: Placement[] = [];
@@ -133,14 +155,6 @@ export const SceneryProps: React.FC = () => {
       }
     }
 
-    // Lamps sit on the verge beyond whatever the road currently occupies.
-    const lampZ = corridor.minZ - 4;
-    const lampList: Placement[] = Array.from({ length: 9 }, (_, i) => ({
-      position: [-30 + i * 22, 0, lampZ] as [number, number, number],
-      scale: 1,
-      rotation: 0
-    }));
-
     // Never hand <Instances> more than its fixed buffer can hold.
     if (treeList.length > MAX_TREES || bushList.length > MAX_BUSHES) {
       console.warn(
@@ -151,10 +165,40 @@ export const SceneryProps: React.FC = () => {
 
     return {
       trees: treeList.slice(0, MAX_TREES),
-      bushes: bushList.slice(0, MAX_BUSHES),
-      lamps: lampList.slice(0, MAX_LAMPS)
+      bushes: bushList.slice(0, MAX_BUSHES)
     };
   }, [plots.ownedParcels, corridor]);
+
+  /**
+   * Lighting columns down the middle of the roadworks: open countryside while
+   * the highway is single, the central reservation once it is widened. That
+   * strip is never buyable and no driveway crosses it, so a column can never
+   * end up standing on a forecourt or in a ramp mouth — and none of them move
+   * when the road is upgraded.
+   *
+   * Each one faces the carriageway it lights: they all lean over the near lane
+   * at first, then alternate so the far lane gets its share.
+   */
+  const lamps = useMemo(() => {
+    const z = roadZ - roadHalfWidth - (LAYOUT.medianWidth * S) / 2;
+    return Array.from({ length: LAMP_COUNT }, (_, i) => ({
+      x: LAMP_FIRST_X + i * LAMP_SPACING,
+      z,
+      // Rotating by -90° swings the arm from +x round to +z, the near lane.
+      yaw: roadLevel >= 2 && i % 2 === 1 ? Math.PI / 2 : -Math.PI / 2
+    })).slice(0, MAX_LAMPS);
+  }, [roadLevel, roadHalfWidth]);
+
+  /** World position of a part sitting `dx` along the arm's own axis. */
+  const lampPart = (
+    lamp: { x: number; z: number; yaw: number },
+    dx: number,
+    y: number
+  ): [number, number, number] => [
+    lamp.x + dx * Math.cos(lamp.yaw),
+    y,
+    lamp.z - dx * Math.sin(lamp.yaw)
+  ];
 
   return (
     <group>
@@ -200,23 +244,73 @@ export const SceneryProps: React.FC = () => {
         ))}
       </Instances>
 
-      {/* Street light columns */}
+      {/* Lamp base plinths */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <cylinderGeometry args={[0.16, 0.22, 6.8, 5]} />
-        <meshStandardMaterial color="#64748b" roughness={0.6} metalness={0.4} />
+        <cylinderGeometry args={[0.34, 0.42, 0.36, 10]} />
+        <meshStandardMaterial color="#475569" roughness={0.8} />
         {lamps.map((l, i) => (
-          <Instance key={i} position={[l.position[0], 3.4, l.position[2]]} />
+          <Instance key={i} position={lampPart(l, 0, 0.18)} />
         ))}
       </Instances>
 
-      {/* Street light heads */}
+      {/* Tapered columns */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <boxGeometry args={[0.4, 0.25, 2.2]} />
-        <meshStandardMaterial color="#475569" roughness={0.6} metalness={0.4} />
+        <cylinderGeometry args={[0.12, 0.2, 6.8, 10]} />
+        <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
         {lamps.map((l, i) => (
-          <Instance key={i} position={[l.position[0], 6.8, l.position[2] + 1.1]} />
+          <Instance key={i} position={lampPart(l, 0, 3.6)} />
         ))}
       </Instances>
+
+      {/* Arms reaching out over the carriageway */}
+      <Instances limit={MAX_LAMPS} range={lamps.length}>
+        <cylinderGeometry args={[0.1, 0.13, LAMP_ARM_LENGTH, 10]} />
+        <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
+        {lamps.map((l, i) => (
+          <Instance
+            key={i}
+            position={lampPart(l, LAMP_ARM / 2, 7.1)}
+            rotation={[0, l.yaw, LAMP_ARM_TILT]}
+          />
+        ))}
+      </Instances>
+
+      {/* Lamp housings */}
+      <Instances limit={MAX_LAMPS} range={lamps.length}>
+        <boxGeometry args={[1.15, 0.26, 0.55]} />
+        <meshStandardMaterial color="#64748b" metalness={0.5} roughness={0.5} />
+        {lamps.map((l, i) => (
+          <Instance key={i} position={lampPart(l, LAMP_ARM, 7.28)} rotation={[0, l.yaw, 0]} />
+        ))}
+      </Instances>
+
+      {/* Lenses, lit from dusk by the same photocell as the forecourt lamps. */}
+      <Instances limit={MAX_LAMPS} range={lamps.length}>
+        <boxGeometry args={[0.95, 0.1, 0.42]} />
+        <meshStandardMaterial
+          color="#fff6d8"
+          emissive="#ffe9a8"
+          emissiveIntensity={isDark ? 3 : 0.08}
+          toneMapped={false}
+        />
+        {lamps.map((l, i) => (
+          <Instance key={i} position={lampPart(l, LAMP_ARM, 7.12)} rotation={[0, l.yaw, 0]} />
+        ))}
+      </Instances>
+
+      {/* What the columns are for. Thirteen real lights would cost more than
+          the rest of the scene put together, so the carriageway is lit with
+          the same pools and flares the forecourt lamps throw — from this
+          camera that is what the eye reads as a lit road anyway. */}
+      {lamps.map((l, i) => (
+        <LampGlow
+          key={`glow${i}`}
+          position={lampPart(l, LAMP_ARM, 7.08)}
+          reach={7.5}
+          shaft={false}
+          lit={isDark}
+        />
+      ))}
     </group>
   );
 };

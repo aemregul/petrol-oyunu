@@ -375,7 +375,7 @@ export const GroundGrid: React.FC = () => {
   }, [plots.pavedParcels]);
 
   const farDriveways =
-    hasFarSideBuilding && farFrontage
+    isDualCarriageway && hasFarSideBuilding && farFrontage
       ? nearDriveways.map((x) => {
           const half = DRIVEWAY_WIDTH / 2;
           const lo = farFrontage.min + half;
