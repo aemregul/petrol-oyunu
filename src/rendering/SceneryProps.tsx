@@ -18,6 +18,9 @@ const roadZ = LAYOUT.roadZ * S;
 /** Nothing decorative may stand this close to owned land or tarmac. */
 const CLEARANCE = 1.5;
 
+/** Grass between a road kerb and the forecourt — the ground the ramps cross. */
+const VERGE_DEPTH = LAYOUT.vergeDepth * S;
+
 /**
  * The whole area the map can ever cover, in world units, plus a margin of
  * countryside. Scenery is scattered across all of it and then cleared where
@@ -94,13 +97,25 @@ export const SceneryProps: React.FC = () => {
   const farRoadZ = layout.farRoadLaneZ * S;
 
   /**
-   * The band of ground the roadworks occupy: one carriageway now, both plus
-   * the median once the road is widened.
+   * The band of ground the roadworks occupy: the carriageways, the median
+   * between them, and — the part that used to be missed — the verges either
+   * side that the driveways are built across.
+   *
+   * Leaving the verges out left a strip of ground the scatter still treated as
+   * countryside even though it is where every ramp lands, so a shrub could end
+   * up standing in the middle of one. The far verge is deeper than the near
+   * one, because the parcels over there already begin clear of the road.
    */
   const corridor = useMemo(
     () => ({
-      minZ: (roadLevel >= 2 ? farRoadZ : roadZ) - roadHalfWidth,
-      maxZ: roadZ + roadHalfWidth
+      minZ:
+        roadLevel >= 2
+          ? Math.min(
+              farRoadZ - roadHalfWidth - VERGE_DEPTH,
+              parcelBounds(0, -1).maxZ * S
+            )
+          : roadZ - roadHalfWidth,
+      maxZ: roadZ + roadHalfWidth + VERGE_DEPTH
     }),
     [roadLevel, farRoadZ, roadHalfWidth]
   );
