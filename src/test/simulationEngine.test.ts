@@ -13,6 +13,12 @@ import {
   trackMissionMetric,
   queueSlotPosition,
   getLayout,
+  drivewayMouths,
+  drivewayLaneX,
+  blockLayout,
+  vehicleSide,
+  stopChance,
+  DRIVEWAY_Z,
   LAYOUT
 } from '../domain/services/simulationEngine';
 import { GAME_EVENTS } from '../config/eventConfig';
@@ -124,7 +130,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
     state.dayState.timeSpeed = 4;
 
     const valid: VehicleState[] = [
-      'SPAWN', 'ROAD_APPROACH', 'QUEUE', 'PUMP_RESERVED', 'AT_PUMP',
+      'SPAWN', 'PASSING', 'ROAD_APPROACH', 'QUEUE', 'PUMP_RESERVED', 'AT_PUMP',
       'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'EXIT', 'DESPAWN'
     ];
 
@@ -516,6 +522,210 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
     // It heads for the entry driveway, never the exit one.
     expect(arriving.targetWaypoint?.[0]).toBe(layout.entryX);
+  });
+
+  it('sends arrivals down both lanes of a widened entrance', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.buildings.ramp = {
+      id: 'ramp',
+      type: 'wide_entry',
+      level: 1,
+      position: [4, DRIVEWAY_Z],
+      rotation: 0,
+      size: [6, 2],
+      health: 100,
+      constructionState: 'ACTIVE',
+      builtAtTimestamp: 0
+    };
+
+    const mouth = drivewayMouths(state).entry;
+    const lanes = new Set<number>();
+
+    advanceUntil(
+      state,
+      (s) => {
+        for (const v of Object.values(s.vehicles)) {
+          if (v.state === 'ROAD_APPROACH' && v.targetWaypoint) lanes.add(v.targetWaypoint[0]);
+        }
+        return lanes.size > 1;
+      },
+      3000
+    );
+
+    // Two entrances, not one queue drawn twice as wide: cars take both.
+    expect([...lanes].sort()).toEqual([drivewayLaneX(mouth, 0), drivewayLaneX(mouth, 1)]);
+  });
+
+  it('runs the same game on the block across the highway', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.station.roadLevel = 2;
+    const far = ['0,-1', '1,-1', '0,-2', '1,-2'];
+    state.station.plots.ownedParcels.push(...far);
+    state.station.plots.pavedParcels.push(...far);
+
+    // Every pump is across the road, so every customer has to go there.
+    const proto = Object.values(state.pumps)[0];
+    state.pumps = {
+      pf: { ...proto, id: 'pf', position: [8, -19], currentVehicleId: null, employeeId: null }
+    };
+
+    const farBlock = blockLayout(state, 'far')!;
+    expect(farBlock.roadLaneZ).toBe(getLayout(state).farRoadLaneZ);
+    // Its cars come from the other end of the road and queue the other way.
+    expect(farBlock.roadStartX).toBeGreaterThan(farBlock.roadEndX);
+    expect(farBlock.queueStep).toBeGreaterThan(0);
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.targetPumpId === 'pf'),
+      4000
+    );
+
+    const customer = Object.values(state.vehicles).find((v) => v.targetPumpId === 'pf')!;
+    expect(customer).toBeDefined();
+    // It spawned on the far carriageway and stayed on that side of the median.
+    expect(vehicleSide(customer)).toBe('far');
+  });
+
+  it('keeps the road busy even with nothing to stop for', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.pumps = {};
+
+    advanceUntil(state, (s) => Object.keys(s.vehicles).length > 0, 900);
+
+    // The highway does not care what the player owns...
+    expect(Object.keys(state.vehicles).length).toBeGreaterThan(0);
+    // ...but with nothing to serve them, every driver goes straight past.
+    expect(stopChance(state)).toBe(0);
+    for (const v of Object.values(state.vehicles)) {
+      expect(['PASSING', 'DESPAWN']).toContain(v.state);
+    }
+  });
+
+  it('turns drivers away as the price climbs, and back with a rush', () => {
+    const state = createInitialGameState();
+    const regional = state.pricing.gasoline.regionalAverage;
+
+    state.pricing.gasoline.playerPrice = regional * 0.92;
+    const cheap = stopChance(state);
+
+    state.pricing.gasoline.playerPrice = regional * 1.35;
+    const dear = stopChance(state);
+
+    expect(dear).toBeLessThan(cheap * 0.7);
+    expect(dear).toBeGreaterThan(0);
+
+    // A burst of custom lifts the same forecourt back up.
+    state.dayState.rushSecondsLeft = 90;
+    expect(stopChance(state)).toBeGreaterThan(dear);
+
+    // Nobody ever stops the whole road, however good the offer.
+    state.pricing.gasoline.playerPrice = regional * 0.5;
+    expect(stopChance(state)).toBeLessThan(1);
+  });
+
+  it('sends drivers to a block that has only a shop', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.pumps = {};
+    state.market.active = true;
+    state.market.stock = 999;
+    state.buildings.mk = {
+      id: 'mk',
+      type: 'mini_market',
+      level: 1,
+      position: [8, 8],
+      rotation: 0,
+      size: [4, 4],
+      health: 100,
+      constructionState: 'ACTIVE',
+      builtAtTimestamp: 0
+    };
+
+    // A forecourt with no pumps is still worth pulling into for the shop, and
+    // the visit has to earn something rather than stranding the driver.
+    expect(stopChance(state)).toBeGreaterThan(0);
+    advanceUntil(state, (s) => s.dayState.todayStats.marketRevenue > 0, 4000);
+    expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
+  });
+
+  it('keeps vehicles out of one another and never gridlocks', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.85;
+
+    let pairs = 0;
+    let touching = 0;
+    let longestTransit = 0;
+    const enteredTransit = new Map<string, number>();
+
+    for (let tick = 0; tick < 3000 && !state.dayState.isDayEnding; tick++) {
+      runSimulationTick(state, 0.2, createEffects());
+      const vehicles = Object.values(state.vehicles);
+
+      for (let a = 0; a < vehicles.length; a++) {
+        for (let b = a + 1; b < vehicles.length; b++) {
+          const gap = Math.hypot(
+            vehicles[a].worldPosition[0] - vehicles[b].worldPosition[0],
+            vehicles[a].worldPosition[2] - vehicles[b].worldPosition[2]
+          );
+          pairs++;
+          // A vehicle is about 1.35 grid units wide, so anything under this is
+          // two cars sharing the same tarmac rather than passing beside it.
+          if (gap < 1.2) touching++;
+        }
+      }
+
+      // These states have nothing to wait for but the road ahead, so a car
+      // that sits in one of them is a car the traffic rules have wedged.
+      for (const vehicle of vehicles) {
+        if (!['PASSING', 'ROAD_APPROACH', 'EXIT'].includes(vehicle.state)) {
+          enteredTransit.delete(vehicle.id);
+          continue;
+        }
+        if (!enteredTransit.has(vehicle.id)) enteredTransit.set(vehicle.id, tick);
+        longestTransit = Math.max(longestTransit, (tick - enteredTransit.get(vehicle.id)!) * 0.2);
+      }
+    }
+
+    expect(pairs).toBeGreaterThan(1000);
+    expect(touching / pairs).toBeLessThan(0.01);
+    expect(longestTransit).toBeLessThan(120);
+  });
+
+  it('runs traffic the length of the road and around what is built on the plot', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.85;
+
+    const office = state.buildings.office_1;
+    let reach = 0;
+    let insideBuilding = 0;
+
+    for (let tick = 0; tick < 1500 && !state.dayState.isDayEnding; tick++) {
+      runSimulationTick(state, 0.2, createEffects());
+
+      for (const vehicle of Object.values(state.vehicles)) {
+        const [x, , z] = vehicle.worldPosition;
+        reach = Math.max(reach, Math.abs(x - state.station.plots.width / 2));
+
+        if (
+          Math.abs(x - office.position[0]) < office.size[0] / 2 &&
+          Math.abs(z - office.position[1]) < office.size[1] / 2
+        ) {
+          insideBuilding++;
+        }
+      }
+    }
+
+    // Cars join and leave the highway well off the edge of the screen rather
+    // than appearing halfway down a road the player is looking at.
+    expect(reach).toBeGreaterThan(LAYOUT.roadMargin);
+    // And the lanes route around the office instead of through its walls.
+    expect(insideBuilding).toBe(0);
   });
 
   it('spawns vehicles on the driving lane', () => {

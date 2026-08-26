@@ -30,6 +30,8 @@ import {
   releasePump,
   setPumpState,
   drivewayRole,
+  drivewaySideAt,
+  defaultMouthX,
   getLayout,
   DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
@@ -208,19 +210,31 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   // Wide ramps used to be ordinary structures and could be dropped anywhere,
   // which left them stranded on the forecourt or out in the road. Pull each
   // one back onto the verge and keep only one per mouth.
-  const seenRoles = new Set<string>();
+  const seenMouths = new Set<string>();
   for (const building of Object.values(loaded.buildings)) {
     const role = drivewayRole(building.type);
     if (!role) continue;
 
-    if (seenRoles.has(role)) {
+    const mouth = `${drivewaySideAt(building.position[1])}-${role}`;
+    if (seenMouths.has(mouth)) {
       delete loaded.buildings[building.id];
       continue;
     }
-    seenRoles.add(role);
+    seenMouths.add(mouth);
 
     building.position = snapPlacement(loaded, building.type, building.position);
     building.size = GAME_CONFIG.buildings[building.type]?.size ?? building.size;
+
+    // A ramp saved while the two blocks shared one set of mouths can be
+    // sitting on the opposite mouth's ground — which reads in game as the
+    // exit having been replaced by a second entrance. Put it back on its own.
+    if (!evaluatePlacement(loaded, building.type, building.position, 0).valid) {
+      const side = drivewaySideAt(building.position[1]);
+      building.position = snapPlacement(loaded, building.type, [
+        defaultMouthX(role, side, loaded.station.plots.width),
+        building.position[1]
+      ]);
+    }
   }
 
   // Day one should open with its daily goals already posted.
@@ -514,11 +528,18 @@ export const useGameStore = create<GameStore>((set, get) => {
       };
     } else {
       // A wide ramp replaces the mouth it stands in for rather than adding a
-      // second one beside it, so the ramp it supersedes is torn out first.
+      // second one beside it, so the ramp it supersedes is torn out first. The
+      // two blocks have their own pair, so only the same side is superseded.
       const role = drivewayRole(buildMode.buildingType);
       if (role) {
+        const side = drivewaySideAt(buildMode.position[1]);
         for (const existing of Object.values(state.buildings)) {
-          if (drivewayRole(existing.type) === role) delete state.buildings[existing.id];
+          if (
+            drivewayRole(existing.type) === role &&
+            drivewaySideAt(existing.position[1]) === side
+          ) {
+            delete state.buildings[existing.id];
+          }
         }
       }
 

@@ -451,9 +451,10 @@ export const GAME_CONFIG: GameConfig = {
       category: 'structure',
       price: 18000,
       dailyUpkeep: 30,
-      // Two grid rows deep: exactly the verge it has to bridge, plus a little
-      // overlap onto the tarmac and the concrete so both ends read as joined.
-      size: [4, 2],
+      // Twice the width of a default mouth — two full lanes, not one lane
+      // with a broader apron — and two grid rows deep: exactly the verge it
+      // bridges, plus enough overlap that both ends read as joined.
+      size: [6, 2],
       unlockLevel: 6,
       description: 'Çift şeritli giriş rampası; araçlar kuyruk oluşturmadan ikişerli girer.',
       icon: 'ArrowRight'
@@ -464,7 +465,7 @@ export const GAME_CONFIG: GameConfig = {
       category: 'structure',
       price: 18000,
       dailyUpkeep: 30,
-      size: [4, 2],
+      size: [6, 2],
       unlockLevel: 6,
       description: 'Çift şeritli çıkış rampası; ayrılan araçlar birbirini beklemez.',
       icon: 'ArrowLeft'

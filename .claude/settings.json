@@ -131,7 +131,15 @@
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/ramp_before.png 4 12 2)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/ramp_after.png 4 12 2 6)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/ramp_zoom.png 7 12 0 6)",
-      "Bash(node /Users/emre/petrol-oyunu/.probe.mjs)"
+      "Bash(node /Users/emre/petrol-oyunu/.probe.mjs)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/far_fixed.png 3 16 -12 far)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/side_by_side.png 3 12 4 side)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/fix_far_both.png 3 14 -12 both)",
+      "Bash(node .probe.mjs)",
+      "Bash(node .probe.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/traffic_spaced.png)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp"
     ]
   }
 }

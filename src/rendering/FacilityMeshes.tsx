@@ -479,13 +479,20 @@ export const Decoration: React.FC<FacilityProps> = ({ building }) => {
 /**
  * A one-way ramp. The highway runs in a single direction, so entry and exit
  * are separate structures rather than two lanes of one gate.
+ *
+ * Which way the paint points depends on the block the ramp serves — traffic on
+ * the far side of the highway runs the other way — but the colour follows the
+ * job it does, so an entrance is green on both sides of the road.
  */
-const OneWayRamp: React.FC<FacilityProps & { entering: boolean }> = ({
+const OneWayRamp: React.FC<FacilityProps & { role: 'entry' | 'exit' }> = ({
   building,
-  entering
+  role
 }) => {
   const { w, d } = dims(building);
-  const accent = entering ? '#22c55e' : '#ef4444';
+  const accent = role === 'entry' ? '#22c55e' : '#ef4444';
+
+  const onNearSide = building.position[1] >= 0;
+  const towardPositiveZ = role === 'entry' ? onNearSide : !onNearSide;
 
   return (
     <group position={[0, 0.05, 0]}>
@@ -519,7 +526,7 @@ const OneWayRamp: React.FC<FacilityProps & { entering: boolean }> = ({
           <group
             key={x}
             position={[x, 0.02, 0]}
-            rotation={[-Math.PI / 2, 0, entering ? Math.PI : 0]}
+            rotation={[-Math.PI / 2, 0, towardPositiveZ ? Math.PI : 0]}
           >
             <mesh position={[0, -0.75 * r, 0]}>
               <planeGeometry args={[r * 0.62, shaftLength]} />
@@ -535,7 +542,7 @@ const OneWayRamp: React.FC<FacilityProps & { entering: boolean }> = ({
 
       {/* Gate posts with a direction plate */}
       {[-w / 2 + 0.4, w / 2 - 0.4].map((x) => (
-        <group key={x} position={[x, 0, entering ? -d / 2 + 0.4 : d / 2 - 0.4]}>
+        <group key={x} position={[x, 0, towardPositiveZ ? -d / 2 + 0.4 : d / 2 - 0.4]}>
           <mesh position={[0, 1.3, 0]} castShadow>
             <cylinderGeometry args={[0.13, 0.16, 2.6, 8]} />
             <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
@@ -556,11 +563,11 @@ const OneWayRamp: React.FC<FacilityProps & { entering: boolean }> = ({
 };
 
 export const WideEntry: React.FC<FacilityProps> = ({ building }) => (
-  <OneWayRamp building={building} entering />
+  <OneWayRamp building={building} role="entry" />
 );
 
 export const WideExit: React.FC<FacilityProps> = ({ building }) => (
-  <OneWayRamp building={building} entering={false} />
+  <OneWayRamp building={building} role="exit" />
 );
 
 /** Two-storey roadside restaurant with a terrace of outdoor tables. */

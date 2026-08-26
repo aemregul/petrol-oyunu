@@ -9,11 +9,16 @@ import { GameState } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { isFootprintOnOwnedLand, pavedFrontage } from './land';
 import {
-  DRIVEWAY_Z,
+  BlockLayout,
   DrivewayRole,
+  LANE_HALF_WIDTH,
+  blockLayout,
+  drivewaySideAt,
   WIDE_DRIVEWAY_WIDTH,
+  drivewayMouths,
   drivewayRole,
-  getLayout
+  drivewayZ,
+  frontageRow
 } from './simulationEngine';
 
 export interface Footprint {
@@ -83,14 +88,14 @@ export function occupiedFootprints(
   return taken;
 }
 
-/** Kerb that has to survive between two mouths, in grid units. */
-const MOUTH_GAP = 1;
-
 /**
  * Pulls a candidate position onto the line the thing being built can actually
  * live on. Ordinary structures go wherever the pointer is; a driveway ramp is
- * pinned to the verge and only slides along the frontage, so dragging it up
- * and down the plot moves nothing.
+ * pinned to a verge and only slides along the frontage, so dragging it up and
+ * down the plot moves nothing.
+ *
+ * Which verge it lands on follows the pointer across the road: aim at the far
+ * block and the ramp snaps to that block's own frontage.
  */
 export function snapPlacement(
   state: GameState,
@@ -100,46 +105,47 @@ export function snapPlacement(
   const role = drivewayRole(buildingType);
   if (!role) return position;
 
-  const frontage = pavedFrontage(state.station.plots.pavedParcels);
+  const side = drivewaySideAt(position[1]);
+  const z = drivewayZ(side);
+  const frontage = pavedFrontage(state.station.plots.pavedParcels, frontageRow(side));
   const half = WIDE_DRIVEWAY_WIDTH / 2;
   const x = Math.round(position[0]);
 
-  if (!frontage) return [x, DRIVEWAY_Z];
+  if (!frontage) return [x, z];
 
   // Keep the whole mouth on concrete; a frontage narrower than the ramp
   // centres it and lets the validity check refuse the build.
   const min = frontage.minX + half;
   const max = frontage.maxX - half;
-  return [max < min ? (frontage.minX + frontage.maxX) / 2 : clamp(x, min, max), DRIVEWAY_Z];
+  return [max < min ? (frontage.minX + frontage.maxX) / 2 : clamp(x, min, max), z];
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/** The mouth a ramp has to keep clear of: the other one. */
-function otherMouth(state: GameState, role: DrivewayRole): { x: number; width: number } {
-  const layout = getLayout(state);
-  return role === 'entry'
-    ? { x: layout.exitX, width: layout.exitWidth }
-    : { x: layout.entryX, width: layout.entryWidth };
-}
-
 /**
  * Where a wide ramp may go. It ignores the footprint rules entirely: it lives
- * on the verge, which is nobody's parcel, and the thing it has to clear is the
- * other driveway rather than anything on the forecourt.
+ * on the verge, which is nobody's parcel, and the only thing it has to clear
+ * is the other mouth on its own side of the road. They may sit flush against
+ * each other or at opposite ends of the frontage — anywhere but overlapping.
  */
 function evaluateDriveway(
   state: GameState,
   role: DrivewayRole,
   position: [number, number]
 ): PlacementResult {
-  if (Math.abs(position[1] - DRIVEWAY_Z) > 0.01) {
+  const side = drivewaySideAt(position[1]);
+
+  if (Math.abs(position[1] - drivewayZ(side)) > 0.01) {
     return { valid: false, reason: 'Rampa yalnızca yol kenarına yerleşir.' };
   }
 
-  const frontage = pavedFrontage(state.station.plots.pavedParcels);
+  if (side === 'far' && state.station.roadLevel < 2) {
+    return { valid: false, reason: 'Yolun karşısı ancak çift şeritli yolla açılır.' };
+  }
+
+  const frontage = pavedFrontage(state.station.plots.pavedParcels, frontageRow(side));
   if (!frontage) {
     return { valid: false, reason: 'Önce yola bakan parsele beton dökmelisiniz.' };
   }
@@ -149,9 +155,9 @@ function evaluateDriveway(
     return { valid: false, reason: 'Rampa betonun dışına taşıyor.' };
   }
 
-  const other = otherMouth(state, role);
-  if (Math.abs(position[0] - other.x) < half + other.width / 2 + MOUTH_GAP) {
-    return { valid: false, reason: 'Diğer rampaya çok yakın.' };
+  const other = drivewayMouths(state, side)[role === 'entry' ? 'exit' : 'entry'];
+  if (Math.abs(position[0] - other.x) < half + other.width / 2 - 0.01) {
+    return { valid: false, reason: 'Diğer rampanın üstüne geliyor.' };
   }
 
   return { valid: true };

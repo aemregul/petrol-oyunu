@@ -155,6 +155,35 @@ export function pavedFrontage(
   return minX < maxX ? { minX, maxX } : null;
 }
 
+/**
+ * The block across the highway, as an explicit box in grid units, or null if
+ * the player holds nothing over there. `ownedBounds` measures width and height
+ * from the origin, which says nothing useful about land sitting at negative z.
+ */
+export function farSideBounds(parcels: string[]): {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+} | null {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+
+  for (const key of parcels) {
+    const { col, row } = parseParcelKey(key);
+    if (!isFarSide(row)) continue;
+    const b = parcelBounds(col, row);
+    minX = Math.min(minX, b.minX);
+    maxX = Math.max(maxX, b.maxX);
+    minZ = Math.min(minZ, b.minZ);
+    maxZ = Math.max(maxZ, b.maxZ);
+  }
+
+  return minX < maxX ? { minX, maxX, minZ, maxZ } : null;
+}
+
 /** True when every corner of a footprint sits on land the player owns. */
 export function isFootprintOnOwnedLand(
   owned: string[],

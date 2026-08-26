@@ -4,9 +4,16 @@ import {
   LAYOUT,
   getLayout,
   wideRamps,
+  drivewayMouths,
   DRIVEWAY_WIDTH as DRIVEWAY_WIDTH_GRID
 } from '../domain/services/simulationEngine';
-import { PARCEL, parseParcelKey, parcelBounds, isOwned } from '../domain/services/land';
+import {
+  PARCEL,
+  parseParcelKey,
+  parcelBounds,
+  isOwned,
+  pavedFrontage
+} from '../domain/services/land';
 
 /** Grid units to world units; every mesh below shares this scale. */
 const S = 2;
@@ -349,6 +356,12 @@ export const GroundGrid: React.FC = () => {
   /** Mouths the player has not upgraded still need their default ramp drawn. */
   const wide = useMemo(() => wideRamps(buildings), [buildings]);
 
+  /** The far block's own pair, which the player can widen independently. */
+  const farPair = useMemo(
+    () => drivewayMouths({ station: { plots }, buildings }, 'far'),
+    [plots, buildings]
+  );
+
   const plotWidth = plots.width * S;
   const plotDepth = plots.height * S;
 
@@ -381,35 +394,41 @@ export const GroundGrid: React.FC = () => {
   }, [buildings, pumps]);
 
   /**
-   * The strip of far-side concrete that meets the road, as a world-x span.
-   * The mouths are pulled inside it so a ramp never ends in the grass when
-   * the block across the road sits over different columns to the station.
+   * The strip of far-side concrete that meets the road, as a world-x span. A
+   * mouth the player has not placed themselves is pulled inside it, so a ramp
+   * never ends in the grass when the block across the road sits over different
+   * columns to the station.
    */
   const farFrontage = useMemo(() => {
-    let min = Infinity;
-    let max = -Infinity;
-    for (const key of plots.pavedParcels) {
-      const { col, row } = parseParcelKey(key);
-      if (row !== -1) continue;
-      const b = parcelBounds(col, row);
-      min = Math.min(min, b.minX * S);
-      max = Math.max(max, b.maxX * S);
-    }
-    return min < max ? { min, max } : null;
+    const span = pavedFrontage(plots.pavedParcels, -1);
+    return span ? { min: span.minX * S, max: span.maxX * S } : null;
   }, [plots.pavedParcels]);
 
-  // The far block gets its own pair of mouths straight across from the near
-  // ones, always the default width: wide ramps are a forecourt upgrade.
-  const farMouths: Mouth[] =
+  /** The far block's mouths in world units, kept keyed by the job each does. */
+  const farByRole: Record<'entry' | 'exit', Mouth> | null =
     isDualCarriageway && hasFarSideBuilding && farFrontage
-      ? nearMouths.map(({ x }) => {
-          const half = DRIVEWAY_WIDTH / 2;
-          const lo = farFrontage.min + half;
-          const hi = farFrontage.max - half;
-          const centre = hi < lo ? (farFrontage.min + farFrontage.max) / 2 : Math.min(Math.max(x, lo), hi);
-          return { x: centre, width: DRIVEWAY_WIDTH };
-        })
-      : [];
+      ? {
+          entry: farWorldMouth('entry'),
+          exit: farWorldMouth('exit')
+        }
+      : null;
+
+  function farWorldMouth(role: 'entry' | 'exit'): Mouth {
+    const mouth = farPair[role];
+    const width = mouth.width * S;
+    // A ramp the player placed is already on their concrete; only the
+    // mirrored default needs holding inside the far frontage.
+    if (wide.far[role] || !farFrontage) return { x: mouth.x * S, width };
+
+    const half = width / 2;
+    const lo = farFrontage.min + half;
+    const hi = farFrontage.max - half;
+    const centre =
+      hi < lo ? (farFrontage.min + farFrontage.max) / 2 : Math.min(Math.max(mouth.x * S, lo), hi);
+    return { x: centre, width };
+  }
+
+  const farMouths: Mouth[] = farByRole ? [farByRole.entry, farByRole.exit] : [];
 
   /**
    * World-space z span of a parcel, held clear of the carriageway. Near-side
@@ -598,7 +617,7 @@ export const GroundGrid: React.FC = () => {
       {/* Default driveway ramps. A mouth the player has widened is drawn by
           the ramp they bought instead, so the old one is not left underneath
           it — that is the same mouth, not a second one. */}
-      {!wide.entry && (
+      {!wide.near.entry && (
         <Driveway
           x={layout.entryX * S}
           apronFront={apronFront}
@@ -607,7 +626,7 @@ export const GroundGrid: React.FC = () => {
           entering
         />
       )}
-      {!wide.exit && (
+      {!wide.near.exit && (
         <Driveway
           x={layout.exitX * S}
           apronFront={apronFront}
@@ -618,24 +637,28 @@ export const GroundGrid: React.FC = () => {
       )}
 
       {/* Once the far side is developed it needs its own mouths */}
-      {farMouths.length === 2 && (
+      {farByRole && (
         <>
-          <Driveway
-            x={farMouths[0].x}
-            apronFront={farApronFront}
-            halfWidth={roadHalfWidth}
-            roadCentreZ={farRoadZ}
-            entering={false}
-            far
-          />
-          <Driveway
-            x={farMouths[1].x}
-            apronFront={farApronFront}
-            halfWidth={roadHalfWidth}
-            roadCentreZ={farRoadZ}
-            entering
-            far
-          />
+          {!wide.far.entry && (
+            <Driveway
+              x={farByRole.entry.x}
+              apronFront={farApronFront}
+              halfWidth={roadHalfWidth}
+              roadCentreZ={farRoadZ}
+              entering
+              far
+            />
+          )}
+          {!wide.far.exit && (
+            <Driveway
+              x={farByRole.exit.x}
+              apronFront={farApronFront}
+              halfWidth={roadHalfWidth}
+              roadCentreZ={farRoadZ}
+              entering={false}
+              far
+            />
+          )}
         </>
       )}
 

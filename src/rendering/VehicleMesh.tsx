@@ -62,6 +62,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
   const needsService = vehicle.state === 'AT_PUMP' || vehicle.state === 'REQUEST';
   const isMoving =
     vehicle.state === 'SPAWN' ||
+    vehicle.state === 'PASSING' ||
     vehicle.state === 'ROAD_APPROACH' ||
     vehicle.state === 'QUEUE' ||
     vehicle.state === 'PUMP_RESERVED' ||

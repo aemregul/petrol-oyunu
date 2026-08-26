@@ -1,14 +1,20 @@
 /**
  * Project Highway - Vehicle State Machine
  * GDD Section 12.2 & 26:
- * SPAWN > ROAD_APPROACH > QUEUE > PUMP_RESERVED > AT_PUMP > REQUEST > FUELING > PAYMENT > OPTIONAL_SHOP > EXIT > DESPAWN
+ * SPAWN > PASSING > DESPAWN, or SPAWN > ROAD_APPROACH > QUEUE > PUMP_RESERVED > AT_PUMP > REQUEST > FUELING > PAYMENT > OPTIONAL_SHOP > EXIT > DESPAWN
  */
 
 import { VehicleState } from '../types/gameState';
 
 const VALID_VEHICLE_TRANSITIONS: Record<VehicleState, VehicleState[]> = {
-  SPAWN: ['ROAD_APPROACH', 'DESPAWN'],
-  ROAD_APPROACH: ['QUEUE', 'PUMP_RESERVED', 'EXIT', 'DESPAWN'],
+  SPAWN: ['ROAD_APPROACH', 'PASSING', 'DESPAWN'],
+  // Through traffic joins the road and leaves it again without ever stopping.
+  PASSING: ['DESPAWN'],
+  // A driver who came for the shop rather than the pumps skips the forecourt
+  // queue entirely — there is nothing on this block to queue for.
+  // A driver who finds the forecourt full before committing to the mouth
+  // simply carries on down the road.
+  ROAD_APPROACH: ['QUEUE', 'PUMP_RESERVED', 'OPTIONAL_SHOP', 'PASSING', 'EXIT', 'DESPAWN'],
   QUEUE: ['PUMP_RESERVED', 'EXIT', 'DESPAWN'],
   PUMP_RESERVED: ['AT_PUMP', 'EXIT', 'DESPAWN'],
   AT_PUMP: ['REQUEST', 'EXIT', 'DESPAWN'],

@@ -9,6 +9,8 @@ export type VehicleArchetype = 'commuter' | 'family' | 'taxi' | 'courier' | 'com
 
 export type VehicleState =
   | 'SPAWN'
+  /** Driving straight past: this one never had any reason to pull in. */
+  | 'PASSING'
   | 'ROAD_APPROACH'
   | 'QUEUE'
   | 'PUMP_RESERVED'
@@ -127,6 +129,11 @@ export interface VehicleEntity {
   speed: number;
   routeProgress: number;
   waitingTimeSeconds: number;
+  /**
+   * How long this driver has been held up by the car in front. Nothing may
+   * wait for ever, so past a few seconds they edge past whatever is in the way.
+   */
+  blockedSeconds?: number;
   shoppingIntent: boolean;
 }
 
@@ -270,6 +277,11 @@ export interface DayState {
   isDayActive: boolean;
   isDayEnding: boolean;
   weather: 'SUNNY' | 'OVERCAST' | 'RAIN';
+  /**
+   * A burst of custom, in game-seconds remaining. Traffic on the highway is
+   * steady; what comes in waves is how many of those drivers decide to stop.
+   */
+  rushSecondsLeft?: number;
   todayStats: {
     fuelRevenue: number;
     fuelCost: number;
