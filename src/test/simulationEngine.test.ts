@@ -145,16 +145,43 @@ describe('simulationEngine - vehicle lifecycle', () => {
   it('queues vehicles once every pump is occupied', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 4;
-    // Block the only pump so arrivals have to queue.
-    state.pumps.pump_1.state = 'BROKEN';
+    state.player.reputation = 5;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.8;
 
+    // One pump and a busy road: the second arrival has to wait its turn.
     const queued = advanceUntil(
       state,
       (s) => Object.values(s.vehicles).some((v) => v.state === 'QUEUE'),
-      600
+      4000
     );
 
     expect(queued).toBe(true);
+  });
+
+  it('stops attracting customers it has no way of serving', () => {
+    const dry = createInitialGameState();
+    dry.dayState.timeSpeed = 4;
+    dry.tanks.gasoline.stock = 0;
+
+    // An empty forecourt used to keep pulling cars in and failing every one of
+    // them, which read as reputation collapsing for no visible reason.
+    expect(stopChance(dry)).toBeGreaterThan(0);
+    advance(dry, 600);
+    expect(
+      Object.values(dry.vehicles).every((v) => v.state === 'PASSING' || v.state === 'DESPAWN')
+    ).toBe(true);
+    expect(dry.dayState.todayStats.customersLost).toBe(0);
+
+    // Same again when the only pump has worn out.
+    const broken = createInitialGameState();
+    broken.dayState.timeSpeed = 4;
+    broken.pumps.pump_1.state = 'BROKEN';
+
+    advance(broken, 600);
+    expect(
+      Object.values(broken.vehicles).every((v) => v.state === 'PASSING' || v.state === 'DESPAWN')
+    ).toBe(true);
+    expect(broken.dayState.todayStats.customersLost).toBe(0);
   });
 });
 

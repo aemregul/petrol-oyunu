@@ -85,6 +85,22 @@ export const DayReportModal: React.FC = () => {
               <div className="font-bold text-white font-mono mt-0.5">{stats.customersServed} Araç</div>
             </div>
             <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
+              <div className="text-slate-400">Sabrı Tükenen</div>
+              <div className="font-bold text-red-400 font-mono mt-0.5">{stats.customersLost} Araç</div>
+            </div>
+            <div
+              className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800"
+              title="Sıra dolu olduğu için hiç durmadan geçen sürücüler. İtibarınıza zarar vermez — daha fazla pompa gerektiğinin işaretidir."
+            >
+              <div className="text-slate-400">Yer Bulamayan</div>
+              <div className="font-bold text-amber-400 font-mono mt-0.5">
+                {stats.customersTurnedAway ?? 0} Araç
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-2 font-sans text-center text-[11px]">
+            <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800">
               <div className="text-slate-400">Bahşiş Geliri</div>
               <div className="font-bold text-amber-400 font-mono mt-0.5">₺{stats.tips}</div>
             </div>

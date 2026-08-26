@@ -1837,9 +1837,18 @@ function findFreeCharger(
   return chargingPoints(state, side).find((point) => !taken.has(point.id)) ?? null;
 }
 
-/** Whether this block has a pump that could serve anyone at all. */
+/**
+ * Whether this block has a pump that could serve anyone at all.
+ *
+ * A broken pump is not a pump. Counting one meant a station whose only bay had
+ * worn out went on pulling cars in and failing every one of them, and the
+ * player watched their reputation fall with no visible cause — the same trap
+ * as a forecourt with empty tanks.
+ */
 function blockHasPumps(state: GameState, side: DrivewaySide): boolean {
-  return Object.values(state.pumps).some((p) => pumpSide(p) === side);
+  return Object.values(state.pumps).some(
+    (p) => pumpSide(p) === side && p.state !== 'BROKEN' && p.state !== 'MAINTENANCE'
+  );
 }
 
 /**
@@ -1912,8 +1921,13 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
 
   // Only offer archetypes whose fuel we can actually sell. A driver who could
   // not be served here is still traffic, so this only narrows who might stop.
+  //
+  // Stock counts, not just having a tank. A dry station used to keep pulling
+  // cars in and then failing every one of them, which read to the player as
+  // their reputation collapsing for no reason they could see — when the real
+  // answer was that nobody would have pulled in at all.
   const sellableFuels = (Object.keys(state.tanks) as FuelType[]).filter(
-    (f) => state.tanks[f].capacity > 0
+    (f) => state.tanks[f].capacity > 0 && state.tanks[f].stock - state.tanks[f].reservedStock > 5
   );
 
   const side = pickSpawnSide(state);
@@ -2069,6 +2083,20 @@ function reservePumpFor(state: GameState, vehicle: VehicleEntity, pump: PumpEnti
   setPumpState(pump, 'VEHICLE_ARRIVING');
 }
 
+/**
+ * A driver who found nowhere to go and carried on.
+ *
+ * This is not the same thing as failing a customer, and counting it as one
+ * made a busy road into a punishment: the more traffic went past a full
+ * forecourt, the further reputation fell, however well the station was run.
+ * It belongs in its own column, where it reads as what it is — a sign to
+ * build another pump.
+ */
+function turnAway(state: GameState): void {
+  state.dayState.todayStats.customersTurnedAway =
+    (state.dayState.todayStats.customersTurnedAway ?? 0) + 1;
+}
+
 function loseCustomer(
   state: GameState,
   vehicle: VehicleEntity,
@@ -2098,12 +2126,41 @@ function loseCustomer(
   notify(effects, 'WARNING', 'Müşteri Kaybedildi!', `${reason} (-0.015 İtibar)`);
 }
 
+/**
+ * Lets go of anything that is holding a reference to a vehicle that no longer
+ * exists.
+ *
+ * A pump left pointing at a departed customer is a pump that never serves
+ * anyone again, and the station quietly loses a bay for the rest of the save.
+ * Every path that removes a vehicle is supposed to release what it was using
+ * first; this is the backstop for the one that forgets, because the failure is
+ * invisible until the player wonders why a pump stopped working.
+ */
+function releaseOrphanedHolds(state: GameState): void {
+  for (const pump of Object.values(state.pumps)) {
+    if (pump.currentVehicleId && !state.vehicles[pump.currentVehicleId]) {
+      releasePump(pump);
+    }
+  }
+
+  for (const employee of Object.values(state.employees)) {
+    if (employee.currentVehicleId && !state.vehicles[employee.currentVehicleId]) {
+      employee.currentVehicleId = null;
+      employee.actionTimerSeconds = 0;
+    }
+    if (employee.assignedPumpId && !state.pumps[employee.assignedPumpId]) {
+      employee.assignedPumpId = null;
+    }
+  }
+}
+
 function tickVehicles(
   state: GameState,
   dt: number,
   effects: SimEffects,
   mods: EventModifiers
 ): void {
+  releaseOrphanedHolds(state);
   const vehicles = Object.values(state.vehicles);
 
   // Queue order is stable by arrival so slots do not shuffle between ticks,
@@ -2148,8 +2205,7 @@ function tickVehicles(
         ) {
           setVehicleState(vehicle, 'PASSING');
           setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
-          state.dayState.todayStats.customersLost++;
-          state.player.statistics.totalCustomersLost++;
+          turnAway(state);
           break;
         }
 
@@ -2181,8 +2237,7 @@ function tickVehicles(
           } else {
             setVehicleState(vehicle, 'EXIT');
             setRoute(vehicle, exitRoute(state, vehicle));
-            state.dayState.todayStats.customersLost++;
-            state.player.statistics.totalCustomersLost++;
+            turnAway(state);
           }
           break;
         }
@@ -2204,8 +2259,7 @@ function tickVehicles(
           // Forecourt is full — this driver never even stops.
           setVehicleState(vehicle, 'EXIT');
           setRoute(vehicle, exitRoute(state, vehicle));
-          state.dayState.todayStats.customersLost++;
-          state.player.statistics.totalCustomersLost++;
+          turnAway(state);
         }
         break;
       }

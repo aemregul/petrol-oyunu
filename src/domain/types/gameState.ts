@@ -297,7 +297,13 @@ export interface DayState {
     loanPayments: number;
     repairs: number;
     customersServed: number;
+    /** Customers taken on and then failed: they gave up waiting. */
     customersLost: number;
+    /**
+     * Drivers who found no room and carried on down the road. Not a service
+     * failure — a capacity signal, and counted separately so it reads as one.
+     */
+    customersTurnedAway?: number;
     /** Running total of service scores, divided by customersServed at day end. */
     serviceScoreSum: number;
   };

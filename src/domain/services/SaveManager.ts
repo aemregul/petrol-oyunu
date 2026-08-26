@@ -98,10 +98,13 @@ export class SaveManager {
       station: { ...defaultState.station, ...(rawState.station || {}) },
       tanks: { ...defaultState.tanks, ...(rawState.tanks || {}) },
       pricing: { ...defaultState.pricing, ...(rawState.pricing || {}) },
-      pumps: { ...defaultState.pumps, ...(rawState.pumps || {}) },
+      // Entity collections replace rather than merge. Merging the starting
+      // pump and buildings back in meant anything the player sold or knocked
+      // down quietly reappeared the next time they loaded the game.
+      pumps: rawState.pumps ?? defaultState.pumps,
       vehicles: rawState.vehicles || {},
       employees: rawState.employees || {},
-      buildings: { ...defaultState.buildings, ...(rawState.buildings || {}) },
+      buildings: rawState.buildings ?? defaultState.buildings,
       fuelOrders: rawState.fuelOrders || [],
       loans: rawState.loans || [],
       missions: this.migrateMissions(rawState.missions, defaultState.missions),

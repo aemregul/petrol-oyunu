@@ -126,7 +126,13 @@ interface GameStore {
   selectedBuildingId: string | null;
   buildMode: BuildModeState;
   /** Set while a lifted building is being carried to its new spot. */
-  relocating: { type: string; level: number; health: number } | null;
+  relocating: {
+    type: string;
+    level: number;
+    health: number;
+    origin: [number, number];
+    rotation: 0 | 90 | 180 | 270;
+  } | null;
   landMode: LandModeState;
   cameraAngle: number; // 0, 90, 180, 270
   cameraZoom: number; // 1 to 7
@@ -408,7 +414,39 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   exitBuildMode: () => {
     sounds.playClick();
+    const { relocating, buildMode, gameState } = get();
+
+    // Backing out of a move must put the building back, not lose it. It was
+    // lifted off the plot to be carried, and the player has already paid for
+    // it once — twice, counting the move fee.
+    if (relocating && buildMode.buildingType === relocating.type) {
+      const catalog = GAME_CONFIG.buildings[relocating.type];
+      const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+      const id = 'bld_' + Math.random().toString(36).substring(2, 7);
+
+      state.buildings[id] = {
+        id,
+        type: relocating.type,
+        level: relocating.level,
+        position: relocating.origin,
+        rotation: relocating.rotation,
+        size: catalog?.size ?? [2, 2],
+        health: relocating.health,
+        constructionState: 'ACTIVE',
+        builtAtTimestamp: Date.now()
+      };
+
+      SaveManager.saveGame(state);
+      set({ gameState: state });
+      get().addNotification({
+        type: 'INFO',
+        title: 'Taşıma İptal Edildi',
+        message: `${catalog?.name ?? 'Yapı'} eski yerine geri kondu.`
+      });
+    }
+
     set({
+      relocating: null,
       buildMode: {
         active: false,
         buildingType: null,
@@ -803,7 +841,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         rotation: moved.rotation,
         isValid: false
       },
-      relocating: { type: moved.type, level: moved.level, health: moved.health }
+      relocating: {
+        type: moved.type,
+        level: moved.level,
+        health: moved.health,
+        // Kept so backing out puts it back exactly where it was.
+        origin: moved.position,
+        rotation: moved.rotation
+      }
     });
     return true;
   },
@@ -1582,7 +1627,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     // Any customer still on the forecourt at closing time is a lost sale.
     for (const vehicle of Object.values(state.vehicles)) {
-      const wasBeingServed = vehicle.state !== 'EXIT' && vehicle.state !== 'DESPAWN';
+      // Anyone still waiting when the shutters come down was taken on and then
+      // failed; anyone already leaving was not.
+      const wasBeingServed =
+        vehicle.state !== 'EXIT' && vehicle.state !== 'DESPAWN' && vehicle.state !== 'PASSING';
       if (wasBeingServed) {
         state.dayState.todayStats.customersLost++;
         state.player.statistics.totalCustomersLost++;
@@ -1652,10 +1700,19 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     }
 
-    // Reputation follows the day's actual average service score.
+    // Reputation follows the day's actual average service score, and how many
+    // of the customers the station *took on* it then failed.
+    //
+    // This used to dock a flat amount for every lost customer, which included
+    // every driver who found the forecourt full and carried on. On a busy road
+    // that is dozens a day, so reputation fell however well the place was run —
+    // the busier the highway, the worse the station's name. A rate, capped,
+    // measures the thing the player can actually do something about.
     const served = state.dayState.todayStats.customersServed;
+    const failed = state.dayState.todayStats.customersLost;
     const avgScore = served > 0 ? state.dayState.todayStats.serviceScoreSum / served : 60;
-    const lostPenalty = state.dayState.todayStats.customersLost * 0.01;
+    const tookOn = served + failed;
+    const lostPenalty = tookOn > 0 ? Math.min(0.35, (failed / tookOn) * 0.6) : 0;
     state.player.reputation = calculateEndOfDayReputation(
       state.player.reputation,
       avgScore,
