@@ -134,6 +134,10 @@ export interface VehicleEntity {
    * wait for ever, so past a few seconds they edge past whatever is in the way.
    */
   blockedSeconds?: number;
+  /** Charging point this driver is plugged into, for electric customers. */
+  chargingBuildingId?: string | null;
+  /** Seconds of charging still to go. */
+  chargeSecondsLeft?: number;
   shoppingIntent: boolean;
 }
 

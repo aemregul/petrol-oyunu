@@ -99,6 +99,15 @@ export interface GameConfig {
   version: '1.0.0';
   fuels: Record<'gasoline' | 'diesel' | 'lpg', FuelConfig>;
   buildings: Record<string, BuildingCatalogItem>;
+  buildingEffects: Record<
+    string,
+    {
+      appeal?: number;
+      patience?: number;
+      satisfaction?: number;
+      service?: { chance: number; avgSpend: number };
+    }
+  >;
   buildingUpgrades: Record<string, Record<number, BuildingUpgradeConfig>>;
   customerTypes: Record<string, CustomerTypeConfig>;
   employees: {
@@ -139,6 +148,8 @@ export interface GameConfig {
   ev: {
     acPricePerKwh: number;
     dcPricePerKwh: number;
+    acChargeSeconds: number;
+    dcChargeSeconds: number;
   };
   roadUpgrade: {
     price: number;
@@ -529,6 +540,42 @@ export const GAME_CONFIG: GameConfig = {
       icon: 'Zap'
     },
   },
+  /**
+   * What each facility actually does for the station.
+   *
+   * Every building in the catalogue used to charge a price and a daily upkeep
+   * and then do nothing at all — the simulation only ever looked at three of
+   * them. Rather than scatter a special case per type through the engine, the
+   * effects live here as data and the engine reads the table:
+   *
+   *  - `appeal`      raises the share of passing traffic that turns in
+   *  - `patience`    buys the driver more time before they give up
+   *  - `satisfaction` lifts the service score, and with it reputation and tips
+   *  - `service`     a side sale on the way out: how often, and how much
+   *
+   * A building only counts on the block it stands on, so the land across the
+   * road has to earn its own custom.
+   */
+  buildingEffects: {
+    toilet:       { appeal: 0.05, patience: 0.08, satisfaction: 3 },
+    air_water:    { appeal: 0.03, satisfaction: 3, service: { chance: 0.14, avgSpend: 40 } },
+    car_park:     { appeal: 0.04, patience: 0.10 },
+    truck_park:   { appeal: 0.06, patience: 0.14 },
+    decoration:   { appeal: 0.02, satisfaction: 4 },
+    light_pole:   { appeal: 0.02, satisfaction: 1 },
+    canopy:       { appeal: 0.04, satisfaction: 3 },
+    price_sign:   { appeal: 0.06 },
+    office:       { satisfaction: 2 },
+    mini_market:  { appeal: 0.06 },
+    cafe:         { appeal: 0.07, satisfaction: 3, service: { chance: 0.26, avgSpend: 95 } },
+    restaurant:   { appeal: 0.12, patience: 0.10, satisfaction: 5, service: { chance: 0.30, avgSpend: 240 } },
+    car_wash:     { appeal: 0.10, satisfaction: 4, service: { chance: 0.20, avgSpend: 320 } },
+    oil_change:   { appeal: 0.08, service: { chance: 0.12, avgSpend: 620 } },
+    tyre_service: { appeal: 0.08, service: { chance: 0.10, avgSpend: 780 } },
+    hotel:        { appeal: 0.14, satisfaction: 4, service: { chance: 0.08, avgSpend: 1650 } },
+    rest_complex: { appeal: 0.26, patience: 0.20, satisfaction: 9, service: { chance: 0.45, avgSpend: 430 } }
+  },
+
   buildingUpgrades: {
     pump_standard: {
       2: {
@@ -854,7 +901,10 @@ export const GAME_CONFIG: GameConfig = {
    */
   ev: {
     acPricePerKwh: 7.5,
-    dcPricePerKwh: 12.9
+    dcPricePerKwh: 12.9,
+    /** How long a charge takes at each kind of point, in game seconds. */
+    acChargeSeconds: 70,
+    dcChargeSeconds: 26
   },
   roadUpgrade: {
     price: 250000,

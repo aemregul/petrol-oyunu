@@ -16,6 +16,8 @@ import {
   drivewayMouths,
   drivewayLaneX,
   blockLayout,
+  blockFacilities,
+  chargingPoints,
   vehicleSide,
   stopChance,
   DRIVEWAY_Z,
@@ -694,6 +696,64 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(pairs).toBeGreaterThan(1000);
     expect(touching / pairs).toBeLessThan(0.01);
     expect(longestTransit).toBeLessThan(120);
+  });
+
+  it('makes the facilities on a block worth what they cost', () => {
+    const state = createInitialGameState();
+    const bare = stopChance(state);
+
+    state.buildings.cw = {
+      id: 'cw', type: 'car_wash', level: 1, position: [13, 4], rotation: 0,
+      size: [5, 5], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    state.buildings.wc = {
+      id: 'wc', type: 'toilet', level: 1, position: [13, 11], rotation: 0,
+      size: [2, 2], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    const kitted = blockFacilities(state, 'near');
+    // A wash and a toilet pull traffic in, hold it longer and sell it something.
+    expect(kitted.appeal).toBeGreaterThan(0);
+    expect(kitted.patience).toBeGreaterThan(0);
+    expect(kitted.services.length).toBe(1);
+    expect(stopChance(state)).toBeGreaterThan(bare);
+
+    // Upgrading in place is worth more than the same building at level one.
+    const atOne = blockFacilities(state, 'near').appeal;
+    state.buildings.cw.level = 3;
+    expect(blockFacilities(state, 'near').appeal).toBeGreaterThan(atOne);
+
+    // Nothing on this side is credited to the block across the road.
+    expect(blockFacilities(state, 'far').appeal).toBe(0);
+  });
+
+  it('opens the electric line only once there is somewhere to plug in', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.player.level = 12;
+
+    // A charger with no substation behind it is a bollard.
+    state.buildings.dc = {
+      id: 'dc', type: 'ev_charger_dc', level: 1, position: [13, 8], rotation: 0,
+      size: [1, 2], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    expect(chargingPoints(state, 'near')).toHaveLength(0);
+
+    state.buildings.sub = {
+      id: 'sub', type: 'ev_substation', level: 1, position: [13, 3], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    expect(chargingPoints(state, 'near')).toHaveLength(1);
+
+    // And now electric customers actually turn up and pay for a charge.
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc'),
+      6000
+    );
+    expect(
+      Object.values(state.vehicles).some((v) => v.chargingBuildingId === 'dc')
+    ).toBe(true);
   });
 
   it('lays out every plot shape without falling over', () => {

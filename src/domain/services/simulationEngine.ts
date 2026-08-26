@@ -955,6 +955,26 @@ function pumpRoute(
   ];
 }
 
+/**
+ * Circulation lane -> the bay beside a charging point. The same shape as the
+ * route to a pump, because from the driver's seat it is the same manoeuvre.
+ */
+function chargerRoute(
+  state: GameState,
+  vehicle: VehicleEntity,
+  point: [number, number]
+): Array<[number, number, number]> {
+  const block = blockFor(state, vehicle);
+  const offset = block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET;
+  const bay = clampToApron(block, [point[0] + offset, 0, point[1]]);
+
+  return [
+    [vehicle.worldPosition[0], 0, block.laneZ],
+    [bay[0], 0, block.laneZ],
+    bay
+  ];
+}
+
 /** Pump -> return lane -> exit driveway -> off down the highway. */
 function exitRoute(
   state: GameState,
@@ -1397,6 +1417,55 @@ export function dispenseStep(
 }
 
 /** Settles payment, tip, XP, market basket and mission progress for one sale. */
+/**
+ * Settles a charging session and sends the driver on their way.
+ *
+ * Electricity is billed off the grid rather than out of a tank, so there is no
+ * stock to draw down and no wholesale cost to book against it — the tariff is
+ * the margin, which is why the substation and the points are the investment.
+ */
+function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
+  const point = vehicle.chargingBuildingId
+    ? state.buildings[vehicle.chargingBuildingId]
+    : null;
+  const fast = point?.type === 'ev_charger_dc';
+  const tariff = fast ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+
+  // The "tank" of an electric car is its battery, in kWh.
+  const kwh = vehicle.request.calculatedLiters;
+  const total = Math.round(kwh * tariff);
+
+  const facilities = blockFacilities(state, vehicleSide(vehicle));
+  const speedRatio = clamp((vehicle.patience / vehicle.maxPatience) * 100, 0, 100);
+  const serviceScore = clamp(
+    calculateServiceScore(speedRatio, 100, state.station.cleanliness) + facilities.satisfaction,
+    0,
+    100
+  );
+  vehicle.satisfaction = serviceScore;
+
+  TransactionService.executeCashTransaction(state, {
+    type: 'FUEL_SALE',
+    amount: total,
+    description: `${fast ? 'DC hızlı' : 'AC'} şarj - ${kwh.toFixed(0)} kWh`
+  });
+
+  state.player.statistics.totalRevenue += total;
+  state.player.statistics.totalCustomersServed++;
+  state.dayState.todayStats.fuelRevenue += total;
+  state.dayState.todayStats.customersServed++;
+  state.dayState.todayStats.serviceScoreSum =
+    (state.dayState.todayStats.serviceScoreSum || 0) + serviceScore;
+
+  trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
+  playCue(effects, 'cash');
+
+  vehicle.chargingBuildingId = null;
+  vehicle.chargeSecondsLeft = 0;
+  setVehicleState(vehicle, 'EXIT');
+  setRoute(vehicle, exitRoute(state, vehicle));
+}
+
 export function finalizeSale(
   state: GameState,
   vehicle: VehicleEntity,
@@ -1411,10 +1480,17 @@ export function finalizeSale(
 
   const speedRatio = clamp((vehicle.patience / vehicle.maxPatience) * 100, 0, 100);
   const accuracy = vehicle.request.isFinished ? 100 : 80;
-  const serviceScore = calculateServiceScore(speedRatio, accuracy, state.station.cleanliness);
+  const facilities = blockFacilities(state, vehicleSide(vehicle));
+  const serviceScore = clamp(
+    calculateServiceScore(speedRatio, accuracy, state.station.cleanliness) + facilities.satisfaction,
+    0,
+    100
+  );
   const mods = getEventModifiers(state);
+  // Some drivers tip and some never do; the archetype says which.
+  const tipHabit = GAME_CONFIG.customerTypes[vehicle.archetype]?.tipChanceModifier ?? 1;
   const tip = Math.round(
-    calculateCustomerTip(totalSale, serviceScore, vehicle.archetype) * mods.tip
+    calculateCustomerTip(totalSale, serviceScore, vehicle.archetype) * mods.tip * tipHabit
   );
 
   vehicle.satisfaction = serviceScore;
@@ -1424,6 +1500,23 @@ export function finalizeSale(
     amount: totalSale + tip,
     description: `${vehicle.archetype.toUpperCase()} - ${dispensed.toFixed(1)} L ${vehicle.fuelType} satışı${tip > 0 ? ` (+${tip} TL bahşiş)` : ''}`
   });
+
+  // Everything else on the forecourt gets its chance at this customer on the
+  // way out: the wash, the café, the tyre bay. This is what those buildings
+  // are for, and until now it was the one thing they never did.
+  for (const service of facilities.services) {
+    if (Math.random() >= service.chance) continue;
+
+    const spend = Math.round(service.avgSpend * (0.7 + Math.random() * 0.6));
+    TransactionService.executeCashTransaction(state, {
+      type: 'MARKET_SALE',
+      amount: spend,
+      description: `${service.name} hizmeti (${vehicle.archetype})`
+    });
+    state.dayState.todayStats.marketRevenue += spend;
+    state.dayState.todayStats.marketCost += Math.round(spend * 0.45);
+    playCue(effects, 'cash');
+  }
 
   state.player.statistics.totalFuelSoldLiters += dispensed;
   state.player.statistics.totalRevenue += totalSale;
@@ -1653,6 +1746,97 @@ function tickRush(state: GameState, dt: number, effects: SimEffects): void {
   );
 }
 
+/**
+ * What the buildings on one block add up to.
+ *
+ * A facility's worth is spread over several unrelated parts of the tick — who
+ * turns in, how long they will wait, what they think of the place, what they
+ * buy on the way out — so it is totalled once, here, from the catalogue table
+ * rather than rediscovered in each of them.
+ *
+ * Levels count: an upgraded building does its job better, at a quarter more
+ * per level, which is what the player is buying when they upgrade in place.
+ */
+export function blockFacilities(
+  state: GameState,
+  side: DrivewaySide
+): {
+  appeal: number;
+  patience: number;
+  satisfaction: number;
+  services: Array<{ name: string; chance: number; avgSpend: number }>;
+} {
+  let appeal = 0;
+  let patience = 0;
+  let satisfaction = 0;
+  const services: Array<{ name: string; chance: number; avgSpend: number }> = [];
+
+  for (const building of Object.values(state.buildings)) {
+    if (drivewaySideAt(building.position[1]) !== side) continue;
+
+    const effect = GAME_CONFIG.buildingEffects[building.type];
+    if (!effect) continue;
+
+    const scale = 1 + 0.25 * (building.level - 1);
+    // A run-down building is worth less than a cared-for one.
+    const condition = 0.5 + 0.5 * (building.health / 100);
+    const weight = scale * condition;
+
+    appeal += (effect.appeal ?? 0) * weight;
+    patience += (effect.patience ?? 0) * weight;
+    satisfaction += (effect.satisfaction ?? 0) * weight;
+
+    if (effect.service) {
+      services.push({
+        name: GAME_CONFIG.buildings[building.type]?.name ?? building.type,
+        chance: effect.service.chance,
+        avgSpend: effect.service.avgSpend * scale
+      });
+    }
+  }
+
+  return { appeal, patience, satisfaction, services };
+}
+
+/**
+ * Charging points on a block that are wired up and free.
+ *
+ * A charger without a substation behind it is a bollard: the catalogue says so
+ * and now the simulation agrees. Electric customers only appear once there is
+ * somewhere on the block to plug them in, which is what makes the whole EV
+ * line worth buying rather than four buildings that quietly do nothing.
+ */
+export function chargingPoints(
+  state: GameState,
+  side: DrivewaySide
+): Array<{ id: string; kind: 'ac' | 'dc'; position: [number, number] }> {
+  const onSide = Object.values(state.buildings).filter(
+    (b) => drivewaySideAt(b.position[1]) === side
+  );
+  if (!onSide.some((b) => b.type === 'ev_substation')) return [];
+
+  return onSide
+    .filter((b) => b.type === 'ev_charger_ac' || b.type === 'ev_charger_dc')
+    .map((b) => ({
+      id: b.id,
+      kind: b.type === 'ev_charger_dc' ? ('dc' as const) : ('ac' as const),
+      position: b.position
+    }));
+}
+
+/** A charging point on this block with nobody plugged into it. */
+function findFreeCharger(
+  state: GameState,
+  side: DrivewaySide
+): { id: string; kind: 'ac' | 'dc'; position: [number, number] } | null {
+  const taken = new Set(
+    Object.values(state.vehicles)
+      .map((v) => v.chargingBuildingId)
+      .filter(Boolean) as string[]
+  );
+  return chargingPoints(state, side).find((point) => !taken.has(point.id)) ?? null;
+}
+
 /** Whether this block has a pump that could serve anyone at all. */
 function blockHasPumps(state: GameState, side: DrivewaySide): boolean {
   return Object.values(state.pumps).some((p) => pumpSide(p) === side);
@@ -1664,7 +1848,11 @@ function blockHasPumps(state: GameState, side: DrivewaySide): boolean {
  * its own still pulls some in, and bare land pulls none.
  */
 function blockAppeal(state: GameState, side: DrivewaySide): number {
-  if (blockHasPumps(state, side)) return 1;
+  // What the player has built on this block is most of what makes a driver
+  // choose it over the next station down the road.
+  const facilities = 1 + blockFacilities(state, side).appeal;
+
+  if (blockHasPumps(state, side)) return facilities;
 
   const hasShop =
     state.market.active &&
@@ -1672,7 +1860,7 @@ function blockAppeal(state: GameState, side: DrivewaySide): number {
       (b) => b.type === 'mini_market' && drivewaySideAt(b.position[1]) === side
     );
 
-  return hasShop ? SHOP_ONLY_APPEAL : 0;
+  return hasShop ? SHOP_ONLY_APPEAL * facilities : 0;
 }
 
 /**
@@ -1728,17 +1916,18 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     (f) => state.tanks[f].capacity > 0
   );
 
-  const servable = (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
-    const conf = GAME_CONFIG.customerTypes[a];
-    // Electric cars wait for the charging system; there is nothing to serve
-    // them with yet.
-    if (conf.requiresCharger) return false;
-    return conf.preferredFuel === 'any' || sellableFuels.includes(conf.preferredFuel as FuelType);
-  });
-
   const side = pickSpawnSide(state);
   const block = blockLayout(state, side);
   if (!block) return;
+
+  // An electric customer is only servable where there is somewhere to plug in.
+  const canCharge = chargingPoints(state, side).length > 0;
+
+  const servable = (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
+    const conf = GAME_CONFIG.customerTypes[a];
+    if (conf.requiresCharger) return canCharge;
+    return conf.preferredFuel === 'any' || sellableFuels.includes(conf.preferredFuel as FuelType);
+  });
 
   // A car cannot materialise where one already is. When the road is backed up
   // to the edge of the map, the next driver simply has not arrived yet.
@@ -1758,7 +1947,17 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
       );
   if (archetypes.length === 0) return;
 
-  const archetype = archetypes[Math.floor(Math.random() * archetypes.length)];
+  const facilities = blockFacilities(state, side);
+
+  // Who stops is not a uniform draw over everyone on the road. A courier
+  // watching every kuruş and a luxury driver who never looks at the board
+  // react to the same price very differently, so the archetype is picked
+  // weighted by how each one feels about what this station is charging.
+  const priceIndex =
+    state.pricing.gasoline.playerPrice / Math.max(0.01, state.pricing.gasoline.regionalAverage);
+  const archetype = pickWeighted(archetypes, (a) =>
+    archetypeAppetite(GAME_CONFIG.customerTypes[a].priceSensitivity, priceIndex)
+  );
   const conf = GAME_CONFIG.customerTypes[archetype];
   const fuelType: FuelType =
     conf.preferredFuel === 'any' || !sellableFuels.includes(conf.preferredFuel as FuelType)
@@ -1783,8 +1982,10 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
       dispensedLiters: 0,
       isFinished: false
     },
-    patience: conf.basePatienceSeconds,
-    maxPatience: conf.basePatienceSeconds,
+    // Somewhere to wait, a coffee, a toilet: a driver puts up with a queue
+    // for longer at a station that gives them something to do.
+    patience: conf.basePatienceSeconds * (1 + facilities.patience),
+    maxPatience: conf.basePatienceSeconds * (1 + facilities.patience),
     satisfaction: 100,
     state: stops ? 'SPAWN' : 'PASSING',
     targetPumpId: null,
@@ -1806,6 +2007,34 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   if (!stops) {
     setRoute(state.vehicles[id], [[block.roadEndX, 0, block.roadLaneZ]]);
   }
+}
+
+/**
+ * How keen a driver of this temperament is on the price being asked, as a
+ * weight rather than a yes or no. Below the regional average the thrifty ones
+ * crowd in; above it they are the first to keep driving, while the drivers who
+ * never look at the board barely notice.
+ */
+function archetypeAppetite(
+  sensitivity: 'LOW' | 'MEDIUM' | 'HIGH',
+  priceIndex: number
+): number {
+  const slope = sensitivity === 'HIGH' ? 3.2 : sensitivity === 'MEDIUM' ? 1.6 : 0.5;
+  return clamp(1 - slope * (priceIndex - 1), 0.08, 2.5);
+}
+
+/** Picks one of a list, in proportion to a weight given to each. */
+function pickWeighted<T>(items: T[], weightOf: (item: T) => number): T {
+  const weights = items.map(weightOf);
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  if (total <= 0) return items[Math.floor(Math.random() * items.length)];
+
+  let roll = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return items[i];
+  }
+  return items[items.length - 1];
 }
 
 /** Finds a free pump that can serve this vehicle's fuel type. */
@@ -1934,6 +2163,30 @@ function tickVehicles(
         }
         if (!arrived) break;
 
+        // An electric customer wants a socket, not a nozzle.
+        if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
+          const point = findFreeCharger(state, side);
+          if (point) {
+            vehicle.chargingBuildingId = point.id;
+            vehicle.chargeSecondsLeft =
+              point.kind === 'dc'
+                ? GAME_CONFIG.ev.dcChargeSeconds
+                : GAME_CONFIG.ev.acChargeSeconds;
+            setVehicleState(vehicle, 'PUMP_RESERVED');
+            setRoute(vehicle, chargerRoute(state, vehicle, point.position));
+          } else if (queued.length < maxQueueLength(block)) {
+            setVehicleState(vehicle, 'QUEUE');
+            setRoute(vehicle, [queueSlotPosition(state, queued.length, side)]);
+            queued.push(vehicle);
+          } else {
+            setVehicleState(vehicle, 'EXIT');
+            setRoute(vehicle, exitRoute(state, vehicle));
+            state.dayState.todayStats.customersLost++;
+            state.player.statistics.totalCustomersLost++;
+          }
+          break;
+        }
+
         const pump = findAvailablePump(state, vehicle.fuelType, mods, side);
         if (pump) {
           reservePumpFor(state, vehicle, pump);
@@ -1975,7 +2228,22 @@ function tickVehicles(
           }
         }
 
-        // Only the head of the queue may claim a freed pump.
+        // Only the head of the queue may claim a point that has come free.
+        if (slot === 0 && GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
+          const point = findFreeCharger(state, side);
+          if (point) {
+            vehicle.chargingBuildingId = point.id;
+            vehicle.chargeSecondsLeft =
+              point.kind === 'dc'
+                ? GAME_CONFIG.ev.dcChargeSeconds
+                : GAME_CONFIG.ev.acChargeSeconds;
+            setVehicleState(vehicle, 'PUMP_RESERVED');
+            setRoute(vehicle, chargerRoute(state, vehicle, point.position));
+            queued.shift();
+          }
+          break;
+        }
+
         if (slot === 0) {
           const pump = findAvailablePump(state, vehicle.fuelType, mods, side);
           if (pump) {
@@ -2004,6 +2272,13 @@ function tickVehicles(
 
       case 'AT_PUMP':
       case 'REQUEST': {
+        // Charging needs nobody's attention: the driver plugs in and waits.
+        if (vehicle.chargingBuildingId) {
+          vehicle.chargeSecondsLeft = (vehicle.chargeSecondsLeft ?? 0) - dt;
+          if (vehicle.chargeSecondsLeft <= 0) finalizeCharge(state, vehicle, effects);
+          break;
+        }
+
         vehicle.waitingTimeSeconds += dt;
         vehicle.patience -= dt;
         if (vehicle.patience <= 0) {

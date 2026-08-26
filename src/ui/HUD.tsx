@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { Award, Building2, Cloud, CloudRain, Crosshair, FastForward, Fuel, Hammer, Landmark, Map as MapIcon, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
+import { Award, Building2, Cloud, CloudRain, Crosshair, FastForward, Fuel, Hammer, Landmark, Map as MapIcon, Move, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { drivewaySideAt } from '../domain/services/simulationEngine';
@@ -37,6 +37,7 @@ export const HUD: React.FC = () => {
   const structureValue = useGameStore((s) => s.structureValue);
   const sellStructure = useGameStore((s) => s.sellStructure);
   const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
+  const relocateStructure = useGameStore((s) => s.relocateStructure);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
 
   const { player, dayState, tanks } = gameState;
@@ -63,7 +64,12 @@ export const HUD: React.FC = () => {
       name: GAME_CONFIG.buildings[type]?.name ?? type,
       value: structureValue(id),
       // Pumps have their own upgrade flow in the pump panel.
-      upgrade: pump ? null : GAME_CONFIG.buildingUpgrades[type]?.[level + 1] ?? null
+      upgrade: pump ? null : GAME_CONFIG.buildingUpgrades[type]?.[level + 1] ?? null,
+      movable: !pump,
+      moveFee:
+        Math.round(
+          ((GAME_CONFIG.buildings[type]?.price ?? 0) * GAME_CONFIG.economy.moveFeeRatio) / 10
+        ) * 10
     };
   })();
   const currentSpeed = dayState.timeSpeed;
@@ -375,6 +381,16 @@ export const HUD: React.FC = () => {
                 title={selected.upgrade.effectsDescription}
               >
                 <span>Sv{selected.level + 1} Yükselt · ₺{selected.upgrade.cost.toLocaleString('tr-TR')}</span>
+              </button>
+            )}
+            {selected.movable && (
+              <button
+                onClick={() => relocateStructure(selected.id)}
+                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-600 flex items-center gap-1.5"
+                title={`Taşıma ücreti ₺${selected.moveFee.toLocaleString('tr-TR')}`}
+              >
+                <Move className="w-3.5 h-3.5" />
+                <span>Taşı</span>
               </button>
             )}
             <button

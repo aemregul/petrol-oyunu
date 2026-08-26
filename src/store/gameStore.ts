@@ -125,6 +125,8 @@ interface GameStore {
   selectedPumpId: string | null;
   selectedBuildingId: string | null;
   buildMode: BuildModeState;
+  /** Set while a lifted building is being carried to its new spot. */
+  relocating: { type: string; level: number; health: number } | null;
   landMode: LandModeState;
   cameraAngle: number; // 0, 90, 180, 270
   cameraZoom: number; // 1 to 7
@@ -155,6 +157,8 @@ interface GameStore {
   /** Second-hand value of a pump or building, for the sell button. */
   structureValue: (id: string) => number;
   sellStructure: (id: string) => boolean;
+  /** Lifts a building for a small fee and re-enters placement with it. */
+  relocateStructure: (id: string) => boolean;
   upgradeBuilding: (id: string) => boolean;
   toggleStationOpen: () => void;
   enterLandMode: () => void;
@@ -277,6 +281,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     rotation: 0,
     isValid: true
   },
+  relocating: null,
   landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
   cameraAngle: 225, // Yol sol üstten sağ alta iner, istasyon sağında kalır
   cameraZoom: 4,
@@ -450,6 +455,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     const catalog = GAME_CONFIG.buildings[buildMode.buildingType];
     if (!catalog) return false;
 
+    const carried =
+      get().relocating && get().relocating!.type === buildMode.buildingType
+        ? get().relocating
+        : null;
+
     const placement = evaluatePlacement(
       gameState,
       buildMode.buildingType,
@@ -465,7 +475,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       return false;
     }
 
-    if (gameState.player.cash < catalog.price) {
+    if (!carried && gameState.player.cash < catalog.price) {
       get().addNotification({
         type: 'WARNING',
         title: 'Yetersiz Bakiye',
@@ -475,13 +485,17 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    const tx = TransactionService.executeCashTransaction(state, {
-      type: 'BUILD',
-      amount: -catalog.price,
-      description: `${catalog.name} inşası`
-    });
 
-    if (!tx.success) return false;
+    // A building being set back down was already paid for; the move fee came
+    // off when it was lifted.
+    if (!carried) {
+      const tx = TransactionService.executeCashTransaction(state, {
+        type: 'BUILD',
+        amount: -catalog.price,
+        description: `${catalog.name} inşası`
+      });
+      if (!tx.success) return false;
+    }
 
     if (catalog.category === 'tank') {
       const TANK_FUELS: Record<string, FuelType> = {
@@ -561,11 +575,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       state.buildings[bId] = {
         id: bId,
         type: buildMode.buildingType,
-        level: 1,
+        level: carried?.level ?? 1,
         position: buildMode.position,
         rotation: buildMode.rotation,
         size: catalog.size,
-        health: 100,
+        health: carried?.health ?? 100,
         constructionState: 'ACTIVE',
         builtAtTimestamp: Date.now()
       };
@@ -590,7 +604,8 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     set({
       gameState: state,
-      buildMode: { ...buildMode, active: false, buildingType: null }
+      buildMode: { ...buildMode, active: false, buildingType: null },
+      relocating: null
     });
 
     get().addNotification({
@@ -741,6 +756,58 @@ export const useGameStore = create<GameStore>((set, get) => {
    * the forecourt is served out. It is the lever for a quiet rebuild, or for
    * riding out a day with no stock.
    */
+  /**
+   * Picks a structure back up so it can be put down somewhere else. Cheaper
+   * than selling and rebuilding — a plot the player can rearrange is a plot
+   * they will keep tinkering with, which is the point.
+   */
+  relocateStructure: (id) => {
+    const { gameState } = get();
+    const building = gameState.buildings[id];
+    if (!building) return false;
+
+    const catalog = GAME_CONFIG.buildings[building.type];
+    if (!catalog) return false;
+
+    const fee = Math.round((catalog.price * GAME_CONFIG.economy.moveFeeRatio) / 10) * 10;
+    if (gameState.player.cash < fee) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `Taşıma için ${fee.toLocaleString('tr-TR')} TL gerekiyor.`
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const moved = state.buildings[id];
+    delete state.buildings[id];
+
+    if (fee > 0) {
+      TransactionService.executeCashTransaction(state, {
+        type: 'BUILD',
+        amount: -fee,
+        description: `${catalog.name} taşındı`
+      });
+    }
+
+    set({
+      gameState: state,
+      selectedBuildingId: null,
+      // Straight back into placement, holding what was just lifted, so the
+      // level and the wear it had are not quietly reset by a rebuild.
+      buildMode: {
+        active: true,
+        buildingType: moved.type,
+        position: snapPlacement(state, moved.type, moved.position),
+        rotation: moved.rotation,
+        isValid: false
+      },
+      relocating: { type: moved.type, level: moved.level, health: moved.health }
+    });
+    return true;
+  },
+
   toggleStationOpen: () => {
     sounds.playClick();
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
