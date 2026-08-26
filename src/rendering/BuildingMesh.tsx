@@ -1,5 +1,4 @@
 import React, { useState, Suspense } from 'react';
-import { Html } from '@react-three/drei';
 import { BuildingEntity } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
 import { BuildingModel } from './models/BuildingModel';
@@ -7,6 +6,7 @@ import { hasBuildingModel } from './models/buildingModels';
 import { ModelErrorBoundary } from './models/ModelErrorBoundary';
 import { PriceTotem } from './PriceTotem';
 import { LightPole } from './LightPole';
+import { FasciaSign } from './FasciaSign';
 import {
   CarPark,
   TruckPark,
@@ -199,32 +199,35 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
   );
 };
 
-const SIGNAGE: Record<string, { text: string; height: number; className: string }> = {
+const SIGNAGE: Record<
+  string,
+  { text: string; height: number; color: string; textColor: string }
+> = {
   office: {
     text: 'YÖNETİM OFİSİ',
     height: 5,
-    className: 'bg-slate-900/85 text-white'
+    color: '#0f172a', textColor: '#ffffff'
   },
   mini_market: {
     text: 'MİNİ MARKET',
     height: 6,
-    className: 'bg-amber-600 text-white'
+    color: '#d97706', textColor: '#ffffff'
   },
-  toilet: { text: 'WC 🚻', height: 3.6, className: 'bg-slate-900/85 text-white' },
-  restaurant: { text: 'RESTORAN', height: 7.4, className: 'bg-red-600 text-white' },
-  cafe: { text: 'KAHVE', height: 5, className: 'bg-amber-700 text-white' },
-  rest_complex: { text: 'DİNLENME TESİSİ', height: 8.2, className: 'bg-sky-600 text-white' },
-  car_wash: { text: 'OTO YIKAMA', height: 5.8, className: 'bg-sky-600 text-white' },
-  oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, className: 'bg-amber-600 text-white' },
-  tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, className: 'bg-sky-700 text-white' },
-  air_water: { text: 'HAVA & SU', height: 3.4, className: 'bg-slate-900/85 text-white' },
-  car_park: { text: 'OTOPARK', height: 1.6, className: 'bg-slate-900/85 text-white' },
-  truck_park: { text: 'TIR PARKI', height: 3.4, className: 'bg-amber-600 text-white' },
-  ev_substation: { text: '⚡ ALTYAPI', height: 8.6, className: 'bg-yellow-500 text-slate-950' },
-  hotel: { text: 'OTEL', height: 9, className: 'bg-indigo-600 text-white' },
-  ev_storage: { text: 'ENERJİ DEPOLAMA', height: 3.6, className: 'bg-emerald-600 text-white' },
-  ev_charger_ac: { text: 'AC ŞARJ', height: 3, className: 'bg-emerald-600 text-white' },
-  ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, className: 'bg-orange-600 text-white' }
+  toilet: { text: 'WC 🚻', height: 3.6, color: '#0f172a', textColor: '#ffffff' },
+  restaurant: { text: 'RESTORAN', height: 7.4, color: '#dc2626', textColor: '#ffffff' },
+  cafe: { text: 'KAHVE', height: 5, color: '#b45309', textColor: '#ffffff' },
+  rest_complex: { text: 'DİNLENME TESİSİ', height: 8.2, color: '#0284c7', textColor: '#ffffff' },
+  car_wash: { text: 'OTO YIKAMA', height: 5.8, color: '#0284c7', textColor: '#ffffff' },
+  oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, color: '#d97706', textColor: '#ffffff' },
+  tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, color: '#0369a1', textColor: '#ffffff' },
+  air_water: { text: 'HAVA & SU', height: 3.4, color: '#0f172a', textColor: '#ffffff' },
+  car_park: { text: 'OTOPARK', height: 1.6, color: '#0f172a', textColor: '#ffffff' },
+  truck_park: { text: 'TIR PARKI', height: 3.4, color: '#d97706', textColor: '#ffffff' },
+  ev_substation: { text: '⚡ ALTYAPI', height: 8.6, color: '#eab308', textColor: '#020617' },
+  hotel: { text: 'OTEL', height: 9, color: '#4f46e5', textColor: '#ffffff' },
+  ev_storage: { text: 'ENERJİ DEPOLAMA', height: 3.6, color: '#059669', textColor: '#ffffff' },
+  ev_charger_ac: { text: 'AC ŞARJ', height: 3, color: '#059669', textColor: '#ffffff' },
+  ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, color: '#ea580c', textColor: '#ffffff' }
 };
 
 export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
@@ -283,13 +286,13 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
       {body}
 
       {signage && (
-        <Html position={[0, signage.height, 0]} center distanceFactor={26} zIndexRange={[5, 0]}>
-          <div
-            className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow whitespace-nowrap ${signage.className}`}
-          >
-            {signage.text}
-          </div>
-        </Html>
+        <FasciaSign
+          text={signage.text}
+          color={signage.color}
+          textColor={signage.textColor}
+          size={building.size}
+          height={signage.height}
+        />
       )}
 
       {(hovered || isSelected) && (

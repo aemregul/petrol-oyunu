@@ -9,14 +9,12 @@ import { GameState } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { isFootprintOnOwnedLand, pavedFrontage } from './land';
 import {
-  BlockLayout,
   DrivewayRole,
-  LANE_HALF_WIDTH,
-  blockLayout,
-  drivewaySideAt,
+  DrivewaySide,
   WIDE_DRIVEWAY_WIDTH,
   drivewayMouths,
   drivewayRole,
+  drivewaySideAt,
   drivewayZ,
   frontageRow
 } from './simulationEngine';
@@ -86,6 +84,40 @@ export function occupiedFootprints(
   }
 
   return taken;
+}
+
+/**
+ * What a rest complex takes the place of. It is one roof over the shop, the
+ * restaurant, the café and the toilets, so building one absorbs whichever of
+ * those the player already has on that block rather than standing beside them.
+ *
+ * It can also be bought outright, with none of them present — that is what the
+ * price is for, and it is how the block across the road gets served without
+ * having to build the whole parade over there first.
+ */
+export const REST_COMPLEX_ABSORBS = ['mini_market', 'restaurant', 'cafe', 'toilet'];
+
+/** The buildings a rest complex placed on this side would replace. */
+export function absorbedByRestComplex(
+  state: GameState,
+  side: DrivewaySide
+): Array<{ id: string; name: string }> {
+  return Object.values(state.buildings)
+    .filter(
+      (b) =>
+        REST_COMPLEX_ABSORBS.includes(b.type) && drivewaySideAt(b.position[1]) === side
+    )
+    .map((b) => ({ id: b.id, name: GAME_CONFIG.buildings[b.type]?.name ?? b.type }));
+}
+
+/** True when this footprint has at least one pump island under it. */
+function coversAPump(state: GameState, footprint: Footprint): boolean {
+  return Object.values(state.pumps).some((pump) =>
+    overlaps(
+      footprint,
+      getFootprint(pump.position, GAME_CONFIG.buildings.pump_standard.size, pump.rotation)
+    )
+  );
 }
 
 /**
@@ -193,10 +225,27 @@ export function evaluatePlacement(
     return { valid: false, reason: 'Önce bu parsele beton dökmelisiniz.' };
   }
 
-  for (const taken of occupiedFootprints(state)) {
-    if (overlaps(footprint, taken.footprint)) {
-      return { valid: false, reason: `${taken.name} ile çakışıyor.` };
+  // A canopy is a roof: the whole point of it is to stand over the pump
+  // island, so it is the one structure allowed to share ground with what is
+  // already there. Everything else has to find its own space.
+  if (buildingType !== 'canopy') {
+    // A rest complex is built *over* the units it replaces, so those are not
+    // obstacles to it — refusing the placement would mean the player had to
+    // demolish the parade first and lose the money twice.
+    const absorbed = new Set(
+      buildingType === 'rest_complex'
+        ? absorbedByRestComplex(state, drivewaySideAt(position[1])).map((b) => b.id)
+        : []
+    );
+
+    for (const taken of occupiedFootprints(state)) {
+      if (absorbed.has(taken.id)) continue;
+      if (overlaps(footprint, taken.footprint)) {
+        return { valid: false, reason: `${taken.name} ile çakışıyor.` };
+      }
     }
+  } else if (!coversAPump(state, footprint)) {
+    return { valid: false, reason: 'Sundurma bir pompanın üzerine kurulmalı.' };
   }
 
   return { valid: true };

@@ -31,8 +31,15 @@ export function paveCost(row: number): number {
  */
 export const FAR_SIDE_FRONT = -14;
 
-/** Land cannot be bought beyond these limits, so the map stays bounded. */
-export const LAND_BOUNDS = { minCol: -2, maxCol: 5, minRow: -3, maxRow: 4 };
+/**
+ * Land cannot be bought beyond these limits, so the map stays bounded.
+ *
+ * The station starts on a 2x2 block and may grow three parcels to the right
+ * and three back from it — enough room to lay out a real forecourt, but not so
+ * much that the plot stops being a constraint worth planning around. The block
+ * across the highway mirrors that depth.
+ */
+export const LAND_BOUNDS = { minCol: 0, maxCol: 4, minRow: -4, maxRow: 4 };
 
 /** True for parcels on the far side of the highway. */
 export function isFarSide(row: number): boolean {

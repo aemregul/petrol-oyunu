@@ -35,7 +35,11 @@ import {
   getLayout,
   DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
-import { evaluatePlacement, snapPlacement } from '../domain/services/placement';
+import {
+  evaluatePlacement,
+  snapPlacement,
+  absorbedByRestComplex
+} from '../domain/services/placement';
 import {
   stationBounds,
   parcelKey,
@@ -127,8 +131,6 @@ interface GameStore {
   /** Point on the ground the camera orbits, in world units. */
   cameraTarget: [number, number];
   perfMetrics: PerformanceMetrics;
-  lastUndoBuildingId: string | null;
-  lastUndoTimer: number;
 
   // UI / Modal Actions
   setActiveModal: (modal: ActiveModalType) => void;
@@ -150,7 +152,11 @@ interface GameStore {
   setBuildPreviewPos: (pos: [number, number]) => void;
   rotateBuildPreview: () => void;
   confirmBuildPlacement: () => boolean;
-  undoLastBuild: () => void;
+  /** Second-hand value of a pump or building, for the sell button. */
+  structureValue: (id: string) => number;
+  sellStructure: (id: string) => boolean;
+  upgradeBuilding: (id: string) => boolean;
+  toggleStationOpen: () => void;
   enterLandMode: () => void;
   exitLandMode: () => void;
   hoverParcel: (col: number, row: number) => void;
@@ -281,8 +287,6 @@ export const useGameStore = create<GameStore>((set, get) => {
     drawCalls: 120,
     simTickMs: 0.5
   },
-  lastUndoBuildingId: null,
-  lastUndoTimer: 0,
 
   setActiveModal: (modal) => {
     sounds.playClick();
@@ -543,6 +547,16 @@ export const useGameStore = create<GameStore>((set, get) => {
         }
       }
 
+      // A rest complex is the shop, the restaurant, the café and the toilets
+      // under one roof — so it takes their place on this block rather than
+      // standing next to duplicates of itself.
+      if (buildMode.buildingType === 'rest_complex') {
+        const side = drivewaySideAt(buildMode.position[1]);
+        for (const absorbed of absorbedByRestComplex(state, side)) {
+          delete state.buildings[absorbed.id];
+        }
+      }
+
       const bId = 'bld_' + Math.random().toString(36).substring(2, 7);
       state.buildings[bId] = {
         id: bId,
@@ -555,7 +569,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         constructionState: 'ACTIVE',
         builtAtTimestamp: Date.now()
       };
-      if (buildMode.buildingType === 'mini_market') {
+      if (buildMode.buildingType === 'mini_market' || buildMode.buildingType === 'rest_complex') {
+        // The complex carries a shop inside it, so the market keeps trading.
         state.market.active = true;
         state.market.stock = 50;
       }
@@ -575,9 +590,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     set({
       gameState: state,
-      buildMode: { ...buildMode, active: false, buildingType: null },
-      lastUndoBuildingId: buildMode.buildingType,
-      lastUndoTimer: Date.now() + GAME_CONFIG.economy.undoTimeoutSeconds * 1000
+      buildMode: { ...buildMode, active: false, buildingType: null }
     });
 
     get().addNotification({
@@ -589,28 +602,158 @@ export const useGameStore = create<GameStore>((set, get) => {
     return true;
   },
 
-  undoLastBuild: () => {
-    // 10s undo logic
-    const { gameState, lastUndoBuildingId, lastUndoTimer } = get();
-    if (!lastUndoBuildingId || Date.now() > lastUndoTimer) return;
+  /**
+   * What a structure is worth second hand. Well under what it cost, and worn
+   * hardware fetches less still — selling is a way out of a mistake, not a
+   * way to park money.
+   */
+  structureValue: (id) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[id];
+    const building = pump ? null : gameState.buildings[id];
+    if (!pump && !building) return 0;
 
-    const catalog = GAME_CONFIG.buildings[lastUndoBuildingId];
-    if (!catalog) return;
+    const type = pump ? 'pump_standard' : building!.type;
+    const level = pump ? pump.level : building!.level;
+    const health = pump ? pump.health : building!.health;
+
+    const catalog = GAME_CONFIG.buildings[type];
+    if (!catalog) return 0;
+
+    // Money sunk into upgrades counts towards the sale, at the same rate.
+    let invested = catalog.price;
+    const upgrades = GAME_CONFIG.buildingUpgrades[type === 'pump_standard' ? 'pump_standard' : type];
+    for (let step = 2; step <= level; step++) {
+      invested += upgrades?.[step]?.cost ?? 0;
+    }
+
+    const wear = 0.6 + 0.4 * (health / 100);
+    return Math.round((invested * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
+  },
+
+  sellStructure: (id) => {
+    const { gameState } = get();
+    const value = get().structureValue(id);
+    const pump = gameState.pumps[id];
+    const building = pump ? null : gameState.buildings[id];
+    if (!pump && !building) return false;
+
+    const name = GAME_CONFIG.buildings[pump ? 'pump_standard' : building!.type]?.name ?? 'Yapı';
+
+    // The last pump is the station's whole business; selling it would leave
+    // the player with nothing to serve anyone with and no way back.
+    if (pump && Object.keys(gameState.pumps).length <= 1) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Son Pompa Satılamaz',
+        message: 'İstasyonun hizmet verebilmesi için en az bir pompa gerekiyor.'
+      });
+      return false;
+    }
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+
+    if (pump) {
+      // Let go of whoever was using it before it disappears underneath them.
+      const served = state.pumps[id].currentVehicleId;
+      if (served && state.vehicles[served]) delete state.vehicles[served];
+      for (const employee of Object.values(state.employees)) {
+        if (employee.assignedPumpId === id) employee.assignedPumpId = null;
+      }
+      delete state.pumps[id];
+    } else {
+      delete state.buildings[id];
+      if (building!.type === 'mini_market') state.market.active = false;
+    }
+
     TransactionService.executeCashTransaction(state, {
       type: 'REFUND',
-      amount: catalog.price,
-      description: `${catalog.name} inşası geri alındı`
+      amount: value,
+      description: `${name} satıldı`
     });
 
     sounds.playCashSound();
     SaveManager.saveGame(state);
-    set({ gameState: state, lastUndoBuildingId: null, lastUndoTimer: 0 });
+    set({ gameState: state, selectedBuildingId: null, selectedPumpId: null });
     get().addNotification({
       type: 'INFO',
-      title: 'İnşaat Geri Alındı',
-      message: `${catalog.price.toLocaleString('tr-TR')} TL iade edildi.`
+      title: 'Yapı Satıldı',
+      message: `${name} elden çıkarıldı, ${value.toLocaleString('tr-TR')} TL kasaya girdi.`
+    });
+    return true;
+  },
+
+  /**
+   * Raises a structure a level in place. An upgrade is the same building doing
+   * its job better, not a second one beside it, so nothing is rebuilt and the
+   * footprint never moves.
+   */
+  upgradeBuilding: (id) => {
+    const { gameState } = get();
+    const building = gameState.buildings[id];
+    if (!building) return false;
+
+    const next = building.level + 1;
+    const upgrade = GAME_CONFIG.buildingUpgrades[building.type]?.[next];
+    const catalog = GAME_CONFIG.buildings[building.type];
+    if (!upgrade || !catalog) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yükseltme Yok',
+        message: `${catalog?.name ?? 'Bu yapı'} için daha üst seviye bulunmuyor.`
+      });
+      return false;
+    }
+
+    if (gameState.player.cash < upgrade.cost) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `Yükseltme için ${upgrade.cost.toLocaleString('tr-TR')} TL gerekiyor.`
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const tx = TransactionService.executeCashTransaction(state, {
+      type: 'UPGRADE',
+      amount: -upgrade.cost,
+      description: `${catalog.name} seviye ${next}`
+    });
+    if (!tx.success) return false;
+
+    state.buildings[id].level = next;
+    state.buildings[id].health = 100;
+
+    sounds.playBuildPlace();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Yükseltme Tamamlandı',
+      message: `${catalog.name} seviye ${next} oldu. ${upgrade.effectsDescription}`
+    });
+    return true;
+  },
+
+  /**
+   * Shutting the station stops new customers coming in; whoever is already on
+   * the forecourt is served out. It is the lever for a quiet rebuild, or for
+   * riding out a day with no stock.
+   */
+  toggleStationOpen: () => {
+    sounds.playClick();
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    state.station.open = !state.station.open;
+
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: state.station.open ? 'İstasyon Açıldı' : 'İstasyon Kapatıldı',
+      message: state.station.open
+        ? 'Yoldan müşteri kabul ediliyor.'
+        : 'Tabelaya KAPALI yazıldı; sahadaki müşteriler tamamlandıktan sonra kimse gelmeyecek.'
     });
   },
 

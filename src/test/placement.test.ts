@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
-import { evaluatePlacement, getFootprint, snapPlacement } from '../domain/services/placement';
+import {
+  evaluatePlacement,
+  getFootprint,
+  snapPlacement,
+  absorbedByRestComplex
+} from '../domain/services/placement';
 import {
   DRIVEWAY_WIDTH,
   DRIVEWAY_Z,
@@ -72,6 +77,48 @@ describe('placement — paving', () => {
 
     state.station.plots.pavedParcels.push('2,0');
     expect(evaluatePlacement(state, 'price_sign', [20, 3], 0).valid).toBe(true);
+  });
+});
+
+describe('structures', () => {
+  const ready = () => {
+    const state = createInitialGameState();
+    state.player.level = 12;
+    return state;
+  };
+
+  it('lets a canopy stand over a pump, and nothing else overlap one', () => {
+    const state = ready();
+    const pump = Object.values(state.pumps)[0];
+
+    // A roof over the island is the whole point of the thing.
+    expect(evaluatePlacement(state, 'canopy', pump.position, 0).valid).toBe(true);
+    // But it has to be over a pump, not parked on spare concrete.
+    expect(evaluatePlacement(state, 'canopy', [3, 3], 0).valid).toBe(false);
+    // Everything else still keeps its distance.
+    expect(evaluatePlacement(state, 'mini_market', pump.position, 0).valid).toBe(false);
+  });
+
+  it('builds a rest complex over the parade it replaces', () => {
+    const state = ready();
+    state.buildings = {
+      mk: {
+        id: 'mk', type: 'mini_market', level: 1, position: [4, 9], rotation: 0,
+        size: [5, 5], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+      },
+      wc: {
+        id: 'wc', type: 'toilet', level: 1, position: [11, 9], rotation: 0,
+        size: [2, 2], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+      }
+    };
+    state.pumps = {};
+
+    const absorbed = absorbedByRestComplex(state, 'near').map((b) => b.id).sort();
+    expect(absorbed).toEqual(['mk', 'wc']);
+
+    // Those units are not obstacles to it: it is built over them, and asking
+    // the player to demolish first would cost them the money twice.
+    expect(evaluatePlacement(state, 'rest_complex', [7, 9], 0).valid).toBe(true);
   });
 });
 

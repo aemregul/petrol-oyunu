@@ -37,7 +37,7 @@ export const BUILDING_MODELS: Record<string, BuildingModelConfig> = {
   office: {
     url: `${COMMERCIAL}/building-k.glb`,
     fit: 'footprint',
-    maxHeight: 7
+    maxHeight: 10
   },
   // building-e is the flattest, widest model in the kit — the right shape for
   // a forecourt shop.

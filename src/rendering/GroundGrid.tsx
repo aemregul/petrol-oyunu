@@ -226,39 +226,83 @@ const Carriageway: React.FC<{
   );
 };
 
-/** Shrubs and saplings down the central reservation. */
+/**
+ * The central reservation, planted.
+ *
+ * A bare strip of grass between two carriageways reads as unfinished ground
+ * rather than as part of the road, so it gets what a real one gets: a low
+ * hedge running its length, broken up by trees and beds at intervals.
+ */
 const MedianPlanting: React.FC<{ centreX: number; centreZ: number }> = ({
   centreX,
   centreZ
 }) => {
-  const plants = useMemo(
-    () => Array.from({ length: 34 }, (_, i) => -240 + i * 15),
+  const beds = useMemo(
+    () => Array.from({ length: 40 }, (_, i) => -240 + i * 12),
     []
   );
 
   return (
     <group position={[centreX, 0, centreZ]}>
-      {plants.map((x, i) => (
-        <group key={x} position={[x, 0, i % 2 === 0 ? -0.7 : 0.7]}>
-          {i % 3 === 0 ? (
-            <>
-              <mesh position={[0, 0.7, 0]} castShadow>
-                <cylinderGeometry args={[0.12, 0.16, 1.4, 6]} />
-                <meshStandardMaterial color="#5b4534" roughness={1} />
-              </mesh>
-              <mesh position={[0, 1.9, 0]} castShadow>
-                <icosahedronGeometry args={[0.95, 0]} />
-                <meshStandardMaterial color="#41802f" roughness={0.95} flatShading />
-              </mesh>
-            </>
-          ) : (
-            <mesh position={[0, 0.45, 0]} castShadow>
-              <icosahedronGeometry args={[0.7, 0]} />
-              <meshStandardMaterial color="#4d8f3c" roughness={1} flatShading />
-            </mesh>
-          )}
-        </group>
-      ))}
+      {/* Continuous clipped hedge down the middle. */}
+      <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
+        <boxGeometry args={[600, 0.84, 1.5]} />
+        <meshStandardMaterial color="#2f6b28" roughness={1} flatShading />
+      </mesh>
+      {/* A paler crown on top, so it does not read as a solid green wall. */}
+      <mesh position={[0, 0.9, 0]} receiveShadow>
+        <boxGeometry args={[600, 0.16, 1.2]} />
+        <meshStandardMaterial color="#498f34" roughness={1} flatShading />
+      </mesh>
+
+      {beds.map((x, i) => {
+        // Every third bed carries a tree; the rest are low colour.
+        const isTree = i % 3 === 0;
+        const side = i % 2 === 0 ? -1 : 1;
+
+        return (
+          <group key={x} position={[x, 0, 0]}>
+            {isTree ? (
+              <>
+                <mesh position={[0, 1.5, 0]} castShadow>
+                  <cylinderGeometry args={[0.16, 0.22, 3, 6]} />
+                  <meshStandardMaterial color="#5b4534" roughness={1} />
+                </mesh>
+                <mesh position={[0, 3.4, 0]} castShadow>
+                  <icosahedronGeometry args={[1.35, 0]} />
+                  <meshStandardMaterial color="#3f8a2f" roughness={0.95} flatShading />
+                </mesh>
+                <mesh position={[0, 4.3, 0.2]} castShadow>
+                  <icosahedronGeometry args={[0.9, 0]} />
+                  <meshStandardMaterial color="#4fa03a" roughness={0.95} flatShading />
+                </mesh>
+              </>
+            ) : (
+              <>
+                {/* A kerbed bed of flowering shrubs. */}
+                <mesh position={[0, 0.12, side * 0.9]} receiveShadow>
+                  <boxGeometry args={[3.4, 0.24, 1.6]} />
+                  <meshStandardMaterial color="#b9c0cb" roughness={0.9} />
+                </mesh>
+                {[-1, 0, 1].map((slot) => (
+                  <mesh
+                    key={slot}
+                    position={[slot * 1.05, 0.5, side * 0.9]}
+                    castShadow
+                  >
+                    <icosahedronGeometry args={[0.46, 0]} />
+                    <meshStandardMaterial
+                      color={slot === 0 ? '#c2506a' : '#4d8f3c'}
+                      roughness={1}
+                      flatShading
+                    />
+                  </mesh>
+                ))}
+              </>
+            )}
+          </group>
+        );
+      })}
     </group>
   );
 };

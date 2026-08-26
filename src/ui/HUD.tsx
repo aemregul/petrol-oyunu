@@ -1,31 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import {
-  Fuel,
-  Building2,
-  Hammer,
-  Users,
-  Tag,
-  Landmark,
-  Settings as SettingsIcon,
-  Play,
-  Pause,
-  FastForward,
-  RotateCcw,
-  RotateCw,
-  ZoomIn,
-  ZoomOut,
-  Sparkles,
-  Sun,
-  Cloud,
-  CloudRain,
-  ShieldAlert,
-  Award,
-  Target,
-  Crosshair,
-  Map as MapIcon
-} from 'lucide-react';
+import { Award, Building2, Cloud, CloudRain, Crosshair, FastForward, Fuel, Hammer, Landmark, Map as MapIcon, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
+import { absorbedByRestComplex } from '../domain/services/placement';
+import { drivewaySideAt } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 
 const WEATHER_DISPLAY = {
@@ -37,6 +15,7 @@ const WEATHER_DISPLAY = {
 export const HUD: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const activeModal = useGameStore((s) => s.activeModal);
+  const [confirmMerge, setConfirmMerge] = useState(false);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const setCameraZoom = useGameStore((s) => s.setCameraZoom);
@@ -46,15 +25,47 @@ export const HUD: React.FC = () => {
   const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
   const rotateBuildPreview = useGameStore((s) => s.rotateBuildPreview);
   const exitBuildMode = useGameStore((s) => s.exitBuildMode);
-  const undoLastBuild = useGameStore((s) => s.undoLastBuild);
   const resetCamera = useGameStore((s) => s.resetCamera);
   const landMode = useGameStore((s) => s.landMode);
   const enterLandMode = useGameStore((s) => s.enterLandMode);
   const exitLandMode = useGameStore((s) => s.exitLandMode);
   const upgradeRoad = useGameStore((s) => s.upgradeRoad);
-  const lastUndoTimer = useGameStore((s) => s.lastUndoTimer);
+  const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
+  const selectedPumpId = useGameStore((s) => s.selectedPumpId);
+  const selectBuilding = useGameStore((s) => s.selectBuilding);
+  const selectPump = useGameStore((s) => s.selectPump);
+  const structureValue = useGameStore((s) => s.structureValue);
+  const sellStructure = useGameStore((s) => s.sellStructure);
+  const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
+  const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
 
   const { player, dayState, tanks } = gameState;
+
+  // The pump or building under the cursor's last click, if any.
+  // What a rest complex would swallow if it were placed where the preview is.
+  const wouldAbsorb =
+    buildMode.active && buildMode.buildingType === 'rest_complex'
+      ? absorbedByRestComplex(gameState, drivewaySideAt(buildMode.position[1]))
+      : [];
+
+  const selected = (() => {
+    const pump = selectedPumpId ? gameState.pumps[selectedPumpId] : null;
+    const building = selectedBuildingId ? gameState.buildings[selectedBuildingId] : null;
+    if (!pump && !building) return null;
+
+    const id = pump ? pump.id : building!.id;
+    const type = pump ? 'pump_standard' : building!.type;
+    const level = pump ? pump.level : building!.level;
+
+    return {
+      id,
+      level,
+      name: GAME_CONFIG.buildings[type]?.name ?? type,
+      value: structureValue(id),
+      // Pumps have their own upgrade flow in the pump panel.
+      upgrade: pump ? null : GAME_CONFIG.buildingUpgrades[type]?.[level + 1] ?? null
+    };
+  })();
   const currentSpeed = dayState.timeSpeed;
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
   const weatherStyle = WEATHER_DISPLAY[dayState.weather] || WEATHER_DISPLAY.SUNNY;
@@ -126,6 +137,21 @@ export const HUD: React.FC = () => {
               <FastForward className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Open / closed. Shutting up shop stops new arrivals without
+              stopping the clock, so the player can rebuild in peace. */}
+          <button
+            onClick={toggleStationOpen}
+            className={`ml-1 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+              gameState.station.open
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
+                : 'bg-red-500/15 text-red-400 border-red-500/40 hover:bg-red-500/25'
+            }`}
+            title={gameState.station.open ? 'İstasyonu kapat' : 'İstasyonu aç'}
+          >
+            <Power className="w-3.5 h-3.5" />
+            {gameState.station.open ? 'Açık' : 'Kapalı'}
+          </button>
         </div>
 
         {/* Top-Center: Cash Balance & Today's Net Revenue */}
@@ -275,7 +301,10 @@ export const HUD: React.FC = () => {
               <span>Döndür (R)</span>
             </button>
             <button
-              onClick={confirmBuildPlacement}
+              onClick={() => {
+                if (wouldAbsorb.length > 0) setConfirmMerge(true);
+                else confirmBuildPlacement();
+              }}
               className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-1.5"
             >
               <span>Onayla & İnşa Et</span>
@@ -289,15 +318,82 @@ export const HUD: React.FC = () => {
           </div>
         )}
 
-        {/* Undo Button (10 seconds undo after build) */}
-        {Date.now() < lastUndoTimer && !buildMode.active && (
-          <button
-            onClick={undoLastBuild}
-            className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-2xl shadow-2xl pointer-events-auto flex items-center gap-2 animate-bounce"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>İnşaatı Geri Al (%100 İade)</span>
-          </button>
+        {/* A rest complex replaces the parade it is built over, and that is
+            not something to discover after paying for it. */}
+        {confirmMerge && buildMode.active && (
+          <div className="bg-slate-900/97 border-2 border-amber-500 backdrop-blur-md rounded-2xl px-6 py-4 shadow-2xl pointer-events-auto max-w-md animate-fade-in">
+            <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm mb-1">
+              <ShieldAlert className="w-4 h-4" />
+              Mevcut Yapılar Birleştirilecek
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed mb-3">
+              Dinlenme Tesisi; market, restoran, kahveci ve WC birimlerini tek çatı
+              altında toplar. Bu tesisi kurarsanız aşağıdaki yapılar sökülecek ve
+              yerine tek bir tesis geçecek — <b>bedelleri iade edilmez</b>.
+            </p>
+            <ul className="text-xs text-white font-bold mb-4 space-y-0.5">
+              {wouldAbsorb.map((b) => (
+                <li key={b.id}>• {b.name}</li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setConfirmMerge(false);
+                  confirmBuildPlacement();
+                }}
+                className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2 rounded-xl"
+              >
+                Anladım, Birleştir
+              </button>
+              <button
+                onClick={() => setConfirmMerge(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-600"
+              >
+                Vazgeç
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Whatever the player has clicked on: what it is worth, and the two
+            things they can do with it. */}
+        {selected && !buildMode.active && (
+          <div className="bg-slate-900/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-5 py-3 shadow-2xl pointer-events-auto flex items-center gap-4 animate-fade-in">
+            <div>
+              <div className="text-xs uppercase font-bold text-sky-400">
+                {selected.name} · Sv{selected.level}
+              </div>
+              <div className="text-sm font-extrabold text-white">
+                Satış değeri ₺{selected.value.toLocaleString('tr-TR')}
+              </div>
+            </div>
+            {selected.upgrade && (
+              <button
+                onClick={() => upgradeBuilding(selected.id)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-1.5"
+                title={selected.upgrade.effectsDescription}
+              >
+                <span>Sv{selected.level + 1} Yükselt · ₺{selected.upgrade.cost.toLocaleString('tr-TR')}</span>
+              </button>
+            )}
+            <button
+              onClick={() => sellStructure(selected.id)}
+              className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Sat</span>
+            </button>
+            <button
+              onClick={() => {
+                selectBuilding(null);
+                selectPump(null);
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-600"
+            >
+              Kapat
+            </button>
+          </div>
         )}
 
         {/* Critical Stock Warning Banner */}

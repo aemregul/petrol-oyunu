@@ -126,7 +126,6 @@ export interface GameConfig {
     minRepairCost: number;
     siteCleanCost: number;
     cleanDurationSeconds: number;
-    undoTimeoutSeconds: number;
     refundRatio: number; // 0.55
     moveFeeRatio: number; // 0.02
     tankerSpeedSecondsMin: number;
@@ -137,6 +136,10 @@ export interface GameConfig {
     defaultAutonomyBudgetReserve: number; // 8000 TL
   };
   /** What it takes to turn the single lane into a dual carriageway. */
+  ev: {
+    acPricePerKwh: number;
+    dcPricePerKwh: number;
+  };
   roadUpgrade: {
     price: number;
     minLevel: number;
@@ -282,7 +285,7 @@ export const GAME_CONFIG: GameConfig = {
     },
     office: {
       type: 'office',
-      name: 'Yönetim Ofisi S2',
+      name: 'Yönetim Ofisi',
       category: 'structure',
       price: 18000,
       dailyUpkeep: 120,
@@ -293,7 +296,7 @@ export const GAME_CONFIG: GameConfig = {
     },
     mini_market: {
       type: 'mini_market',
-      name: 'Mini Market S1',
+      name: 'Mini Market',
       category: 'service',
       price: 28000,
       dailyUpkeep: 180,
@@ -830,8 +833,12 @@ export const GAME_CONFIG: GameConfig = {
     minRepairCost: 250,
     siteCleanCost: 300,
     cleanDurationSeconds: 30,
-    undoTimeoutSeconds: 10,
-    refundRatio: 0.55,
+    /**
+     * What selling a structure hands back. Deliberately well under half: a
+     * misplaced building should cost the player something, so that the plot
+     * they end up with is one they had to think about.
+     */
+    refundRatio: 0.4,
     moveFeeRatio: 0.02,
     tankerSpeedSecondsMin: 90,
     tankerSpeedSecondsMax: 150,
@@ -839,6 +846,15 @@ export const GAME_CONFIG: GameConfig = {
     tankerCancelRefundRatio: 0.85,
     overdraftLimit: -5000,
     defaultAutonomyBudgetReserve: 8000
+  },
+  /**
+   * Charging tariffs, in TL per kWh. Fixed for now: electricity is not yet a
+   * stocked commodity like the liquid fuels, so there is nothing for the
+   * player to price against.
+   */
+  ev: {
+    acPricePerKwh: 7.5,
+    dcPricePerKwh: 12.9
   },
   roadUpgrade: {
     price: 250000,

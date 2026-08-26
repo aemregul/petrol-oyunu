@@ -21,6 +21,7 @@ import {
   EmployeeState,
   MissionMetric,
   MissionEntity,
+  BuildingEntity,
   ActiveGameEvent
 } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
@@ -1338,6 +1339,26 @@ export function beginFueling(
   return true;
 }
 
+/** What a roof over the island is worth: faster fills, and less weathering. */
+const CANOPY_FLOW_BONUS = 0.05;
+const CANOPY_GRIME_RELIEF = 0.7;
+
+/** True when a canopy's footprint covers this pump. */
+export function isUnderCanopy(
+  state: { buildings: Record<string, BuildingEntity> },
+  pump: { position: [number, number] }
+): boolean {
+  return Object.values(state.buildings).some((building) => {
+    if (building.type !== 'canopy') return false;
+    const halfX = building.size[0] / 2;
+    const halfZ = building.size[1] / 2;
+    return (
+      Math.abs(pump.position[0] - building.position[0]) <= halfX &&
+      Math.abs(pump.position[1] - building.position[1]) <= halfZ
+    );
+  });
+}
+
 /** Pushes fuel for one step. Returns true when the requested amount is met. */
 export function dispenseStep(
   state: GameState,
@@ -1353,6 +1374,9 @@ export function dispenseStep(
   // A worn pump dispenses noticeably slower.
   if (pump && pump.health < 60) flowRate *= 0.75;
   if (pump && pump.health < 30) flowRate *= 0.6;
+
+  // Working under a roof is quicker, and that is what the canopy is sold on.
+  if (pump && isUnderCanopy(state, pump)) flowRate *= 1 + CANOPY_FLOW_BONUS;
 
   const remaining = vehicle.request.calculatedLiters - vehicle.request.dispensedLiters;
   vehicle.request.dispensedLiters += Math.min(remaining, flowRate * deltaSeconds);
@@ -1418,8 +1442,10 @@ export function finalizeSale(
 
   // Serving customers dirties the forecourt; a trash can slows that down.
   const hasTrashCan = Object.values(state.buildings).some((b) => b.type === 'trash_can');
+  // Islands with a roof over them stay markedly cleaner day to day.
+  const roofed = Object.values(state.buildings).some((b) => b.type === 'canopy');
   state.station.cleanliness = clamp(
-    state.station.cleanliness - (hasTrashCan ? 0.21 : 0.3),
+    state.station.cleanliness - (hasTrashCan ? 0.21 : 0.3) * (roofed ? CANOPY_GRIME_RELIEF : 1),
     0,
     100
   );
