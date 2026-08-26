@@ -440,7 +440,15 @@ function laneClearance(z: number, spans: Array<[number, number]>): number {
  * runs through one of them means cars driving through the walls — so the lane
  * moves, rather than the traffic pretending the building is not there.
  */
-function clearLaneZ(candidates: number[], spans: Array<[number, number]>): number {
+function clearLaneZ(
+  candidates: number[],
+  spans: Array<[number, number]>,
+  fallback: number
+): number {
+  // A block can be too shallow to offer any choice at all — a single row of
+  // parcels has nowhere to put a return lane but the one place it fits.
+  if (candidates.length === 0) return fallback;
+
   return candidates.reduce((best, z) =>
     laneClearance(z, spans) > laneClearance(best, spans) ? z : best
   );
@@ -556,7 +564,8 @@ export function blockLayout(
     spans.map(([a, b]) => [
       inward * (a - front) - LANE_HALF_WIDTH,
       inward * (b - front) + LANE_HALF_WIDTH
-    ])
+    ]),
+    Math.max(7, depth - 3)
   );
 
   return side === 'far'
@@ -657,10 +666,21 @@ const CAR_CLEARANCE = 1.4;
 
 /**
  * The gap in the traffic a driver waits for before joining a carriageway.
- * Scaled by how fast that traffic is moving, because what matters is how long
- * the gap lasts, not how long it is.
+ *
+ * Deliberately modest. Traffic on the road gives way to a car that has already
+ * committed to the merge, so demanding a long gap does not make the join safer
+ * — it just means the gap never comes, departures back up across the whole
+ * forecourt, and the arrivals behind them stack in the entrance.
  */
-const MERGE_GAP = 5.5;
+const MERGE_GAP = 4;
+
+/**
+ * How close to a lane a driver has to be before waiting for a gap in it. Any
+ * further out and they would be holding station halfway across the forecourt
+ * for traffic they have not reached yet, which backs the whole plot up behind
+ * them — a driver waits at the give-way line, not two streets before it.
+ */
+const MERGE_LOOKAHEAD = 5;
 
 /**
  * How long a driver will sit behind an obstruction before edging past it. Two
@@ -671,6 +691,15 @@ const BLOCKED_LIMIT_SECONDS = 5;
 
 /** Below this a driver counts as held up rather than merely following. */
 const CRAWL_THROTTLE = 0.4;
+
+/**
+ * How long a driver puts up with going nowhere before giving up on the whole
+ * visit. Cars crossing each other's paths can form a ring where every one of
+ * them is waiting on the next, and no give-way rule can unpick that from the
+ * inside — so every state has a way out. Without one the ring simply stays on
+ * the forecourt for the rest of the day, and everything queues behind it.
+ */
+const STUCK_LIMIT_SECONDS = 20;
 
 /** Where a vehicle is pointing, or null when it is not going anywhere. */
 function headingVector(vehicle: VehicleEntity): { x: number; z: number } | null {
@@ -697,13 +726,16 @@ function distanceAhead(
   const ox = other.worldPosition[0] - vehicle.worldPosition[0];
   const oz = other.worldPosition[2] - vehicle.worldPosition[2];
 
-  // Anything this close is in the way whichever direction either car faces.
-  // Judging only by what is dead ahead lets two cars cutting across each
-  // other's path meet in the middle without either ever giving way.
-  const separation = Math.hypot(ox, oz);
-  if (separation < CAR_CLEARANCE) return separation;
-
   const ahead = ox * dir.x + oz * dir.z;
+
+  // Anything this close is in the way whichever direction either car faces —
+  // judging only by what is dead ahead lets two cars cutting across each
+  // other's path meet in the middle without either giving way. But a car
+  // squarely behind is not in the way at all, and treating it as one has the
+  // leader waiting on its own follower while the follower waits on the leader.
+  const separation = Math.hypot(ox, oz);
+  if (separation < CAR_CLEARANCE && ahead > -CAR_CLEARANCE * 0.4) return separation;
+
   if (ahead <= 0) return null;
 
   const lateral = Math.abs(ox * dir.z - oz * dir.x);
@@ -719,9 +751,13 @@ function distanceAhead(
  * Easing off rather than stopping dead means a quick car settles in behind a
  * slow one instead of snapping to a halt.
  */
-function followThrottle(state: GameState, vehicle: VehicleEntity, block: BlockLayout): number {
+function followThrottle(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout
+): { throttle: number; gap: number } {
   const dir = headingVector(vehicle);
-  if (!dir) return 1;
+  if (!dir) return { throttle: 1, gap: Infinity };
 
   const target = vehicle.targetWaypoint!;
 
@@ -737,8 +773,10 @@ function followThrottle(state: GameState, vehicle: VehicleEntity, block: BlockLa
   //
   // Only traffic coming up from behind counts, because the carriageway is
   // one-way and anything ahead of the join is already leaving.
-  const joining = (laneZ: number) =>
-    Math.abs(target[2] - laneZ) < 1 && Math.abs(vehicle.worldPosition[2] - laneZ) >= 1;
+  const joining = (laneZ: number) => {
+    const away = Math.abs(vehicle.worldPosition[2] - laneZ);
+    return Math.abs(target[2] - laneZ) < 1 && away >= 1 && away < MERGE_LOOKAHEAD;
+  };
 
   if (joining(block.roadLaneZ)) {
     const flow = Math.sign(block.roadEndX - block.roadStartX);
@@ -746,9 +784,9 @@ function followThrottle(state: GameState, vehicle: VehicleEntity, block: BlockLa
       if (other.id === vehicle.id) return false;
       if (Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1) return false;
       const behind = (target[0] - other.worldPosition[0]) * flow;
-      return behind > -CAR_CLEARANCE && behind < MERGE_GAP * HIGHWAY_SPEED;
+      return behind > -CAR_CLEARANCE && behind < MERGE_GAP;
     });
-    if (noGap) return 0;
+    if (noGap) return { throttle: 0, gap: Infinity };
   }
 
   // The return lane is the other place cars merge rather than follow: they
@@ -760,7 +798,7 @@ function followThrottle(state: GameState, vehicle: VehicleEntity, block: BlockLa
         Math.abs(other.worldPosition[2] - block.exitLaneZ) < 1 &&
         Math.abs(other.worldPosition[0] - target[0]) < MERGE_GAP
     );
-    if (occupied) return 0;
+    if (occupied) return { throttle: 0, gap: Infinity };
   }
   const toTarget = Math.hypot(
     target[0] - vehicle.worldPosition[0],
@@ -801,8 +839,13 @@ function followThrottle(state: GameState, vehicle: VehicleEntity, block: BlockLa
     nearest = mutual ? gap - CAR_CLEARANCE : gap;
   }
 
-  if (nearest === Infinity) return 1;
-  return clamp((nearest - wanted) / wanted, 0, 1);
+  if (nearest === Infinity) return { throttle: 1, gap: Infinity };
+  return { throttle: clamp((nearest - wanted) / wanted, 0, 1), gap: nearest };
+}
+
+/** True once a driver has spent longer than anyone would getting nowhere. */
+function isWedged(vehicle: VehicleEntity): boolean {
+  return (vehicle.blockedSeconds ?? 0) > STUCK_LIMIT_SECONDS;
 }
 
 /**
@@ -816,14 +859,21 @@ function driveInTraffic(
   block: BlockLayout,
   dt: number
 ): boolean {
-  const throttle = followThrottle(state, vehicle, block);
+  const { throttle, gap } = followThrottle(state, vehicle, block);
   const pace = highwayPace(vehicle, block);
 
   // Crawling counts as being held up, not just standing still: a car nosing
   // out onto a road that is never empty would otherwise inch along for the
   // rest of the day without ever tripping the valve below.
   vehicle.blockedSeconds = throttle < CRAWL_THROTTLE ? (vehicle.blockedSeconds ?? 0) + dt : 0;
-  const held = (vehicle.blockedSeconds ?? 0) > BLOCKED_LIMIT_SECONDS;
+
+  // The valve exists so two cars in each other's way cannot freeze the
+  // forecourt between them — but it must never be the thing that closes the
+  // last metre. Nudging a car that is already bumper to bumper does not free
+  // anything: it just presses the queue together, a little every few seconds,
+  // until the whole line is standing inside itself. When there is genuinely no
+  // room, the driver waits for the car in front like anyone else.
+  const held = (vehicle.blockedSeconds ?? 0) > BLOCKED_LIMIT_SECONDS && gap > CAR_CLEARANCE;
 
   // The nudge is a single moment of impatience, not a licence to barge: the
   // clock restarts so the driver goes back to giving way immediately after.
@@ -915,11 +965,16 @@ function exitRoute(
   // A driver who never reached a pump is still out at the front of the plot,
   // and has no business cutting across the middle of it to pick up the return
   // lane — that is the path that runs through whatever the player built there.
-  const reachedTheBays =
-    Math.abs(from.worldPosition[2] - block.laneZ) > 2 &&
-    Math.abs(from.worldPosition[2] - block.queueZ) > 2;
+  // Judged by where the car is standing: on the approach lane, or in the
+  // waiting bay. Anywhere else it is out among the pumps. The tolerance is
+  // tight because those are exact spots a car parks on — measuring loosely
+  // catches a pump island that happens to sit near the waiting bay and sends
+  // cars that did reach a pump back out through the arriving traffic.
+  const atFrontOfPlot =
+    Math.abs(from.worldPosition[2] - block.laneZ) < 1 ||
+    Math.abs(from.worldPosition[2] - block.queueZ) < 1;
 
-  const throughLane = reachedTheBays ? block.exitLaneZ : block.laneZ;
+  const throughLane = atFrontOfPlot ? block.laneZ : block.exitLaneZ;
 
   return [
     clampToApron(block, [from.worldPosition[0], 0, throughLane]),
@@ -1844,6 +1899,13 @@ function tickVehicles(
         }
 
         const arrived = driveInTraffic(state, vehicle, block, dt);
+        if (isWedged(vehicle)) {
+          // Never made it in, so nothing to release — just carry on down the
+          // road rather than standing in the entrance blocking it.
+          setVehicleState(vehicle, 'PASSING');
+          setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+          break;
+        }
         if (!arrived) break;
 
         const pump = findAvailablePump(state, vehicle.fuelType, mods, side);
@@ -1905,6 +1967,12 @@ function tickVehicles(
           if (pump) setPumpState(pump, 'REQUEST_READY');
         }
         vehicle.patience -= dt * 0.5; // waiting is gentler while rolling up
+
+        // A driver who cannot reach the bay they were promised gives it up.
+        // Holding the pump reserved for one would shut it for everybody else.
+        if (vehicle.patience <= 0 || isWedged(vehicle)) {
+          loseCustomer(state, vehicle, 'Pompaya ulaşamayan müşteri vazgeçti.', effects);
+        }
         break;
       }
 
@@ -1942,7 +2010,9 @@ function tickVehicles(
       }
 
       case 'EXIT': {
-        if (driveInTraffic(state, vehicle, block, dt)) {
+        // This customer is already counted; letting a wedged one sit on the
+        // forecourt only blocks the cars still trying to be served.
+        if (isWedged(vehicle) || driveInTraffic(state, vehicle, block, dt)) {
           setVehicleState(vehicle, 'DESPAWN');
         }
         break;

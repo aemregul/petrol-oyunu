@@ -696,6 +696,82 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(longestTransit).toBeLessThan(120);
   });
 
+  it('lays out every plot shape without falling over', () => {
+    // The lane geometry is derived, and a derivation that throws takes the
+    // whole tick with it — no traffic at all, on a plot that looks fine.
+    for (const depth of [7, 14, 21, 28]) {
+      for (const width of [8, 16, 32, 48]) {
+        const state = createInitialGameState();
+        state.station.roadLevel = 2;
+        state.station.plots.width = width;
+        state.station.plots.height = depth;
+        state.station.plots.ownedParcels = ['0,0', '0,-1'];
+        state.station.plots.pavedParcels = ['0,0', '0,-1'];
+
+        for (const side of ['near', 'far'] as const) {
+          const block = blockLayout(state, side);
+          expect(block, `${side} block at ${width}x${depth}`).not.toBeNull();
+          expect(Number.isFinite(block!.laneZ)).toBe(true);
+          expect(Number.isFinite(block!.exitLaneZ)).toBe(true);
+          expect(Number.isFinite(block!.queueZ)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('keeps traffic coming on a plot only one row deep', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.station.roadLevel = 2;
+    state.station.plots.ownedParcels = ['0,0', '1,0', '0,-1', '1,-1'];
+    state.station.plots.pavedParcels = ['0,0', '1,0', '0,-1', '1,-1'];
+    state.station.plots.height = 7;
+
+    advanceUntil(state, (s) => Object.keys(s.vehicles).length > 0, 900);
+    expect(Object.keys(state.vehicles).length).toBeGreaterThan(0);
+  });
+
+  it('never lets the forecourt seize up', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 4;
+    state.player.reputation = 5;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.75;
+
+    const proto = Object.values(state.pumps)[0];
+    state.pumps = {
+      a: { ...proto, id: 'a', position: [6, 7], currentVehicleId: null, employeeId: null },
+      b: { ...proto, id: 'b', position: [11, 7], currentVehicleId: null, employeeId: null }
+    };
+
+    // States with nothing to wait for but the road: a car in one of these is
+    // either moving or the traffic rules have wedged it against another car.
+    const rolling = ['PASSING', 'ROAD_APPROACH', 'EXIT', 'PUMP_RESERVED'];
+    const lastMoved = new Map<string, { tick: number; x: number; z: number }>();
+    let longestStill = 0;
+
+    for (let tick = 0; tick < 6000 && !state.dayState.isDayEnding; tick++) {
+      runSimulationTick(state, 0.2, createEffects());
+
+      for (const vehicle of Object.values(state.vehicles)) {
+        const [x, , z] = vehicle.worldPosition;
+        const seen = lastMoved.get(vehicle.id);
+
+        if (!seen || Math.hypot(x - seen.x, z - seen.z) > 0.05) {
+          lastMoved.set(vehicle.id, { tick, x, z });
+          continue;
+        }
+        if (rolling.includes(vehicle.state)) {
+          longestStill = Math.max(longestStill, (tick - seen.tick) * 0.2);
+        }
+      }
+    }
+
+    expect(longestStill).toBeLessThan(30);
+    // And the plot has not silently filled with cars that can no longer leave.
+    const leaving = Object.values(state.vehicles).filter((v) => v.state === 'EXIT');
+    expect(leaving.length).toBeLessThan(8);
+  });
+
   it('runs traffic the length of the road and around what is built on the plot', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 4;
