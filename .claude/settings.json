@@ -139,7 +139,8 @@
       "Bash(node .probe.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/traffic_spaced.png)",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/scatter.mjs)",
       "WebFetch(domain:beneloil.com)",
-      "Bash(grep -vE \"^\\\\s*$\")"
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "Bash(git checkout *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

@@ -107,14 +107,22 @@ function setOrderState(orderId: string, current: OrderState, next: OrderState): 
   return OrderStateMachine.transition(orderId, current, next).state;
 }
 
-/** Frees a pump back to IDLE, walking the RELEASE step when the machine needs it. */
+/**
+ * Frees a pump back to IDLE, walking the RELEASE step when the machine needs
+ * it. Which of the two routes applies is asked rather than tried: attempting
+ * the direct one first logs a warning about an invalid transition on a path
+ * this function is deliberately taking, which buries the real ones.
+ */
 export function releasePump(pump: PumpEntity): void {
   pump.currentVehicleId = null;
   if (pump.state === 'BROKEN' || pump.state === 'MAINTENANCE') return;
-  if (!setPumpState(pump, 'IDLE')) {
-    setPumpState(pump, 'RELEASE');
+
+  if (PumpStateMachine.canTransition(pump.state, 'IDLE')) {
     setPumpState(pump, 'IDLE');
+    return;
   }
+  setPumpState(pump, 'RELEASE');
+  setPumpState(pump, 'IDLE');
 }
 
 /* ------------------------------------------------------------------ */
@@ -596,6 +604,43 @@ export function blockLayout(
         roadEndX: box.maxX + LAYOUT.roadMargin,
         ...box
       };
+}
+
+/**
+ * Where the price totem stands: on the verge, midway between the two mouths,
+ * facing the road.
+ *
+ * A real forecourt does not have a choice about this — the board goes where
+ * drivers read it from the carriageway before they commit to the turn — so the
+ * game does not offer one either. It follows the mouths, which means widening
+ * a ramp or buying more frontage moves the board with them.
+ */
+export function priceSignPosition(state: {
+  station: { plots: { width: number; height: number; pavedParcels: string[] }; roadLevel: number };
+  buildings?: Record<string, { type: string; position: [number, number]; size?: [number, number] }>;
+}): [number, number] {
+  const mouths = drivewayMouths(state, 'near');
+  return [Math.round(((mouths.entry.x + mouths.exit.x) / 2) * 2) / 2, DRIVEWAY_Z];
+}
+
+/**
+ * Keeps the totem on its mark until the player moves it themselves. Cheap
+ * enough to do every tick, which saves hunting down every action that could
+ * move a mouth — buying land, widening a ramp, loading an older save — and
+ * getting one of them wrong.
+ */
+export function syncPriceSign(state: GameState): void {
+  const sign = Object.values(state.buildings).find((b) => b.type === 'price_sign');
+  if (!sign) return;
+
+  // Once the player has chosen a spot for it, that is the spot. The default is
+  // there to save them a decision, not to overrule one they have made.
+  if (sign.movedByPlayer) return;
+
+  const [x, z] = priceSignPosition(state);
+  if (sign.position[0] !== x || sign.position[1] !== z) {
+    sign.position = [x, z];
+  }
 }
 
 /** Which block a vehicle belongs to. The median keeps the two sets apart. */
@@ -1838,17 +1883,70 @@ function findFreeCharger(
 }
 
 /**
- * Whether this block has a pump that could serve anyone at all.
+ * Whether this block has a forecourt worth pulling into at all.
  *
- * A broken pump is not a pump. Counting one meant a station whose only bay had
- * worn out went on pulling cars in and failing every one of them, and the
- * player watched their reputation fall with no visible cause — the same trap
- * as a forecourt with empty tanks.
+ * Broken bays count. A driver coming off the road has no way of knowing a pump
+ * has failed until they are stood at it, so they still turn in and still leave
+ * disappointed — an out-of-order forecourt costs the station its name, which is
+ * what makes repairs urgent rather than optional.
  */
 function blockHasPumps(state: GameState, side: DrivewaySide): boolean {
+  return Object.values(state.pumps).some((p) => pumpSide(p) === side);
+}
+
+/**
+ * How long a driver spends at a bay working out that it is no good to them.
+ * Long enough to read as pulling up and looking, short enough that a dead
+ * forecourt is not clogged with cars waiting out a patience timer for nothing.
+ */
+const GIVE_UP_SECONDS = 0.5;
+
+/**
+ * Whether this station is in any position to serve this particular driver:
+ * a bay that works, and something in the tank they came for.
+ */
+function cannotServe(state: GameState, vehicle: VehicleEntity): boolean {
+  const side = vehicleSide(vehicle);
+  if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
+    return chargingPoints(state, side).length === 0;
+  }
+
+  const tank = state.tanks[vehicle.fuelType];
+  if (!tank || tank.stock - tank.reservedStock < 1) return true;
+  return !blockHasWorkingPump(state, side);
+}
+
+/** Whether any bay on this block could actually serve someone right now. */
+function blockHasWorkingPump(state: GameState, side: DrivewaySide): boolean {
   return Object.values(state.pumps).some(
     (p) => pumpSide(p) === side && p.state !== 'BROKEN' && p.state !== 'MAINTENANCE'
   );
+}
+
+/**
+ * Why this customer could not be served, in words the player can act on.
+ *
+ * Losing custom is meant to sting, but it should never be a mystery: a station
+ * that is dry, or whose only bay has failed, will bleed reputation until the
+ * player notices, so the notification says which of the two it is rather than
+ * repeating that somebody left.
+ */
+function serviceFailureReason(
+  state: GameState,
+  vehicle: VehicleEntity,
+  fallback: string
+): string {
+  const side = vehicleSide(vehicle);
+  const tank = state.tanks[vehicle.fuelType];
+  const fuel = GAME_CONFIG.fuels[vehicle.fuelType]?.shortName ?? vehicle.fuelType;
+
+  if (!blockHasWorkingPump(state, side)) {
+    return 'Çalışır pompa yok — müşteri bekledi ve ayrıldı. Pompayı onarın.';
+  }
+  if (tank && tank.stock - tank.reservedStock < 1) {
+    return `${fuel} deposu boş — müşteri yakıt alamadan ayrıldı.`;
+  }
+  return fallback;
 }
 
 /**
@@ -1919,15 +2017,15 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
 
   if (Math.random() >= ROAD_TRAFFIC_PER_SEC * hourlyMult * weatherMult * mods.traffic * dt) return;
 
-  // Only offer archetypes whose fuel we can actually sell. A driver who could
-  // not be served here is still traffic, so this only narrows who might stop.
+  // Only offer archetypes whose fuel this station carries at all.
   //
-  // Stock counts, not just having a tank. A dry station used to keep pulling
-  // cars in and then failing every one of them, which read to the player as
-  // their reputation collapsing for no reason they could see — when the real
-  // answer was that nobody would have pulled in at all.
+  // Note what this deliberately does *not* check: whether there is any left in
+  // the tank. A driver on the road cannot see that, so they pull in anyway,
+  // wait, and leave unhappy — and the station's name suffers for it. Running
+  // dry is meant to hurt; it is the pressure that keeps the player watching
+  // their stock instead of letting the manager run the place unattended.
   const sellableFuels = (Object.keys(state.tanks) as FuelType[]).filter(
-    (f) => state.tanks[f].capacity > 0 && state.tanks[f].stock - state.tanks[f].reservedStock > 5
+    (f) => state.tanks[f].capacity > 0
   );
 
   const side = pickSpawnSide(state);
@@ -2243,8 +2341,17 @@ function tickVehicles(
         }
 
         const pump = findAvailablePump(state, vehicle.fuelType, mods, side);
+        const deadForecourt = !pump && blockHasPumps(state, side) && cannotServe(state, vehicle);
+
         if (pump) {
           reservePumpFor(state, vehicle, pump);
+        } else if (deadForecourt) {
+          // Nothing here works, but the driver has no way of knowing that from
+          // the road. They pull up to a bay, see it, and go — rather than
+          // joining a queue for fuel that is never coming.
+          const bay = Object.values(state.pumps).find((p) => pumpSide(p) === side)!;
+          setVehicleState(vehicle, 'PUMP_RESERVED');
+          setRoute(vehicle, pumpRoute(state, vehicle, bay));
         } else if (!blockHasPumps(state, side)) {
           // Nothing here to fuel with, so this driver came for the shop.
           // Queueing for a pump that does not exist would only strand them.
@@ -2270,7 +2377,12 @@ function tickVehicles(
         vehicle.patience -= dt;
 
         if (vehicle.patience <= 0) {
-          loseCustomer(state, vehicle, 'Kuyrukta bekleyen müşteri sabrını yitirdi.', effects);
+          loseCustomer(
+            state,
+            vehicle,
+            serviceFailureReason(state, vehicle, 'Kuyrukta bekleyen müşteri sabrını yitirdi.'),
+            effects
+          );
           break;
         }
 
@@ -2326,6 +2438,15 @@ function tickVehicles(
 
       case 'AT_PUMP':
       case 'REQUEST': {
+        // Pulled up and found nothing on offer. No point standing there.
+        if (!vehicle.chargingBuildingId && cannotServe(state, vehicle)) {
+          vehicle.noServiceSeconds = (vehicle.noServiceSeconds ?? 0) + dt;
+          if (vehicle.noServiceSeconds >= GIVE_UP_SECONDS) {
+            loseCustomer(state, vehicle, serviceFailureReason(state, vehicle, 'Müşteri hizmet alamadan ayrıldı.'), effects);
+          }
+          break;
+        }
+
         // Charging needs nobody's attention: the driver plugs in and waits.
         if (vehicle.chargingBuildingId) {
           vehicle.chargeSecondsLeft = (vehicle.chargeSecondsLeft ?? 0) - dt;
@@ -2336,7 +2457,12 @@ function tickVehicles(
         vehicle.waitingTimeSeconds += dt;
         vehicle.patience -= dt;
         if (vehicle.patience <= 0) {
-          loseCustomer(state, vehicle, 'Pompada hizmet bekleyen müşteri ayrıldı.', effects);
+          loseCustomer(
+            state,
+            vehicle,
+            serviceFailureReason(state, vehicle, 'Pompada hizmet bekleyen müşteri ayrıldı.'),
+            effects
+          );
         }
         break;
       }
@@ -2745,6 +2871,7 @@ export function runSimulationTick(
   tickEvents(state, dt * hoursPerSecond, dt, effects);
   const mods = getEventModifiers(state);
 
+  syncPriceSign(state);
   tickFuelOrders(state, dt, effects);
   tickRush(state, dt, effects);
   trySpawnVehicle(state, dt, mods);

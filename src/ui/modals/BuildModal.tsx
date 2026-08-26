@@ -114,7 +114,9 @@ export const BuildModal: React.FC = () => {
     category === 'land'
       ? []
       : Object.values(GAME_CONFIG.buildings).filter(
-          (b) => category === 'all' || b.category === category
+          // Fixed infrastructure comes with the station; there is nothing to
+          // choose here, only a level to raise on the thing itself.
+          (b) => !b.fixed && (category === 'all' || b.category === category)
         );
 
   const handleSelectBuild = (type: string) => {

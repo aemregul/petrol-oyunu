@@ -32,6 +32,8 @@ export interface BuildingCatalogItem {
   description: string;
   icon?: string;
   isUnderground?: boolean;
+  /** Comes with the station and cannot be bought, moved or sold. */
+  fixed?: boolean;
 }
 
 export interface BuildingUpgradeConfig {
@@ -273,6 +275,13 @@ export const GAME_CONFIG: GameConfig = {
       icon: 'Flame'
     },
     price_sign: {
+      /**
+       * Station infrastructure rather than a purchase: every forecourt has one,
+       * it stands where the layout says it stands — between the two mouths,
+       * facing the road — and the player upgrades it in place rather than
+       * choosing where to put it.
+       */
+      fixed: true,
       type: 'price_sign',
       name: 'Fiyat Totem Tabelası',
       category: 'structure',
@@ -282,6 +291,18 @@ export const GAME_CONFIG: GameConfig = {
       unlockLevel: 1,
       description: 'Ana yol sürücülerine güncel yakıt fiyatlarını gösterir.',
       icon: 'Tag'
+    },
+    pylon_sign: {
+      type: 'pylon_sign',
+      name: 'Reklam Kulesi',
+      category: 'structure',
+      price: 60000,
+      dailyUpkeep: 260,
+      size: [2, 2],
+      unlockLevel: 5,
+      description:
+        'Yol boyunca kilometrelerce öteden görünen yüksek kule; istasyon adını ve açık/kapalı durumunu duyurur. Arsanın 2 birim dışına kadar kurulabilir.',
+      icon: 'Megaphone'
     },
     canopy: {
       type: 'canopy',
@@ -565,6 +586,7 @@ export const GAME_CONFIG: GameConfig = {
     light_pole:   { appeal: 0.02, satisfaction: 1 },
     canopy:       { appeal: 0.04, satisfaction: 3 },
     price_sign:   { appeal: 0.06 },
+    pylon_sign:   { appeal: 0.16 },
     office:       { satisfaction: 2 },
     mini_market:  { appeal: 0.06 },
     cafe:         { appeal: 0.07, satisfaction: 3, service: { chance: 0.26, avgSpend: 95 } },

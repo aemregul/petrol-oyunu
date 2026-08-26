@@ -138,6 +138,12 @@ export interface VehicleEntity {
   chargingBuildingId?: string | null;
   /** Seconds of charging still to go. */
   chargeSecondsLeft?: number;
+  /**
+   * How long this driver has been stood at a bay that cannot serve them. They
+   * take a moment to work it out, then leave — they do not queue for fuel that
+   * is not there.
+   */
+  noServiceSeconds?: number;
   shoppingIntent: boolean;
 }
 
@@ -156,6 +162,11 @@ export interface EmployeeEntity {
 }
 
 export interface BuildingEntity {
+  /**
+   * Set once the player has picked a fixed structure up and put it somewhere
+   * of their own choosing. From then on the layout stops deciding for them.
+   */
+  movedByPlayer?: boolean;
   id: string;
   type: string;
   level: number;

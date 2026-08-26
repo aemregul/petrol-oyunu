@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
+import { GAME_CONFIG } from '../config/gameConfig';
 import {
   evaluatePlacement,
   getFootprint,
   snapPlacement,
-  absorbedByRestComplex
+  absorbedByRestComplex,
+  PYLON_REACH
 } from '../domain/services/placement';
 import {
   DRIVEWAY_WIDTH,
@@ -14,6 +16,7 @@ import {
   drivewayLaneX,
   drivewayMouths,
   defaultMouthX,
+  syncPriceSign,
   getLayout
 } from '../domain/services/simulationEngine';
 import { pavedFrontage } from '../domain/services/land';
@@ -33,11 +36,11 @@ describe('placement rules', () => {
     const state = createInitialGameState();
     state.player.level = 10;
 
-    expect(evaluatePlacement(state, 'price_sign', [0, 10], 0).valid).toBe(false);
-    expect(evaluatePlacement(state, 'price_sign', [10, 10], 0).valid).toBe(true);
+    expect(evaluatePlacement(state, 'trash_can', [0, 10], 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'trash_can', [10, 10], 0).valid).toBe(true);
 
     const { width } = state.station.plots;
-    expect(evaluatePlacement(state, 'price_sign', [width, 10], 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'trash_can', [width, 10], 0).valid).toBe(false);
   });
 
   it('rejects a structure overlapping the existing pump', () => {
@@ -45,12 +48,12 @@ describe('placement rules', () => {
     state.player.level = 10;
     const pumpPos = state.pumps.pump_1.position;
 
-    const onTop = evaluatePlacement(state, 'price_sign', [pumpPos[0], pumpPos[1]], 0);
+    const onTop = evaluatePlacement(state, 'trash_can', [pumpPos[0], pumpPos[1]], 0);
     expect(onTop.valid).toBe(false);
     expect(onTop.reason).toContain('Pompa');
 
     // Clear of the pump's 2x3 footprint.
-    expect(evaluatePlacement(state, 'price_sign', [pumpPos[0] + 4, pumpPos[1]], 0).valid).toBe(true);
+    expect(evaluatePlacement(state, 'trash_can', [pumpPos[0] + 4, pumpPos[1]], 0).valid).toBe(true);
   });
 
   it('keeps level gates in force', () => {
@@ -71,12 +74,12 @@ describe('placement — paving', () => {
     state.station.plots.ownedParcels.push('2,0');
 
     // Grid x 16..24 is the new parcel: owned, but bare.
-    const onBareLand = evaluatePlacement(state, 'price_sign', [20, 3], 0);
+    const onBareLand = evaluatePlacement(state, 'trash_can', [20, 3], 0);
     expect(onBareLand.valid).toBe(false);
     expect(onBareLand.reason).toContain('beton');
 
     state.station.plots.pavedParcels.push('2,0');
-    expect(evaluatePlacement(state, 'price_sign', [20, 3], 0).valid).toBe(true);
+    expect(evaluatePlacement(state, 'trash_can', [20, 3], 0).valid).toBe(true);
   });
 });
 
@@ -119,6 +122,57 @@ describe('structures', () => {
     // Those units are not obstacles to it: it is built over them, and asking
     // the player to demolish first would cost them the money twice.
     expect(evaluatePlacement(state, 'rest_complex', [7, 9], 0).valid).toBe(true);
+  });
+});
+
+describe('signage', () => {
+  const ready = () => {
+    const state = createInitialGameState();
+    state.player.level = 12;
+    return state;
+  };
+
+  it('keeps the price board on its mark between the two mouths', () => {
+    const state = ready();
+    const mouths = drivewayMouths(state, 'near');
+
+    syncPriceSign(state);
+    const sign = Object.values(state.buildings).find((b) => b.type === 'price_sign')!;
+    expect(sign.position[0]).toBeCloseTo((mouths.entry.x + mouths.exit.x) / 2, 1);
+    expect(sign.position[1]).toBe(DRIVEWAY_Z);
+
+    // Widen the plot and the exit moves, so the board moves with it.
+    state.station.plots.width = 32;
+    syncPriceSign(state);
+    const widened = drivewayMouths(state, 'near');
+    expect(sign.position[0]).toBeCloseTo((widened.entry.x + widened.exit.x) / 2, 1);
+
+    // It is the station's own equipment, so there is nothing to buy — but the
+    // one that exists can be picked up and put somewhere else.
+    expect(GAME_CONFIG.buildings.price_sign.fixed).toBe(true);
+    expect(evaluatePlacement(state, 'price_sign', [10, 10], 0).valid).toBe(true);
+
+    // Once the player has chosen a spot, the layout stops overruling them.
+    sign.movedByPlayer = true;
+    sign.position = [10, 10];
+    state.station.plots.width = 40;
+    syncPriceSign(state);
+    expect(sign.position).toEqual([10, 10]);
+  });
+
+  it('lets the pylon overhang the plot, but not by much and never onto the road', () => {
+    const state = ready();
+    const { width } = state.station.plots;
+
+    // On the plot, and a couple of units past its edge.
+    expect(evaluatePlacement(state, 'pylon_sign', [12, 6], 0).valid).toBe(true);
+    expect(evaluatePlacement(state, 'pylon_sign', [width + 1, 6], 0).valid).toBe(true);
+
+    // Any further out and it is a sign in a field.
+    expect(evaluatePlacement(state, 'pylon_sign', [width + 1 + PYLON_REACH, 6], 0).valid).toBe(false);
+
+    // And it may never stand in the carriageway.
+    expect(evaluatePlacement(state, 'pylon_sign', [12, -2], 0).valid).toBe(false);
   });
 });
 
@@ -234,7 +288,7 @@ describe('driveway ramps', () => {
 
   it('leaves ordinary structures where the pointer put them', () => {
     const state = ready();
-    expect(snapPlacement(state, 'price_sign', [7, 11])).toEqual([7, 11]);
+    expect(snapPlacement(state, 'trash_can', [7, 11])).toEqual([7, 11]);
   });
 
   it('refuses a mouth that would run into the other driveway', () => {

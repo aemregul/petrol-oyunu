@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
+import { calculateReputationTrafficMultiplier } from '../domain/formulas/economy';
 import {
   createEffects,
   runSimulationTick,
@@ -158,34 +159,31 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(queued).toBe(true);
   });
 
-  it('stops attracting customers it has no way of serving', () => {
+  it('makes running dry and letting a pump fail cost the station its name', () => {
     const dry = createInitialGameState();
     dry.dayState.timeSpeed = 4;
     dry.tanks.gasoline.stock = 0;
 
-    // An empty forecourt used to keep pulling cars in and failing every one of
-    // them, which read as reputation collapsing for no visible reason.
+    // A driver on the road cannot see an empty tank, so they still pull in —
+    // and leave unserved. Neglect is meant to be felt, not quietly absorbed.
     expect(stopChance(dry)).toBeGreaterThan(0);
-    advance(dry, 600);
-    expect(
-      Object.values(dry.vehicles).every((v) => v.state === 'PASSING' || v.state === 'DESPAWN')
-    ).toBe(true);
-    expect(dry.dayState.todayStats.customersLost).toBe(0);
+    advanceUntil(dry, (s) => s.dayState.todayStats.customersLost > 0, 6000);
+    expect(dry.dayState.todayStats.customersLost).toBeGreaterThan(0);
 
-    // Same again when the only pump has worn out.
+    // The same when the only bay has worn out.
     const broken = createInitialGameState();
     broken.dayState.timeSpeed = 4;
     broken.pumps.pump_1.state = 'BROKEN';
 
-    advance(broken, 600);
-    expect(
-      Object.values(broken.vehicles).every((v) => v.state === 'PASSING' || v.state === 'DESPAWN')
-    ).toBe(true);
-    expect(broken.dayState.todayStats.customersLost).toBe(0);
-  });
-});
+    expect(stopChance(broken)).toBeGreaterThan(0);
+    advanceUntil(broken, (s) => s.dayState.todayStats.customersLost > 0, 6000);
+    expect(broken.dayState.todayStats.customersLost).toBeGreaterThan(0);
 
-describe('simulationEngine - tanker orders', () => {
+    // There is a way back, though: reputation has a floor and the road never
+    // empties completely, so a neglected station can always be recovered.
+    expect(calculateReputationTrafficMultiplier(1)).toBeGreaterThan(0.5);
+  });
+
   it('moves an order through the full gate and unloading sequence', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 4;

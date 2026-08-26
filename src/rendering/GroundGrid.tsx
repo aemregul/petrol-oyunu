@@ -4,6 +4,7 @@ import {
   LAYOUT,
   getLayout,
   wideRamps,
+  priceSignPosition,
   drivewayMouths,
   DRIVEWAY_WIDTH as DRIVEWAY_WIDTH_GRID
 } from '../domain/services/simulationEngine';
@@ -26,6 +27,13 @@ const KERB = { width: 0.34, height: 0.16 };
 
 /** Gap between the road kerb and the forecourt, bridged by the driveways. */
 const VERGE_DEPTH = LAYOUT.vergeDepth * S;
+
+/**
+ * How much room the price totem takes up *along the road* at each level. The
+ * board stands square across the carriageway, so what the beds either side of
+ * it have to clear is its depth and its plinth, not the width of its face.
+ */
+const PRICE_TOTEM_WIDTH = [1.4, 1.5, 1.6];
 
 /** Default width of a driveway mouth; a wide ramp opens a broader one. */
 const DRIVEWAY_WIDTH = DRIVEWAY_WIDTH_GRID * S;
@@ -307,6 +315,87 @@ const MedianPlanting: React.FC<{ centreX: number; centreZ: number }> = ({
   );
 };
 
+/**
+ * The planted strip of verge between the two mouths.
+ *
+ * On a real forecourt this is never left as bare grass: it is the frontage
+ * everybody sees from the road, so it gets a kerbed bed, a clipped hedge and a
+ * few shrubs either side of the price board. It appears with the board and
+ * follows it, because it is the same piece of ground.
+ */
+const FrontageLanding: React.FC<{
+  /** The stretch the beds may occupy, in world units. */
+  from: number;
+  to: number;
+  /** Where the board actually stands, which is what they are laid out around. */
+  signX: number;
+  signZ: number;
+  signWidth: number;
+}> = ({ from, to, signX, signZ, signWidth }) => {
+  const beds = useMemo(() => {
+    const out: Array<{ x: number; width: number }> = [];
+
+    // Two beds, one either side of the board, each stopping clear of it and of
+    // the ramp mouths. The clearances are measured off the board rather than
+    // guessed, because on a starting plot the frontage between the two mouths
+    // is only a few metres wide and a guess leaves no room for either bed.
+    const clear = signWidth / 2 + 0.7;
+    const kerb = 0.6;
+    const spans: Array<[number, number]> = [
+      [from + kerb, signX - clear],
+      [signX + clear, to - kerb]
+    ];
+
+    for (const [a, b] of spans) {
+      if (b - a >= 1.6) out.push({ x: (a + b) / 2, width: Math.min(b - a, 6.5) });
+    }
+    return out;
+  }, [from, to, signX, signWidth]);
+
+  return (
+    <group>
+      {beds.map((bed) => (
+        <group key={bed.x} position={[bed.x, 0, signZ]}>
+          {/* Kerbed bed, set into the verge. */}
+          <mesh position={[0, 0.1, 0]} receiveShadow>
+            <boxGeometry args={[bed.width, 0.2, 2.4]} />
+            <meshStandardMaterial color="#b9c0cb" roughness={0.9} />
+          </mesh>
+          <mesh position={[0, 0.22, 0]} receiveShadow>
+            <boxGeometry args={[bed.width - 0.5, 0.06, 1.9]} />
+            <meshStandardMaterial color="#4a3527" roughness={1} />
+          </mesh>
+
+          {/* A low hedge along the back, shrubs in front of it. */}
+          <mesh position={[0, 0.55, -0.6]} castShadow receiveShadow>
+            <boxGeometry args={[bed.width - 0.8, 0.7, 0.7]} />
+            <meshStandardMaterial color="#2f6b28" roughness={1} flatShading />
+          </mesh>
+
+          {(() => {
+            const count = Math.max(1, Math.floor(bed.width / 2.6));
+            const span = bed.width - 1.6;
+            const step = count > 1 ? span / (count - 1) : 0;
+            return Array.from({ length: count }, (_, i) => {
+              const x = count > 1 ? -span / 2 + i * step : 0;
+              return (
+                <mesh key={i} position={[x, 0.55, 0.5]} castShadow>
+                  <icosahedronGeometry args={[0.44, 0]} />
+                  <meshStandardMaterial
+                    color={i % 2 === 0 ? '#c2506a' : '#4d8f3c'}
+                    roughness={1}
+                    flatShading
+                  />
+                </mesh>
+              );
+            });
+          })()}
+        </group>
+      ))}
+    </group>
+  );
+};
+
 /** Post-and-rail fence marking land that is owned but not yet paved. */
 const ParcelFence: React.FC<{ col: number; row: number }> = ({ col, row }) => {
   const b = parcelBounds(col, row);
@@ -396,6 +485,23 @@ export const GroundGrid: React.FC = () => {
     { x: layout.entryX * S, width: layout.entryWidth * S },
     { x: layout.exitX * S, width: layout.exitWidth * S }
   ];
+
+  /**
+   * The board the frontage planting is laid out around, and where it actually
+   * stands: on the mark the layout picks, unless the player has moved it. Read
+   * the same way the mesh does, so the beds cannot end up somewhere the board
+   * is not — the stored position lags by a tick while the game is paused.
+   */
+  const priceSign = useMemo(() => {
+    const sign = Object.values(buildings).find((b) => b.type === 'price_sign');
+    if (!sign) return null;
+
+    const at = sign.movedByPlayer
+      ? sign.position
+      : priceSignPosition({ station: { plots, roadLevel }, buildings });
+
+    return { level: sign.level, x: at[0] * S, z: at[1] * S };
+  }, [buildings, plots, roadLevel]);
 
   /** Mouths the player has not upgraded still need their default ramp drawn. */
   const wide = useMemo(() => wideRamps(buildings), [buildings]);
@@ -657,6 +763,32 @@ export const GroundGrid: React.FC = () => {
           </group>
         );
       })}
+
+      {/* Beds laid out around the price board, wherever it is standing. On the
+          verge they are held between the two mouths so they never run into a
+          ramp; moved onto the concrete they simply flank the board. */}
+      {priceSign && (
+        <FrontageLanding
+          {...(() => {
+            const onVerge = priceSign.z < apronFront;
+
+            return onVerge
+              ? {
+                  from: Math.min(nearMouths[0].x, nearMouths[1].x) + nearMouths[0].width / 2,
+                  to: Math.max(nearMouths[0].x, nearMouths[1].x) - nearMouths[1].width / 2
+                }
+              : {
+                  // On the concrete the beds simply flank the board, but they
+                  // are still part of the forecourt and stop at its edge.
+                  from: Math.max(0, priceSign.x - 9),
+                  to: Math.min(plotWidth, priceSign.x + 9)
+                };
+          })()}
+          signX={priceSign.x}
+          signZ={priceSign.z}
+          signWidth={PRICE_TOTEM_WIDTH[Math.min(3, Math.max(1, priceSign.level)) - 1]}
+        />
+      )}
 
       {/* Default driveway ramps. A mouth the player has widened is drawn by
           the ramp they bought instead, so the old one is not left underneath

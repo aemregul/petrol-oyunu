@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from 'react';
+import React, { useState, useMemo, Suspense } from 'react';
 import { BuildingEntity } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
 import { BuildingModel } from './models/BuildingModel';
@@ -7,6 +7,8 @@ import { ModelErrorBoundary } from './models/ModelErrorBoundary';
 import { PriceTotem } from './PriceTotem';
 import { LightPole } from './LightPole';
 import { FasciaSign } from './FasciaSign';
+import { PylonSign } from './PylonSign';
+import { priceSignPosition } from '../domain/services/simulationEngine';
 import {
   CarPark,
   TruckPark,
@@ -237,14 +239,31 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const setActiveModal = useGameStore((s) => s.setActiveModal);
 
   const isSelected = selectedBuildingId === building.id;
-  const posX = building.position[0] * 2;
-  const posZ = building.position[1] * 2;
+
+  // The price board's place is decided by the layout, not by where it happens
+  // to be stored — so it is read straight from there and can never be seen
+  // lagging behind a mouth that has just moved.
+  const plots = useGameStore((s) => s.gameState.station.plots);
+  const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+  const allBuildings = useGameStore((s) => s.gameState.buildings);
+
+  const anchored = useMemo(
+    () =>
+      building.type === 'price_sign' && !building.movedByPlayer
+        ? priceSignPosition({ station: { plots, roadLevel }, buildings: allBuildings })
+        : building.position,
+    [building.type, building.position, building.movedByPlayer, plots, roadLevel, allBuildings]
+  );
+
+  const posX = anchored[0] * 2;
+  const posZ = anchored[1] * 2;
 
   const handleClick = (e: any) => {
     e.stopPropagation();
     selectBuilding(building.id);
     if (building.type === 'office') setActiveModal('OFFICE');
     else if (building.type === 'price_sign') setActiveModal('PRICING');
+    else if (building.type === 'pylon_sign') setActiveModal('SETTINGS');
   };
 
   const signage = SIGNAGE[building.type];
@@ -262,6 +281,8 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
     </ModelErrorBoundary>
   ) : building.type === 'canopy' ? (
     <Canopy building={building} />
+  ) : building.type === 'pylon_sign' ? (
+    <PylonSign />
   ) : building.type === 'price_sign' ? (
     <PriceTotem level={building.level} />
   ) : building.type === 'light_pole' ? (

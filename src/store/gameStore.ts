@@ -31,6 +31,7 @@ import {
   setPumpState,
   drivewayRole,
   drivewaySideAt,
+  syncPriceSign,
   defaultMouthX,
   getLayout,
   DRIVEWAY_Z
@@ -132,6 +133,7 @@ interface GameStore {
     health: number;
     origin: [number, number];
     rotation: 0 | 90 | 180 | 270;
+    wasMoved: boolean;
   } | null;
   landMode: LandModeState;
   cameraAngle: number; // 0, 90, 180, 270
@@ -252,6 +254,10 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
       ]);
     }
   }
+
+  // The price board is infrastructure: it belongs between the mouths, not
+  // wherever an older save happened to leave it.
+  syncPriceSign(loaded);
 
   // Day one should open with its daily goals already posted.
   if (!loaded.missions.some((m) => m.type !== 'TUTORIAL')) {
@@ -389,6 +395,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   // BUILD MODE
   enterBuildMode: (buildingType) => {
+    // Fixed structures come with the station; the only way into placement for
+    // one of those is picking up the one that already exists.
+    if (GAME_CONFIG.buildings[buildingType]?.fixed) return;
+
     sounds.playClick();
     set((state) => {
       // A ramp opens where the mouth it replaces already is, so the preview
@@ -432,6 +442,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         rotation: relocating.rotation,
         size: catalog?.size ?? [2, 2],
         health: relocating.health,
+        movedByPlayer: relocating.wasMoved,
         constructionState: 'ACTIVE',
         builtAtTimestamp: Date.now()
       };
@@ -618,6 +629,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         rotation: buildMode.rotation,
         size: catalog.size,
         health: carried?.health ?? 100,
+        // Put down by hand, so the layout leaves it where it was put.
+        movedByPlayer: carried ? true : undefined,
         constructionState: 'ACTIVE',
         builtAtTimestamp: Date.now()
       };
@@ -692,6 +705,17 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!pump && !building) return false;
 
     const name = GAME_CONFIG.buildings[pump ? 'pump_standard' : building!.type]?.name ?? 'Yapı';
+
+    // Infrastructure is not the player's to dispose of: a forecourt without a
+    // price board is not a forecourt.
+    if (building && GAME_CONFIG.buildings[building.type]?.fixed) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Bu Yapı Sökülemez',
+        message: `${name} istasyonun zorunlu donanımıdır; yalnızca yükseltilebilir.`
+      });
+      return false;
+    }
 
     // The last pump is the station's whole business; selling it would leave
     // the player with nothing to serve anyone with and no way back.
@@ -847,7 +871,9 @@ export const useGameStore = create<GameStore>((set, get) => {
         health: moved.health,
         // Kept so backing out puts it back exactly where it was.
         origin: moved.position,
-        rotation: moved.rotation
+        rotation: moved.rotation,
+        // Whether the layout was still placing it before the player stepped in.
+        wasMoved: moved.movedByPlayer ?? false
       }
     });
     return true;

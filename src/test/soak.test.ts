@@ -71,8 +71,12 @@ describe('a station left running', () => {
         currentVehicleId: null, actionTimerSeconds: 0, worldPosition: [8, 0, 7]
       }
     } as never;
+    // A manager set up the way an attentive player would: reordering well
+    // before the tank runs dry, because running dry now costs custom.
     state.station.managerId = 'mgr';
     state.managerSettings.autoFuelOrder = true;
+    state.managerSettings.orderThresholdPercent = 55;
+    state.managerSettings.orderTargetPercent = 95;
 
     const problems: string[] = [];
     const note = (message: string) => {

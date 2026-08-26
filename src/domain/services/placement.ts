@@ -7,8 +7,9 @@
 
 import { GameState } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { isFootprintOnOwnedLand, pavedFrontage } from './land';
+import { isFootprintOnOwnedLand, ownedBounds, pavedFrontage } from './land';
 import {
+  LAYOUT,
   DrivewayRole,
   DrivewaySide,
   WIDE_DRIVEWAY_WIDTH,
@@ -108,6 +109,46 @@ export function absorbedByRestComplex(
         REST_COMPLEX_ABSORBS.includes(b.type) && drivewaySideAt(b.position[1]) === side
     )
     .map((b) => ({ id: b.id, name: GAME_CONFIG.buildings[b.type]?.name ?? b.type }));
+}
+
+/** How far outside the plot a roadside sign may stand, in grid units. */
+export const PYLON_REACH = 2;
+
+/**
+ * A sign may sit on the plot or just outside it, but not out in the country
+ * and never on the carriageway — a sign in the middle of the road is not
+ * advertising, it is an obstruction.
+ */
+function evaluateRoadsideSign(state: GameState, footprint: Footprint): PlacementResult {
+  const owned = ownedBounds(state.station.plots.ownedParcels);
+
+  const outside =
+    Math.max(
+      owned.minX - footprint.minX,
+      footprint.maxX - owned.width,
+      owned.minZ - footprint.minZ,
+      footprint.maxZ - owned.height
+    );
+
+  if (outside > PYLON_REACH) {
+    return { valid: false, reason: `Tabela arsanın en fazla ${PYLON_REACH} birim dışına kurulabilir.` };
+  }
+
+  // Keep it off both carriageways and the median between them.
+  const roadTop = LAYOUT.roadZ + LAYOUT.roadHalfWidth;
+  const roadBottom =
+    LAYOUT.roadZ - 2 * LAYOUT.roadHalfWidth - LAYOUT.medianWidth - LAYOUT.roadHalfWidth;
+  if (footprint.minZ < roadTop && footprint.maxZ > roadBottom) {
+    return { valid: false, reason: 'Tabela yolun üzerine kurulamaz.' };
+  }
+
+  for (const taken of occupiedFootprints(state)) {
+    if (overlaps(footprint, taken.footprint)) {
+      return { valid: false, reason: `${taken.name} ile çakışıyor.` };
+    }
+  }
+
+  return { valid: true };
 }
 
 /** True when this footprint has at least one pump island under it. */
@@ -216,6 +257,13 @@ export function evaluatePlacement(
   if (role) return evaluateDriveway(state, role, position);
 
   const footprint = getFootprint(position, catalog.size, rotation);
+
+  // Signage is meant to be read from the carriageway, so it may stand at the
+  // boundary or a little past it — the price board's own default spot is out
+  // on the verge, which is nobody's parcel. Neither may stand in the road.
+  if (buildingType === 'pylon_sign' || buildingType === 'price_sign') {
+    return evaluateRoadsideSign(state, footprint);
+  }
 
   if (!isFootprintOnOwnedLand(state.station.plots.ownedParcels, footprint)) {
     return { valid: false, reason: 'Burası sahip olduğunuz arsanın dışında.' };
