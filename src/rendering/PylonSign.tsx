@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { hourOfDay } from '../domain/services/simulationEngine';
 
 /**
  * The tall roadside pylon.
@@ -36,7 +37,8 @@ export const PylonSign: React.FC = () => {
   const isOpen = useGameStore((s) => s.gameState.station.open);
   const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
 
-  const lit = gameTime < 7.5 || gameTime > 18.5;
+  const hour = hourOfDay(gameTime);
+  const lit = hour < 7.5 || hour > 18.5;
 
   const texture = useMemo(() => {
     const scale = 96;

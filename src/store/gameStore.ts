@@ -152,7 +152,6 @@ interface GameStore {
   /** Pans the camera by a screen-space delta, rotated into world space. */
   panCamera: (screenDeltaX: number, screenDeltaY: number) => void;
   resetCamera: () => void;
-  setTimeSpeed: (speed: 0 | 1 | 2 | 4) => void;
   addNotification: (notif: Omit<GameNotification, 'id' | 'timestamp'>) => void;
   dismissNotification: (id: string) => void;
 
@@ -354,16 +353,6 @@ export const useGameStore = create<GameStore>((set, get) => {
   resetCamera: () => {
     sounds.playClick();
     set({ cameraTarget: [16, 12], cameraZoom: 4, cameraAngle: 225 });
-  },
-
-  setTimeSpeed: (speed) => {
-    sounds.playClick();
-    set((state) => ({
-      gameState: {
-        ...state.gameState,
-        dayState: { ...state.gameState.dayState, timeSpeed: speed }
-      }
-    }));
   },
 
   addNotification: (notif) => {
@@ -1764,6 +1753,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.dayState.currentDay++;
     state.dayState.gameTime = GAME_CONFIG.economy.dayStartHour;
     state.dayState.timeSpeed = 1;
+    // One discounted window a day, at an hour drawn fresh each morning.
+    state.dayState.fuelDealDoneToday = false;
+    state.dayState.fuelDealSecondsLeft = 0;
+    state.dayState.fuelDealAtHour = undefined;
     state.dayState.isDayActive = true;
     state.dayState.isDayEnding = false;
     state.dayState.weather = (['SUNNY', 'SUNNY', 'OVERCAST', 'RAIN'] as const)[

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { hourOfDay } from '../domain/services/simulationEngine';
 import { LampGlow } from './LampGlow';
 
 /** Full darkness before this hour and after DUSK; lamps burn between them. */
@@ -18,7 +19,8 @@ export function lampsAreLit(
 ): boolean {
   const dawn = weather === 'SUNNY' ? DAWN : DAWN + 0.8;
   const dusk = weather === 'SUNNY' ? DUSK : DUSK - 0.8;
-  return gameTime < dawn || gameTime > dusk;
+  const hour = hourOfDay(gameTime);
+  return hour < dawn || hour > dusk;
 }
 
 /**

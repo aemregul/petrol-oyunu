@@ -2,16 +2,28 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { hourOfDay } from '../domain/services/simulationEngine';
 
-/** Sun colour and intensity through the 06:00-22:00 trading day. */
+/**
+ * Sun colour and intensity right round the clock.
+ *
+ * The day used to stop at ten in the evening, so there was never a night to
+ * light. Now it runs to six the next morning, which means the small hours have
+ * to look like the small hours — dark enough for the forecourt lamps to be
+ * doing the work, and lifting again before the first commuters.
+ */
 const SUN_KEYFRAMES = [
-  { hour: 6, color: '#ffc590', intensity: 1.5, ambient: 0.62, sky: '#ffd4a8' },
+  { hour: 0, color: '#5c6ba8', intensity: 0.32, ambient: 0.2, sky: '#141d33' },
+  { hour: 4, color: '#6272aa', intensity: 0.36, ambient: 0.22, sky: '#1a2440' },
+  { hour: 5.5, color: '#c98d78', intensity: 0.8, ambient: 0.4, sky: '#5b5f86' },
+  { hour: 6.5, color: '#ffc590', intensity: 1.5, ambient: 0.62, sky: '#ffd4a8' },
   { hour: 8, color: '#ffe9cc', intensity: 1.9, ambient: 0.72, sky: '#d3eaff' },
   { hour: 12, color: '#fffdf8', intensity: 2.2, ambient: 0.82, sky: '#c6e7ff' },
   { hour: 17, color: '#ffe2bc', intensity: 2.0, ambient: 0.76, sky: '#d0e7fb' },
   { hour: 19.5, color: '#ffab70', intensity: 1.45, ambient: 0.6, sky: '#f7bb87' },
-  { hour: 21, color: '#8d9cd4', intensity: 0.95, ambient: 0.46, sky: '#5d6c96' },
-  { hour: 22, color: '#7684bc', intensity: 0.8, ambient: 0.42, sky: '#42507a' }
+  { hour: 21, color: '#8d9cd4', intensity: 0.8, ambient: 0.4, sky: '#4a5680' },
+  { hour: 22.5, color: '#6272aa', intensity: 0.4, ambient: 0.24, sky: '#1e2846' },
+  { hour: 24, color: '#5c6ba8', intensity: 0.32, ambient: 0.2, sky: '#141d33' }
 ];
 
 function sampleSun(hour: number) {
@@ -61,7 +73,7 @@ export const SceneLighting: React.FC = () => {
   const fog = useMemo(() => new THREE.Fog('#a8d8ff', 190, 460), []);
 
   useFrame((_, delta) => {
-    const sample = sampleSun(gameTime);
+    const sample = sampleSun(hourOfDay(gameTime));
     const ease = Math.min(1, delta * 2);
 
     sunColor.current.lerp(new THREE.Color(sample.color), ease);
@@ -72,9 +84,10 @@ export const SceneLighting: React.FC = () => {
       sunRef.current.intensity +=
         (sample.intensity * weatherDamping - sunRef.current.intensity) * ease;
 
-      // Sweep the sun across the sky as the day advances.
-      const dayProgress = THREE.MathUtils.clamp((gameTime - 6) / 16, 0, 1);
-      const arc = Math.PI * dayProgress;
+      // Sweep the sun across the sky through the daylight hours, and leave it
+      // below the horizon overnight so the lamps are what lights the place.
+      const daylight = THREE.MathUtils.clamp((hourOfDay(gameTime) - 6) / 15, 0, 1);
+      const arc = Math.PI * daylight;
       sunRef.current.position.set(
         32 - Math.cos(arc) * 55,
         12 + Math.sin(arc) * 48,

@@ -643,6 +643,17 @@ export function syncPriceSign(state: GameState): void {
   }
 }
 
+/**
+ * The time of day `gameTime` represents.
+ *
+ * The clock runs from 6 straight through to 30 so that a day is one unbroken
+ * increasing number — but anything asking what time it *is* wants 06:00 to
+ * 05:59, so it asks here rather than reading the raw value and getting 27.
+ */
+export function hourOfDay(gameTime: number): number {
+  return ((gameTime % 24) + 24) % 24;
+}
+
 /** Which block a vehicle belongs to. The median keeps the two sets apart. */
 export function vehicleSide(vehicle: { worldPosition: [number, number, number] }): DrivewaySide {
   return drivewaySideAt(vehicle.worldPosition[2]);
@@ -1447,8 +1458,6 @@ export function dispenseStep(
   vehicle.request.dispensedLiters += Math.min(remaining, flowRate * deltaSeconds);
   playCue(effects, 'fuelTick');
 
-  // Pumping wears the hardware down.
-  if (pump) pump.health = Math.max(0, pump.health - 0.03 * deltaSeconds);
 
   if (vehicle.request.dispensedLiters >= vehicle.request.calculatedLiters - 0.05) {
     vehicle.request.dispensedLiters = vehicle.request.calculatedLiters;
@@ -1750,14 +1759,80 @@ const SHOP_ONLY_APPEAL = 0.4;
 /** How much harder a rush pushes drivers onto the forecourt. */
 const RUSH_STOP_MULTIPLIER = 2.2;
 
-/** A rush lands about this often, and runs for one to two minutes. */
+/**
+ * A rush lasts a minute of the player's time, not the forecourt's.
+ *
+ * These windows are a prompt to whoever is at the keyboard — look up, the next
+ * sixty seconds matter — so they are measured in wall-clock seconds and stay
+ * the same length whatever the clock on the wall of the station says.
+ *
+ * Rare enough to stay an event: a minute out of a four-minute day is a quarter
+ * of it, so at better odds than this the forecourt would be busy more often
+ * than not and the word would stop meaning anything.
+ */
 const RUSH_CHANCE_PER_SEC = 1 / 260;
-const RUSH_MIN_SECONDS = 60;
-const RUSH_MAX_SECONDS = 120;
+const RUSH_SECONDS = 60;
+
+/**
+ * Once a day the supplier drops *their* price for a minute — this is a
+ * discount on the fuel the player buys in, not on what they sell it for. The
+ * board out front does not change; the tanker does. It lands at a different
+ * hour each morning, so the only way to catch it is to be watching, which is
+ * the point of it.
+ */
+const FUEL_DEAL_SECONDS = 60;
+export const FUEL_DEAL_DISCOUNT = 0.3;
 
 /** True while a burst of custom is running. */
 export function isRushHour(state: GameState): boolean {
   return (state.dayState.rushSecondsLeft ?? 0) > 0;
+}
+
+/** True while the supplier's daily discount window is open. */
+export function isFuelDealOn(state: GameState): boolean {
+  return (state.dayState.fuelDealSecondsLeft ?? 0) > 0;
+}
+
+/** What a litre costs to buy right now, discount included. */
+export function wholesaleNow(state: GameState, fuelType: FuelType): number {
+  const listed = state.pricing[fuelType].todayWholesaleCost;
+  return isFuelDealOn(state) ? Number((listed * (1 - FUEL_DEAL_DISCOUNT)).toFixed(2)) : listed;
+}
+
+/**
+ * Runs the day's one discounted window: picks an hour for it each morning,
+ * opens it when the clock reaches that hour, and shuts it a minute later.
+ */
+function tickFuelDeal(state: GameState, dt: number, effects: SimEffects): void {
+  const day = state.dayState;
+
+  if ((day.fuelDealSecondsLeft ?? 0) > 0) {
+    const left = (day.fuelDealSecondsLeft ?? 0) - dt;
+    day.fuelDealSecondsLeft = Math.max(0, left);
+    if (left <= 0) {
+      notify(effects, 'INFO', 'İndirim Bitti', 'Tedarikçi alış fiyatları normale döndü.');
+    }
+    return;
+  }
+
+  if (day.fuelDealDoneToday) return;
+
+  // Drawn fresh each morning, and never in the small hours when nobody is
+  // looking — an offer the player cannot see is not an offer.
+  if (day.fuelDealAtHour === undefined) {
+    day.fuelDealAtHour = 8 + Math.random() * 13;
+  }
+  if (hourOfDay(day.gameTime) < day.fuelDealAtHour || day.gameTime >= 24) return;
+
+  day.fuelDealSecondsLeft = FUEL_DEAL_SECONDS;
+  day.fuelDealDoneToday = true;
+  playCue(effects, 'alert');
+  notify(
+    effects,
+    'INFO',
+    `Toptan Yakıt İndirimi! %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`,
+    'Tedarikçi bir dakikalığına tüm yakıtlarda alış fiyatını indirdi — depoları şimdi doldurun.'
+  );
 }
 
 /**
@@ -1780,8 +1855,7 @@ function tickRush(state: GameState, dt: number, effects: SimEffects): void {
   if (!state.station.open) return;
   if (Math.random() >= RUSH_CHANCE_PER_SEC * dt) return;
 
-  state.dayState.rushSecondsLeft =
-    RUSH_MIN_SECONDS + Math.random() * (RUSH_MAX_SECONDS - RUSH_MIN_SECONDS);
+  state.dayState.rushSecondsLeft = RUSH_SECONDS;
   playCue(effects, 'alert');
   notify(
     effects,
@@ -2011,7 +2085,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const vehicleCount = Object.keys(state.vehicles).length;
   if (vehicleCount >= MAX_ACTIVE_VEHICLES || !state.station.open) return;
 
-  const hourlyMult = calculateHourlyTrafficMultiplier(state.dayState.gameTime);
+  const hourlyMult = calculateHourlyTrafficMultiplier(hourOfDay(state.dayState.gameTime));
   const weatherMult =
     state.dayState.weather === 'RAIN' ? 0.78 : state.dayState.weather === 'OVERCAST' ? 0.92 : 1;
 
@@ -2614,12 +2688,26 @@ function tickEmployees(state: GameState, dt: number, effects: SimEffects): void 
   }
 }
 
+/**
+ * How fast a pump ages, per second, whether or not it is being used.
+ *
+ * Wear used to be charged per litre dispensed, which quietly punished the
+ * busiest bay and left an idle one pristine for ever. Hardware standing in the
+ * weather ages either way — and tying it to time makes maintenance something
+ * the player schedules rather than something that ambushes their best pump.
+ * Slow on purpose: a bay goes from new to needing attention over about a
+ * fortnight of trading.
+ */
+const PUMP_AGEING_PER_SECOND = 0.022;
+
 function tickStationCondition(state: GameState, dt: number, effects: SimEffects): void {
   // Idle grime accumulates slowly across the whole forecourt.
-  state.station.cleanliness = clamp(state.station.cleanliness - 0.02 * dt, 0, 100);
+  state.station.cleanliness = clamp(state.station.cleanliness - 0.035 * dt, 0, 100);
 
   for (const pump of Object.values(state.pumps)) {
     if (pump.state === 'BROKEN' || pump.state === 'MAINTENANCE') continue;
+
+    pump.health = Math.max(0, pump.health - PUMP_AGEING_PER_SECOND * dt);
 
     // Level 3 hardware is markedly more reliable (GDD: -%25 arıza riski).
     const reliability = pump.level >= 3 ? 0.75 : 1;
@@ -2669,8 +2757,8 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     result: 'SUCCESS' | 'SKIPPED_RESERVE' | 'FAILED',
     amount?: number
   ) => {
-    const hour = Math.floor(state.dayState.gameTime);
-    const minute = Math.floor((state.dayState.gameTime - hour) * 60);
+    const hour = Math.floor(hourOfDay(state.dayState.gameTime));
+    const minute = Math.floor((state.dayState.gameTime % 1) * 60);
     state.managerLogs.unshift({
       id: 'mlog_' + Math.random().toString(36).substring(2, 8),
       timestamp: Date.now(),
@@ -2801,7 +2889,7 @@ export function placeFuelOrder(
     return false;
   }
 
-  const unitCost = state.pricing[fuelType].todayWholesaleCost;
+  const unitCost = wholesaleNow(state, fuelType);
   const totalCost = liters * unitCost + conf.deliveryFee;
 
   const tx = TransactionService.executeCashTransaction(state, {
@@ -2858,7 +2946,7 @@ export function runSimulationTick(
 
   const dt = deltaSeconds * speed;
 
-  const hoursPerSecond = 16 / GAME_CONFIG.economy.realSecondsPerDay;
+  const hoursPerSecond = 1 / GAME_CONFIG.economy.realSecondsPerGameHour;
   state.dayState.gameTime += dt * hoursPerSecond;
 
   if (state.dayState.gameTime >= GAME_CONFIG.economy.dayEndHour) {
@@ -2874,6 +2962,7 @@ export function runSimulationTick(
   syncPriceSign(state);
   tickFuelOrders(state, dt, effects);
   tickRush(state, dt, effects);
+  tickFuelDeal(state, dt, effects);
   trySpawnVehicle(state, dt, mods);
   const vehicleSteps = Math.max(1, Math.ceil(dt / MAX_VEHICLE_STEP));
   for (let step = 0; step < vehicleSteps; step++) {

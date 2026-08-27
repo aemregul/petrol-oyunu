@@ -131,9 +131,8 @@ export interface GameConfig {
     initialCash: number;
     initialReputation: number;
     dayStartHour: number; // 06:00
-    dayEndHour: number; // 22:00
-    realSecondsPerDay: number; // 600s (10 min)
-    tutorialDaySeconds: number; // 720s (12 min)
+    dayEndHour: number; // 30 = 06:00 the next morning
+    realSecondsPerGameHour: number;
     minRepairCost: number;
     siteCleanCost: number;
     cleanDurationSeconds: number;
@@ -683,7 +682,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'sedan_standard',
       minDemand: 18,
       maxDemand: 35,
-      basePatienceSeconds: 90,
+      basePatienceSeconds: 36,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'gasoline',
       marketBaseProbability: 0.18,
@@ -697,7 +696,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'suv_standard',
       minDemand: 25,
       maxDemand: 50,
-      basePatienceSeconds: 120,
+      basePatienceSeconds: 48,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'gasoline',
       marketBaseProbability: 0.42,
@@ -711,7 +710,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'sedan_taxi',
       minDemand: 15,
       maxDemand: 40,
-      basePatienceSeconds: 65,
+      basePatienceSeconds: 26,
       priceSensitivity: 'HIGH',
       preferredFuel: 'lpg',
       marketBaseProbability: 0.10,
@@ -725,7 +724,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'courier_van',
       minDemand: 8,
       maxDemand: 28,
-      basePatienceSeconds: 55,
+      basePatienceSeconds: 22,
       priceSensitivity: 'HIGH',
       preferredFuel: 'gasoline',
       marketBaseProbability: 0.08,
@@ -739,7 +738,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'van_cargo',
       minDemand: 35,
       maxDemand: 75,
-      basePatienceSeconds: 110,
+      basePatienceSeconds: 44,
       priceSensitivity: 'LOW',
       preferredFuel: 'diesel',
       marketBaseProbability: 0.22,
@@ -753,7 +752,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'truck_heavy',
       minDemand: 80,
       maxDemand: 180,
-      basePatienceSeconds: 150,
+      basePatienceSeconds: 60,
       priceSensitivity: 'LOW',
       preferredFuel: 'diesel',
       marketBaseProbability: 0.35,
@@ -767,7 +766,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'hatchback_ev',
       minDemand: 20,
       maxDemand: 55,
-      basePatienceSeconds: 130,
+      basePatienceSeconds: 52,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'any',
       marketBaseProbability: 0.38,
@@ -782,7 +781,7 @@ export const GAME_CONFIG: GameConfig = {
       vehicleModel: 'sport_luxury',
       minDemand: 30,
       maxDemand: 60,
-      basePatienceSeconds: 75,
+      basePatienceSeconds: 30,
       priceSensitivity: 'LOW',
       preferredFuel: 'gasoline',
       marketBaseProbability: 0.25,
@@ -800,7 +799,7 @@ export const GAME_CONFIG: GameConfig = {
           hireCost: 7500,
           dailyWage: 650,
           speedMultiplier: 0.75,
-          actionDelaySeconds: 5.0,
+          actionDelaySeconds: 2.0,
           maxConcurrentPumps: 1,
           unlockRequirement: 'Seviye 3'
         },
@@ -809,7 +808,7 @@ export const GAME_CONFIG: GameConfig = {
           hireCost: 4000,
           dailyWage: 800,
           speedMultiplier: 0.90,
-          actionDelaySeconds: 3.0,
+          actionDelaySeconds: 1.2,
           maxConcurrentPumps: 1,
           unlockRequirement: '40 Hizmet Tamamla',
           requiredServices: 40
@@ -819,7 +818,7 @@ export const GAME_CONFIG: GameConfig = {
           hireCost: 9000,
           dailyWage: 1050,
           speedMultiplier: 1.10,
-          actionDelaySeconds: 1.5,
+          actionDelaySeconds: 0.6,
           maxConcurrentPumps: 2,
           unlockRequirement: '160 Hizmet Tamamla',
           requiredServices: 160
@@ -895,13 +894,20 @@ export const GAME_CONFIG: GameConfig = {
   economy: {
     initialCash: 15000,
     initialReputation: 3.00,
+    /**
+     * A day runs from six in the morning round to six the next morning, so
+     * the night is played rather than skipped. `gameTime` counts on past 24
+     * rather than wrapping — every hour-of-day rule reads it through
+     * `hourOfDay`, and a clock that never goes backwards is far easier to
+     * reason about than one that does.
+     */
     dayStartHour: 6,
-    dayEndHour: 22,
-    realSecondsPerDay: 600,
-    tutorialDaySeconds: 720,
+    dayEndHour: 30,
+    /** Ten seconds at the wall is an hour on the forecourt. */
+    realSecondsPerGameHour: 10,
     minRepairCost: 250,
     siteCleanCost: 300,
-    cleanDurationSeconds: 30,
+    cleanDurationSeconds: 12,
     /**
      * What selling a structure hands back. Deliberately well under half: a
      * misplaced building should cost the player something, so that the plot
@@ -909,8 +915,8 @@ export const GAME_CONFIG: GameConfig = {
      */
     refundRatio: 0.4,
     moveFeeRatio: 0.02,
-    tankerSpeedSecondsMin: 90,
-    tankerSpeedSecondsMax: 150,
+    tankerSpeedSecondsMin: 36,
+    tankerSpeedSecondsMax: 60,
     tankerUnloadSpeedLps: 100,
     tankerCancelRefundRatio: 0.85,
     overdraftLimit: -5000,
@@ -925,8 +931,8 @@ export const GAME_CONFIG: GameConfig = {
     acPricePerKwh: 7.5,
     dcPricePerKwh: 12.9,
     /** How long a charge takes at each kind of point, in game seconds. */
-    acChargeSeconds: 70,
-    dcChargeSeconds: 26
+    acChargeSeconds: 28,
+    dcChargeSeconds: 10
   },
   roadUpgrade: {
     price: 250000,

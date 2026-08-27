@@ -15,7 +15,6 @@ const PAN_STEP_PX = 60;
 export const App: React.FC = () => {
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const setCameraZoom = useGameStore((s) => s.setCameraZoom);
-  const setTimeSpeed = useGameStore((s) => s.setTimeSpeed);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const buildMode = useGameStore((s) => s.buildMode);
   const rotateBuildPreview = useGameStore((s) => s.rotateBuildPreview);
@@ -44,27 +43,6 @@ export const App: React.FC = () => {
           break;
         case 'r':
           if (buildMode.active) rotateBuildPreview();
-          break;
-        case ' ':
-          e.preventDefault();
-          useGameStore.setState((s) => ({
-            gameState: {
-              ...s.gameState,
-              dayState: {
-                ...s.gameState.dayState,
-                timeSpeed: s.gameState.dayState.timeSpeed === 0 ? 1 : 0
-              }
-            }
-          }));
-          break;
-        case '1':
-          setTimeSpeed(1);
-          break;
-        case '2':
-          setTimeSpeed(2);
-          break;
-        case '4':
-          setTimeSpeed(4);
           break;
         case 'escape':
           if (buildMode.active) exitBuildMode();
@@ -110,7 +88,6 @@ export const App: React.FC = () => {
   }, [
     rotateCamera,
     setCameraZoom,
-    setTimeSpeed,
     setActiveModal,
     buildMode.active,
     rotateBuildPreview,

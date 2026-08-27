@@ -287,11 +287,27 @@ export interface ManagerLogEntry {
 
 export interface DayState {
   currentDay: number;
-  gameTime: number; // 6.00 to 22.00 (e.g. 6.5 = 06:30)
-  timeSpeed: 0 | 1 | 2 | 4;
+  /** Runs from 6.00 up to 30.00 — six in the morning to six the next. */
+  gameTime: number;
+/**
+   * Kept at 1. The clock does not stop: shutting the station is the way to
+   * take a breather, and that is a decision with consequences rather than a
+   * freeze button. Retained as a field so a tick can still be told to idle.
+   */
+  timeSpeed: 0 | 1;
   isDayActive: boolean;
   isDayEnding: boolean;
   weather: 'SUNNY' | 'OVERCAST' | 'RAIN';
+  /**
+   * Seconds of wall-clock time left on the day's discounted fuel window, and
+   * whether it has already been offered today. Both of these run on real time
+   * rather than the forecourt clock: they are a prompt to the player at the
+   * keyboard, not an event in the world.
+   */
+  fuelDealSecondsLeft?: number;
+  fuelDealDoneToday?: boolean;
+  /** Hour of the day the discount is due, drawn fresh each morning. */
+  fuelDealAtHour?: number;
   /**
    * A burst of custom, in game-seconds remaining. Traffic on the highway is
    * steady; what comes in waves is how many of those drivers decide to stop.

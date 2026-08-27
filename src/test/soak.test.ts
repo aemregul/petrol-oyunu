@@ -63,7 +63,7 @@ describe('a station left running', () => {
     const state = createInitialGameState();
     state.player.level = 12;
     state.player.cash = 400000;
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.employees = {
       e1: {
         id: 'e1', name: 'Ahmet', role: 'PUMP_ATTENDANT', level: 3, wage: 1000,

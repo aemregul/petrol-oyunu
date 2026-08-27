@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { Award, Building2, Cloud, CloudRain, Crosshair, FastForward, Fuel, Hammer, Landmark, Map as MapIcon, Move, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
+import { Award, Building2, Cloud, CloudRain, Crosshair, Fuel, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
-import { drivewaySideAt } from '../domain/services/simulationEngine';
+import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 
 const WEATHER_DISPLAY = {
@@ -19,7 +19,6 @@ export const HUD: React.FC = () => {
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const setCameraZoom = useGameStore((s) => s.setCameraZoom);
-  const setTimeSpeed = useGameStore((s) => s.setTimeSpeed);
   const cleanStation = useGameStore((s) => s.cleanStation);
   const buildMode = useGameStore((s) => s.buildMode);
   const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
@@ -72,14 +71,15 @@ export const HUD: React.FC = () => {
         ) * 10
     };
   })();
-  const currentSpeed = dayState.timeSpeed;
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
   const weatherStyle = WEATHER_DISPLAY[dayState.weather] || WEATHER_DISPLAY.SUNNY;
   const WeatherIcon = weatherStyle.icon;
 
   // Format Game Time (e.g. 6.5 -> 06:30)
-  const hours = Math.floor(dayState.gameTime);
-  const minutes = Math.floor((dayState.gameTime - hours) * 60);
+  // The clock counts past midnight to keep the day one rising number, so the
+  // face shows the hour of the day rather than the raw value.
+  const hours = Math.floor(hourOfDay(dayState.gameTime));
+  const minutes = Math.floor((dayState.gameTime % 1) * 60);
   const timeFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
   // Find next level xp target
@@ -113,42 +113,11 @@ export const HUD: React.FC = () => {
             </div>
           </div>
 
-          {/* Time Speed Controls */}
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setTimeSpeed(0)}
-              className={`p-1.5 rounded-lg transition-all ${
-                currentSpeed === 0 ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Duraklat (Space)"
-            >
-              <Pause className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setTimeSpeed(1)}
-              className={`p-1.5 rounded-lg transition-all ${
-                currentSpeed === 1 ? 'bg-sky-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Normal Hız 1x"
-            >
-              <Play className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setTimeSpeed(2)}
-              className={`p-1.5 rounded-lg transition-all ${
-                currentSpeed === 2 ? 'bg-sky-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Hızlı 2x"
-            >
-              <FastForward className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
           {/* Open / closed. Shutting up shop stops new arrivals without
               stopping the clock, so the player can rebuild in peace. */}
           <button
             onClick={toggleStationOpen}
-            className={`ml-1 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
               gameState.station.open
                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
                 : 'bg-red-500/15 text-red-400 border-red-500/40 hover:bg-red-500/25'

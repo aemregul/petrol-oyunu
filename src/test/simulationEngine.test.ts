@@ -19,6 +19,10 @@ import {
   blockLayout,
   blockFacilities,
   chargingPoints,
+  hourOfDay,
+  isFuelDealOn,
+  wholesaleNow,
+  FUEL_DEAL_DISCOUNT,
   vehicleSide,
   stopChance,
   DRIVEWAY_Z,
@@ -79,7 +83,7 @@ function advanceUntil(
 describe('simulationEngine - vehicle lifecycle', () => {
   it('spawns vehicles that drive in and arrive at a pump', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
 
     const arrived = advanceUntil(
       state,
@@ -96,7 +100,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
   it('walks a manual sale through REQUEST > FUELING > PAYMENT and pays out', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     advanceUntil(state, (s) => Object.values(s.vehicles).some((v) => v.state === 'AT_PUMP'), 600);
 
     const vehicle = Object.values(state.vehicles).find((v) => v.state === 'AT_PUMP')!;
@@ -130,7 +134,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
   it('never lets a vehicle reach an invalid state', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
 
     const valid: VehicleState[] = [
       'SPAWN', 'PASSING', 'ROAD_APPROACH', 'QUEUE', 'PUMP_RESERVED', 'AT_PUMP',
@@ -145,7 +149,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
   it('queues vehicles once every pump is occupied', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.player.reputation = 5;
     state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.8;
 
@@ -161,7 +165,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
   it('makes running dry and letting a pump fail cost the station its name', () => {
     const dry = createInitialGameState();
-    dry.dayState.timeSpeed = 4;
+    dry.dayState.timeSpeed = 1;
     dry.tanks.gasoline.stock = 0;
 
     // A driver on the road cannot see an empty tank, so they still pull in —
@@ -172,7 +176,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
     // The same when the only bay has worn out.
     const broken = createInitialGameState();
-    broken.dayState.timeSpeed = 4;
+    broken.dayState.timeSpeed = 1;
     broken.pumps.pump_1.state = 'BROKEN';
 
     expect(stopChance(broken)).toBeGreaterThan(0);
@@ -186,7 +190,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
   it('moves an order through the full gate and unloading sequence', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.player.cash = 100000;
     const effects = createEffects();
 
@@ -223,7 +227,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 describe('simulationEngine - attendants', () => {
   it('serves customers end to end without player input', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.tanks.gasoline.stock = 1500;
 
     state.employees.emp_test = {
@@ -277,7 +281,7 @@ describe('simulationEngine - state machine integrity', () => {
 
     try {
       const state = createInitialGameState();
-      state.dayState.timeSpeed = 4;
+      state.dayState.timeSpeed = 1;
       state.player.cash = 200000;
       state.tanks.gasoline.capacity = 6000;
       state.tanks.gasoline.stock = 6000;
@@ -316,10 +320,126 @@ describe('simulationEngine - state machine integrity', () => {
 });
 
 describe('simulationEngine - day boundary', () => {
+  it('runs a full day from six to six at ten seconds an hour', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+
+    const perHour = GAME_CONFIG.economy.realSecondsPerGameHour;
+    let elapsed = 0;
+    let ended = false;
+
+    while (elapsed < 600 && !ended) {
+      const effects = createEffects();
+      runSimulationTick(state, 0.05, effects);
+      elapsed += 0.05;
+      ended = effects.dayEnded;
+
+      // Six hours in should be sixty seconds in, and so on round the clock.
+      if (Math.abs(elapsed - 6 * perHour) < 0.03) {
+        expect(state.dayState.gameTime).toBeCloseTo(12, 1);
+      }
+      if (Math.abs(elapsed - 21 * perHour) < 0.03) {
+        // Past midnight the clock keeps counting up rather than wrapping.
+        expect(state.dayState.gameTime).toBeCloseTo(27, 1);
+      }
+    }
+
+    expect(ended).toBe(true);
+    expect(elapsed).toBeCloseTo(24 * perHour, 0);
+    expect(state.dayState.gameTime).toBe(GAME_CONFIG.economy.dayEndHour);
+
+    // And the clock reads as a time of day however far past midnight it runs.
+    expect(hourOfDay(27)).toBe(3);
+    expect(hourOfDay(GAME_CONFIG.economy.dayEndHour)).toBe(
+      GAME_CONFIG.economy.dayStartHour
+    );
+  });
+
+  it('opens one discounted fuel window a day, for a minute, at a fresh hour', () => {
+    const hours: number[] = [];
+
+    for (let day = 0; day < 5; day++) {
+      const state = createInitialGameState();
+      state.dayState.timeSpeed = 1;
+
+      let openFor = 0;
+      let opened = 0;
+      let wasOpen = false;
+
+      for (let i = 0; i < 30000; i++) {
+        const effects = createEffects();
+        runSimulationTick(state, 0.05, effects);
+
+        const on = isFuelDealOn(state);
+        if (on) {
+          openFor += 0.05;
+          if (!wasOpen) {
+            opened++;
+            hours.push(hourOfDay(state.dayState.gameTime));
+            // While it is open the supplier's price really is cut.
+            expect(wholesaleNow(state, 'gasoline')).toBeCloseTo(
+              state.pricing.gasoline.todayWholesaleCost * (1 - FUEL_DEAL_DISCOUNT),
+              1
+            );
+          }
+        }
+        wasOpen = on;
+        if (effects.dayEnded) break;
+      }
+
+      // Once, and for a minute of the player's time — not the forecourt's.
+      expect(opened).toBe(1);
+      expect(openFor).toBeCloseTo(60, 0);
+      expect(wholesaleNow(state, 'gasoline')).toBe(state.pricing.gasoline.todayWholesaleCost);
+    }
+
+    // And not at the same time every day, or there would be nothing to catch.
+    expect(new Set(hours.map((h) => h.toFixed(1))).size).toBeGreaterThan(1);
+  });
+
+  it('discounts what the station buys, never what it sells', () => {
+    const state = createInitialGameState();
+    state.player.cash = 500000;
+
+    const pumpPrice = state.pricing.gasoline.playerPrice;
+    const listPrice = state.pricing.gasoline.todayWholesaleCost;
+
+    state.dayState.fuelDealSecondsLeft = 60;
+    placeFuelOrder(state, 'gasoline', 500, createEffects());
+
+    // The tanker comes in cheaper...
+    const order = state.fuelOrders[state.fuelOrders.length - 1];
+    expect(order.unitCost).toBeCloseTo(listPrice * (1 - FUEL_DEAL_DISCOUNT), 1);
+
+    // ...while the board out front, and what a customer pays at the pump, are
+    // exactly as the player left them. This is a supply deal, not a sale.
+    expect(state.pricing.gasoline.playerPrice).toBe(pumpPrice);
+    expect(state.pricing.gasoline.todayWholesaleCost).toBe(listPrice);
+  });
+
+  it('ages a pump on the clock rather than on how much it has sold', () => {
+    const busy = createInitialGameState();
+    busy.dayState.timeSpeed = 1;
+    const idle = createInitialGameState();
+    idle.dayState.timeSpeed = 1;
+    // Nothing to sell, so this one serves nobody all day.
+    idle.tanks.gasoline.capacity = 0;
+
+    advance(busy, 240);
+    advance(idle, 240);
+
+    // Hardware standing in the weather wears out either way, so the busiest
+    // bay is not quietly punished for being the one that earns.
+    expect(busy.pumps.pump_1.health).toBeLessThan(100);
+    expect(idle.pumps.pump_1.health).toBeCloseTo(busy.pumps.pump_1.health, 0);
+    // And slowly: a fortnight of trading before it needs attention.
+    expect(100 - busy.pumps.pump_1.health).toBeLessThan(8);
+  });
+
   it('flags the end of the day at closing time', () => {
     const state = createInitialGameState();
     state.dayState.gameTime = GAME_CONFIG.economy.dayEndHour - 0.01;
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
 
     const effects = createEffects();
     for (let i = 0; i < 200 && !effects.dayEnded; i++) {
@@ -384,8 +504,8 @@ describe('simulationEngine - random events', () => {
 
     expect(getEventModifiers(state).pumpsDisabled).toBe(true);
 
-    // Stay inside the outage: at 1x, one game hour is ~37s of sim time.
-    advance(state, 25);
+    // Stay inside the outage: an hour on the forecourt is ten seconds.
+    advance(state, 6);
     expect(state.activeEvents).toHaveLength(1);
 
     // Cars still arrive, but none of them can be given a pump.
@@ -397,7 +517,7 @@ describe('simulationEngine - random events', () => {
 
   it('expires timed events once their hours run out', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     triggerEvent(state, GAME_EVENTS.find((e) => e.id === 'rush_hour')!, createEffects());
 
     expect(state.activeEvents).toHaveLength(1);
@@ -459,7 +579,7 @@ describe('simulationEngine - daily missions', () => {
 describe('simulationEngine - forecourt boundary', () => {
   it('keeps every parked or queueing vehicle on the concrete', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.player.cash = 200000;
     state.tanks.gasoline.capacity = 6000;
     state.tanks.gasoline.stock = 6000;
@@ -532,7 +652,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('brings vehicles in at the entry and sends them out at the exit', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     const layout = getLayout(state);
 
     // Entry is upstream of exit, so a car meets the entry mouth first.
@@ -553,7 +673,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('sends arrivals down both lanes of a widened entrance', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.buildings.ramp = {
       id: 'ramp',
       type: 'wide_entry',
@@ -586,7 +706,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('runs the same game on the block across the highway', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.station.roadLevel = 2;
     const far = ['0,-1', '1,-1', '0,-2', '1,-2'];
     state.station.plots.ownedParcels.push(...far);
@@ -618,7 +738,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('keeps the road busy even with nothing to stop for', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.pumps = {};
 
     advanceUntil(state, (s) => Object.keys(s.vehicles).length > 0, 900);
@@ -656,7 +776,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('sends drivers to a block that has only a shop', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.pumps = {};
     state.market.active = true;
     state.market.stock = 999;
@@ -754,7 +874,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('opens the electric line only once there is somewhere to plug in', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.player.level = 12;
 
     // A charger with no substation behind it is a bollard.
@@ -806,7 +926,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('keeps traffic coming on a plot only one row deep', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.station.roadLevel = 2;
     state.station.plots.ownedParcels = ['0,0', '1,0', '0,-1', '1,-1'];
     state.station.plots.pavedParcels = ['0,0', '1,0', '0,-1', '1,-1'];
@@ -818,7 +938,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('never lets the forecourt seize up', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.player.reputation = 5;
     state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.75;
 
@@ -838,6 +958,15 @@ describe('simulationEngine - highway lanes and driveways', () => {
       runSimulationTick(state, 0.2, createEffects());
 
       for (const vehicle of Object.values(state.vehicles)) {
+        // Only while they are meant to be moving. A car parked at a pump is
+        // supposed to sit still, and carrying its last position across that
+        // stop would report the whole visit as a stall the moment it pulls
+        // away again.
+        if (!rolling.includes(vehicle.state)) {
+          lastMoved.delete(vehicle.id);
+          continue;
+        }
+
         const [x, , z] = vehicle.worldPosition;
         const seen = lastMoved.get(vehicle.id);
 
@@ -845,9 +974,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
           lastMoved.set(vehicle.id, { tick, x, z });
           continue;
         }
-        if (rolling.includes(vehicle.state)) {
-          longestStill = Math.max(longestStill, (tick - seen.tick) * 0.2);
-        }
+        longestStill = Math.max(longestStill, (tick - seen.tick) * 0.2);
       }
     }
 
@@ -859,7 +986,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
   it('runs traffic the length of the road and around what is built on the plot', () => {
     const state = createInitialGameState();
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
     state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.85;
 
     const office = state.buildings.office_1;
@@ -892,7 +1019,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
   it('spawns vehicles on the driving lane', () => {
     const state = createInitialGameState();
     state.station.roadLevel = 2;
-    state.dayState.timeSpeed = 4;
+    state.dayState.timeSpeed = 1;
 
     advanceUntil(state, (s) => Object.keys(s.vehicles).length > 0, 600);
     const vehicle = Object.values(state.vehicles)[0];

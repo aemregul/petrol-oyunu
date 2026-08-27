@@ -4,6 +4,7 @@ import { FuelType } from '../../domain/types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { X, Fuel, Truck, Clock, AlertCircle, Trash2 } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import { isFuelDealOn, FUEL_DEAL_DISCOUNT } from '../../domain/services/simulationEngine';
 
 export const FuelOrderModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
@@ -22,7 +23,12 @@ export const FuelOrderModal: React.FC = () => {
   const maxOrder = Math.max(500, Math.floor(freeCapacity / 100) * 100);
   const clampedOrderLiters = Math.min(maxOrder, Math.max(500, orderLiters));
 
-  const unitCost = pricing ? pricing.todayWholesaleCost : fuelConf.baseWholesale;
+  // The supplier's daily window, if it happens to be open right now.
+  const dealOn = isFuelDealOn(gameState);
+  const listedCost = pricing ? pricing.todayWholesaleCost : fuelConf.baseWholesale;
+  const unitCost = dealOn
+    ? Number((listedCost * (1 - FUEL_DEAL_DISCOUNT)).toFixed(2))
+    : listedCost;
   const deliveryFee = fuelConf.deliveryFee;
   const totalCost = clampedOrderLiters * unitCost + deliveryFee;
 
@@ -145,7 +151,14 @@ export const FuelOrderModal: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/80 text-xs font-mono">
               <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-sans">Birim Alış Fiyatı</span>
-                <span className="font-bold text-white">{unitCost.toFixed(2)} TL/L</span>
+                <span className={`font-bold ${dealOn ? 'text-emerald-400' : 'text-white'}`}>
+                  {unitCost.toFixed(2)} TL/L
+                </span>
+                {dealOn && (
+                  <span className="text-slate-500 line-through ml-1.5">
+                    {listedCost.toFixed(2)}
+                  </span>
+                )}
               </div>
               <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-sans">Tanker Nakliye Bedeli</span>

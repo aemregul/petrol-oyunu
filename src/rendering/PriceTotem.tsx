@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { hourOfDay } from '../domain/services/simulationEngine';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { FuelType } from '../domain/types/gameState';
 
@@ -65,7 +66,8 @@ export const PriceTotem: React.FC<PriceTotemProps> = ({ level }) => {
   const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
 
   const spec = LEVELS[Math.min(LEVELS.length, Math.max(1, level)) - 1];
-  const lit = gameTime < 7.5 || gameTime > 18.5;
+  const hour = hourOfDay(gameTime);
+  const lit = hour < 7.5 || hour > 18.5;
 
   // Charging tariffs only appear once there is something to plug into.
   const chargers = useMemo(() => {
