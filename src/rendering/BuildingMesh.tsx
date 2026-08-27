@@ -201,32 +201,28 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
   );
 };
 
+/**
+ * `height` is where the board hangs, in world units — only for the hand-built
+ * meshes, whose height is known here. A type with a model measures its own.
+ */
 const SIGNAGE: Record<
   string,
-  { text: string; height: number; color: string; textColor: string }
+  { text: string; height?: number; color: string; textColor: string }
 > = {
-  office: {
-    text: 'YÖNETİM OFİSİ',
-    height: 5,
-    color: '#0f172a', textColor: '#ffffff'
-  },
-  mini_market: {
-    text: 'MİNİ MARKET',
-    height: 6,
-    color: '#d97706', textColor: '#ffffff'
-  },
-  toilet: { text: 'WC 🚻', height: 3.6, color: '#0f172a', textColor: '#ffffff' },
+  office: { text: 'YÖNETİM OFİSİ', color: '#0f172a', textColor: '#ffffff' },
+  mini_market: { text: 'MİNİ MARKET', color: '#d97706', textColor: '#ffffff' },
+  toilet: { text: 'WC 🚻', color: '#0f172a', textColor: '#ffffff' },
   restaurant: { text: 'RESTORAN', height: 7.4, color: '#dc2626', textColor: '#ffffff' },
-  cafe: { text: 'KAHVE', height: 5, color: '#b45309', textColor: '#ffffff' },
+  cafe: { text: 'KAHVE', color: '#b45309', textColor: '#ffffff' },
   rest_complex: { text: 'DİNLENME TESİSİ', height: 8.2, color: '#0284c7', textColor: '#ffffff' },
-  car_wash: { text: 'OTO YIKAMA', height: 5.8, color: '#0284c7', textColor: '#ffffff' },
+  car_wash: { text: 'OTO YIKAMA', height: 3.5, color: '#0284c7', textColor: '#ffffff' },
   oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, color: '#d97706', textColor: '#ffffff' },
   tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, color: '#0369a1', textColor: '#ffffff' },
   air_water: { text: 'HAVA & SU', height: 3.4, color: '#0f172a', textColor: '#ffffff' },
   car_park: { text: 'OTOPARK', height: 1.6, color: '#0f172a', textColor: '#ffffff' },
   truck_park: { text: 'TIR PARKI', height: 3.4, color: '#d97706', textColor: '#ffffff' },
   ev_substation: { text: '⚡ ALTYAPI', height: 8.6, color: '#eab308', textColor: '#020617' },
-  hotel: { text: 'OTEL', height: 9, color: '#4f46e5', textColor: '#ffffff' },
+  hotel: { text: 'OTEL', color: '#4f46e5', textColor: '#ffffff' },
   ev_storage: { text: 'ENERJİ DEPOLAMA', height: 3.6, color: '#059669', textColor: '#ffffff' },
   ev_charger_ac: { text: 'AC ŞARJ', height: 3, color: '#059669', textColor: '#ffffff' },
   ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, color: '#ea580c', textColor: '#ffffff' }
@@ -276,7 +272,7 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   ) : hasBuildingModel(building.type) ? (
     <ModelErrorBoundary fallback={<FallbackGeometry building={building} />}>
       <Suspense fallback={<FallbackGeometry building={building} />}>
-        <BuildingModel type={building.type} footprint={building.size} />
+        <BuildingModel type={building.type} footprint={building.size} sign={signage} />
       </Suspense>
     </ModelErrorBoundary>
   ) : building.type === 'canopy' ? (
@@ -306,13 +302,16 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
     >
       {body}
 
-      {signage && (
+      {/* Models carry their own board, hung from the geometry they actually
+          have. Everything else is hand-built to a known height, so the board
+          goes straight on top of it. */}
+      {signage?.height !== undefined && (
         <FasciaSign
           text={signage.text}
           color={signage.color}
           textColor={signage.textColor}
-          size={building.size}
-          height={signage.height}
+          width={Math.max(2.2, building.size[0] * 2 * 0.78)}
+          y={signage.height}
         />
       )}
 

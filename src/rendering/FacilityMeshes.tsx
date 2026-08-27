@@ -82,9 +82,18 @@ export const TruckPark: React.FC<FacilityProps> = ({ building }) => {
 };
 
 /** Drive-through wash tunnel: open at both ends, gantry inside. */
+/**
+ * A drive-through wash tunnel: long, narrow and low.
+ *
+ * It used to be built to the same height as a two-storey building, which made
+ * a single wash bay the bulkiest thing on the forecourt — taller than the
+ * office it stood next to. A tunnel is barely higher than the vehicles that go
+ * through it, and reads as one only if it is longer than it is wide.
+ */
 export const CarWash: React.FC<FacilityProps> = ({ building }) => {
   const { w, d } = dims(building);
-  const height = 5;
+  const height = 2.7;
+  const wall = 0.4;
 
   return (
     <group>
@@ -94,20 +103,20 @@ export const CarWash: React.FC<FacilityProps> = ({ building }) => {
       </mesh>
 
       {/* Side walls, leaving the drive-through axis clear */}
-      {[-w / 2 + 0.35, w / 2 - 0.35].map((x) => (
+      {[-w / 2 + wall / 2, w / 2 - wall / 2].map((x) => (
         <mesh key={x} position={[x, height / 2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.7, height, d]} />
+          <boxGeometry args={[wall, height, d]} />
           <meshStandardMaterial color="#e2e8f0" roughness={0.6} />
         </mesh>
       ))}
 
       {/* Roof and brand band */}
-      <mesh position={[0, height + 0.3, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, 0.6, d]} />
+      <mesh position={[0, height + 0.15, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, 0.3, d]} />
         <meshStandardMaterial color="#94a3b8" roughness={0.6} metalness={0.15} />
       </mesh>
-      <mesh position={[0, height - 0.1, d / 2 + 0.05]}>
-        <boxGeometry args={[w, 0.8, 0.2]} />
+      <mesh position={[0, height - 0.05, d / 2 + 0.05]}>
+        <boxGeometry args={[w, 0.45, 0.2]} />
         <meshStandardMaterial
           color="#0ea5e9"
           emissive="#0ea5e9"
@@ -117,8 +126,8 @@ export const CarWash: React.FC<FacilityProps> = ({ building }) => {
       </mesh>
 
       {/* Brush gantry spanning the tunnel */}
-      <mesh position={[0, height - 1.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.22, 0.22, w - 1.6, 10]} />
+      <mesh position={[0, height - 0.75, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.16, 0.16, w - wall * 2, 10]} />
         <meshStandardMaterial color="#38bdf8" roughness={0.5} />
       </mesh>
     </group>

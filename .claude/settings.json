@@ -140,7 +140,12 @@
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/063dec48-3607-4384-806a-470686a3254d/scratchpad/scatter.mjs)",
       "WebFetch(domain:beneloil.com)",
       "Bash(grep -vE \"^\\\\s*$\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(npx vite *)",
+      "Bash(pkill -f \"vite --port 5173\")",
+      "Bash(npx vite --port 5173 > /tmp/vite.log 2>&1 & *)",
+      "Bash(sed -i '' 's|    signYaw: 180|    rotationOffset: 180,\\\\n    signYaw: 180|' src/rendering/models/buildingModels.ts)",
+      "Bash(sed -i '' '/    rotationOffset: 180,/d' src/rendering/models/buildingModels.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp"

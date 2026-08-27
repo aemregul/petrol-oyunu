@@ -408,7 +408,7 @@ export const GAME_CONFIG: GameConfig = {
       category: 'service',
       price: 32000,
       dailyUpkeep: 200,
-      size: [3, 4],
+      size: [2, 3],
       unlockLevel: 6,
       description: 'Tünel tipi otomatik yıkama hattı.',
       icon: 'Droplets'
