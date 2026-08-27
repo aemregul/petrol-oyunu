@@ -36,8 +36,9 @@ export const HUD: React.FC = () => {
   const structureValue = useGameStore((s) => s.structureValue);
   const sellStructure = useGameStore((s) => s.sellStructure);
   const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
-  const relocateStructure = useGameStore((s) => s.relocateStructure);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
+  const editMode = useGameStore((s) => s.editMode);
+  const toggleEditMode = useGameStore((s) => s.toggleEditMode);
 
   const { player, dayState, tanks } = gameState;
 
@@ -63,12 +64,7 @@ export const HUD: React.FC = () => {
       name: GAME_CONFIG.buildings[type]?.name ?? type,
       value: structureValue(id),
       // Pumps have their own upgrade flow in the pump panel.
-      upgrade: pump ? null : GAME_CONFIG.buildingUpgrades[type]?.[level + 1] ?? null,
-      movable: !pump,
-      moveFee:
-        Math.round(
-          ((GAME_CONFIG.buildings[type]?.price ?? 0) * GAME_CONFIG.economy.moveFeeRatio) / 10
-        ) * 10
+      upgrade: pump ? null : GAME_CONFIG.buildingUpgrades[type]?.[level + 1] ?? null
     };
   })();
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
@@ -331,6 +327,21 @@ export const HUD: React.FC = () => {
           </div>
         )}
 
+        {editMode && !buildMode.active && (
+          <div className="bg-sky-950/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-5 py-2.5 shadow-2xl pointer-events-auto flex items-center gap-3 animate-fade-in">
+            <Move className="w-4 h-4 text-sky-400" />
+            <span className="text-xs font-bold text-white">
+              Düzenleme modu — taşımak istediğin yapıya tıkla
+            </span>
+            <button
+              onClick={toggleEditMode}
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-600"
+            >
+              Bitir
+            </button>
+          </div>
+        )}
+
         {/* Whatever the player has clicked on: what it is worth, and the two
             things they can do with it. */}
         {selected && !buildMode.active && (
@@ -350,16 +361,6 @@ export const HUD: React.FC = () => {
                 title={selected.upgrade.effectsDescription}
               >
                 <span>Sv{selected.level + 1} Yükselt · ₺{selected.upgrade.cost.toLocaleString('tr-TR')}</span>
-              </button>
-            )}
-            {selected.movable && (
-              <button
-                onClick={() => relocateStructure(selected.id)}
-                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-600 flex items-center gap-1.5"
-                title={`Taşıma ücreti ₺${selected.moveFee.toLocaleString('tr-TR')}`}
-              >
-                <Move className="w-3.5 h-3.5" />
-                <span>Taşı</span>
               </button>
             )}
             <button
@@ -416,6 +417,19 @@ export const HUD: React.FC = () => {
           >
             <Hammer className="w-4 h-4 text-amber-400" />
             <span>İnşaat</span>
+          </button>
+
+          {/* One switch for rearranging what is already built, in place of a
+              move button on every structure panel. */}
+          <button
+            onClick={toggleEditMode}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              editMode ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            }`}
+            title="Yapıları taşımak için aç, sonra taşımak istediğin yapıya tıkla"
+          >
+            <Move className={`w-4 h-4 ${editMode ? 'text-white' : 'text-sky-400'}`} />
+            <span>Düzenle</span>
           </button>
 
           <button

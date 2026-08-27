@@ -233,8 +233,13 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
   const selectBuilding = useGameStore((s) => s.selectBuilding);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
+  const editMode = useGameStore((s) => s.editMode);
+  const placing = useGameStore((s) => s.buildMode.active);
+  const relocateStructure = useGameStore((s) => s.relocateStructure);
 
   const isSelected = selectedBuildingId === building.id;
+  // Only while rearranging is a structure something to pick up.
+  const editable = editMode && !placing;
 
   // The price board's place is decided by the layout, not by where it happens
   // to be stored — so it is read straight from there and can never be seen
@@ -256,6 +261,14 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
 
   const handleClick = (e: any) => {
     e.stopPropagation();
+
+    // In edit mode a click lifts the structure straight into placement rather
+    // than opening whatever panel it owns.
+    if (editable) {
+      relocateStructure(building.id);
+      return;
+    }
+
     selectBuilding(building.id);
     if (building.type === 'office') setActiveModal('OFFICE');
     else if (building.type === 'price_sign') setActiveModal('PRICING');
@@ -315,13 +328,17 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
         />
       )}
 
-      {(hovered || isSelected) && (
-        <mesh position={[0, 0.07, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[ringRadius, ringRadius + 0.3, 32]} />
+      {/* Only while rearranging does a structure show that it can be picked
+          up, and it shows it as the ground it stands on rather than as a ring
+          floating around it. Outside that mode the forecourt is left alone. */}
+      {editable && (
+        <mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[building.size[0] * 2, building.size[1] * 2]} />
           <meshBasicMaterial
-            color={isSelected ? '#38bdf8' : '#e2e8f0'}
-            opacity={0.8}
+            color={hovered ? '#38bdf8' : '#e2e8f0'}
+            opacity={hovered ? 0.42 : 0.15}
             transparent
+            depthWrite={false}
           />
         </mesh>
       )}

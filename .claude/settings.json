@@ -148,7 +148,8 @@
       "Bash(sed -i '' '/    rotationOffset: 180,/d' src/rendering/models/buildingModels.ts)",
       "Bash(cp src/rendering/BuildingShowcase.tsx /tmp/showcase.bak)",
       "Bash(sed -i '' 's|deviceScaleFactor: 10|deviceScaleFactor: 2|; s|clip: { x: 500, y: 180, width: 80, height: 90 }|clip: { x: 500, y: 150, width: 620, height: 650 }|' .probe.mjs)",
-      "Bash(cp /tmp/showcase.bak src/rendering/BuildingShowcase.tsx)"
+      "Bash(cp /tmp/showcase.bak src/rendering/BuildingShowcase.tsx)",
+      "Bash(sed -i '' 's|  vehicleSide,\\\\n|&|' src/test/simulationEngine.test.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp"

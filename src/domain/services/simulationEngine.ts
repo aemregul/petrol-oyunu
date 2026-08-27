@@ -2299,6 +2299,75 @@ function loseCustomer(
 }
 
 /**
+ * Turns everybody out and sends them to the exit.
+ *
+ * Closing is meant to stop the station, not to leave it half-running: a driver
+ * mid-fill, one at the till and one browsing the shop would otherwise carry on
+ * as though nothing had happened, and the bays they hold would stay held. So
+ * every car that is on the forecourt drops what it is doing and drives out,
+ * and everything it was holding — a pump, an attendant, a fuel reservation —
+ * is given back.
+ *
+ * Fuel already in a tank is not clawed back: it left the pump, and nobody is
+ * going to pay for it now. That is the cost of shutting the doors mid-serve,
+ * and it is reported rather than quietly absorbed.
+ */
+export function closeForecourt(state: GameState): { left: number; unpaidLiters: number } {
+  let left = 0;
+  let unpaidLiters = 0;
+
+  for (const vehicle of Object.values(state.vehicles)) {
+    // Traffic on the road is none of the station's business, and anyone
+    // already on their way out needs no second telling.
+    if (
+      vehicle.state === 'SPAWN' ||
+      vehicle.state === 'PASSING' ||
+      vehicle.state === 'EXIT' ||
+      vehicle.state === 'DESPAWN'
+    ) {
+      continue;
+    }
+
+    const reserved = vehicle.request.calculatedLiters;
+    const dispensed = vehicle.request.dispensedLiters;
+
+    if (reserved > 0) {
+      // Whatever went into the car leaves the tank unpaid; the rest of the
+      // reservation goes back on the shelf.
+      if (dispensed > 0) {
+        TransactionService.dispenseFuel(state, vehicle.fuelType, dispensed);
+        vehicle.currentFuel = Math.min(vehicle.tankCapacity, vehicle.currentFuel + dispensed);
+        unpaidLiters += dispensed;
+      }
+      TransactionService.releaseFuelReservation(
+        state,
+        vehicle.fuelType,
+        Math.max(0, reserved - dispensed)
+      );
+      vehicle.request.calculatedLiters = 0;
+      vehicle.request.dispensedLiters = 0;
+    }
+
+    if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {
+      releasePump(state.pumps[vehicle.targetPumpId]);
+    }
+    vehicle.targetPumpId = null;
+
+    for (const employee of Object.values(state.employees)) {
+      if (employee.currentVehicleId === vehicle.id) employee.currentVehicleId = null;
+    }
+
+    vehicle.assignedActor = null;
+    vehicle.shoppingIntent = false;
+    setVehicleState(vehicle, 'EXIT');
+    setRoute(vehicle, exitRoute(state, vehicle));
+    left++;
+  }
+
+  return { left, unpaidLiters: Number(unpaidLiters.toFixed(1)) };
+}
+
+/**
  * Lets go of anything that is holding a reference to a vehicle that no longer
  * exists.
  *

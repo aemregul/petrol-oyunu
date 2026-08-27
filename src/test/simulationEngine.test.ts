@@ -25,6 +25,7 @@ import {
   FUEL_DEAL_DISCOUNT,
   vehicleSide,
   stopChance,
+  closeForecourt,
   DRIVEWAY_Z,
   LAYOUT
 } from '../domain/services/simulationEngine';
@@ -130,6 +131,38 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(state.pumps.pump_1.state).toBe('IDLE');
     expect(state.pumps.pump_1.currentVehicleId).toBeNull();
     expect(['OPTIONAL_SHOP', 'EXIT']).toContain(vehicle.state);
+  });
+
+  it('empties the forecourt the moment the station closes', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    advanceUntil(state, (s) => Object.values(s.vehicles).some((v) => v.state === 'AT_PUMP'), 600);
+
+    const vehicle = Object.values(state.vehicles).find((v) => v.state === 'AT_PUMP')!;
+    const effects = createEffects();
+    const stockBefore = state.tanks.gasoline.stock;
+
+    expect(beginFueling(state, vehicle, 'LITERS', 20, 'PLAYER', effects)).toBe(true);
+    for (let i = 0; i < 40; i++) dispenseStep(state, vehicle, 0.1, effects);
+    expect(vehicle.request.dispensedLiters).toBeGreaterThan(0);
+
+    const onSite = Object.values(state.vehicles).filter(
+      (v) => !['SPAWN', 'PASSING', 'EXIT', 'DESPAWN'].includes(v.state)
+    ).length;
+
+    const cleared = closeForecourt(state);
+
+    // Everyone drops what they are doing, and the bay they held comes back.
+    expect(cleared.left).toBe(onSite);
+    expect(vehicle.state).toBe('EXIT');
+    expect(state.pumps.pump_1.currentVehicleId).toBeNull();
+    expect(state.pumps.pump_1.state).toBe('IDLE');
+
+    // What was pumped is gone and unpaid; the rest of the hold is released, so
+    // closing mid-serve never leaves stock locked away for good.
+    expect(cleared.unpaidLiters).toBeGreaterThan(0);
+    expect(state.tanks.gasoline.stock).toBeCloseTo(stockBefore - cleared.unpaidLiters, 1);
+    expect(state.tanks.gasoline.reservedStock).toBeCloseTo(0, 1);
   });
 
   it('never lets a vehicle reach an invalid state', () => {

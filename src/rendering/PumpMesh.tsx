@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { PumpEntity, FuelType } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
 import { Html } from '@react-three/drei';
@@ -24,10 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
  * each face — both sides of an island serve a car.
  */
 export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
-  const [hovered, setHovered] = useState(false);
-  const selectedPumpId = useGameStore((s) => s.selectedPumpId);
   const selectPump = useGameStore((s) => s.selectPump);
-  const isSelected = selectedPumpId === pump.id;
 
   const posX = pump.position[0] * 2;
   const posZ = pump.position[1] * 2;
@@ -54,11 +51,6 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
         e.stopPropagation();
         selectPump(pump.id);
       }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHovered(true);
-      }}
-      onPointerOut={() => setHovered(false)}
     >
       {/* Concrete island, edged in painted yellow */}
       <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
@@ -187,13 +179,6 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
         <mesh position={[1.0, 0.95, 0.3]} rotation={[0, 0, Math.PI / 2.4]}>
           <cylinderGeometry args={[0.07, 0.07, 1.6, 8]} />
           <meshStandardMaterial color="#0f172a" roughness={0.9} />
-        </mesh>
-      )}
-
-      {(hovered || isSelected) && (
-        <mesh position={[0, 0.33, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.6, 1.85, 32]} />
-          <meshBasicMaterial color={isSelected ? '#38bdf8' : '#e2e8f0'} opacity={0.8} transparent />
         </mesh>
       )}
 

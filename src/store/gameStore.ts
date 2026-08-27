@@ -34,6 +34,7 @@ import {
   syncPriceSign,
   defaultMouthX,
   getLayout,
+  closeForecourt,
   DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
 import {
@@ -136,6 +137,13 @@ interface GameStore {
     wasMoved: boolean;
   } | null;
   landMode: LandModeState;
+  /**
+   * The forecourt is unlocked for rearranging. Off, the plot is scenery the
+   * player reads; on, every structure is something they can pick up. Keeping
+   * that a mode rather than a button on each structure is what stops the map
+   * being covered in handles the player did not ask for.
+   */
+  editMode: boolean;
   cameraAngle: number; // 0, 90, 180, 270
   cameraZoom: number; // 1 to 7
   /** Point on the ground the camera orbits, in world units. */
@@ -170,6 +178,8 @@ interface GameStore {
   toggleStationOpen: () => void;
   enterLandMode: () => void;
   exitLandMode: () => void;
+  /** Turns rearranging on or off; a click on a structure then lifts it. */
+  toggleEditMode: () => void;
   hoverParcel: (col: number, row: number) => void;
   buyHoveredParcel: () => boolean;
   paveHoveredParcel: () => boolean;
@@ -294,6 +304,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
   relocating: null,
   landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
+  editMode: false,
   cameraAngle: 225, // Yol sol üstten sağ alta iner, istasyon sağında kalır
   cameraZoom: 4,
   cameraTarget: [16, 12], // Küçük başlangıç arsasının merkezi (dünya birimi)
@@ -406,6 +417,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           rotation: 0,
           isValid: evaluatePlacement(state.gameState, buildingType, position, 0).valid
         },
+        editMode: false,
         activeModal: 'NONE'
       };
     });
@@ -873,14 +885,39 @@ export const useGameStore = create<GameStore>((set, get) => {
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     state.station.open = !state.station.open;
 
+    // Shutting the doors clears the forecourt there and then, rather than
+    // letting the cars already on it finish in a station that is closed.
+    const cleared = state.station.open ? { left: 0, unpaidLiters: 0 } : closeForecourt(state);
+
     SaveManager.saveGame(state);
-    set({ gameState: state });
+    set({
+      gameState: state,
+      // A dispensing panel for a car that has just driven off has nothing left
+      // to dispense into.
+      ...(cleared.left > 0 && get().activeModal === 'CUSTOMER_FUEL'
+        ? { activeModal: 'NONE' as const, selectedVehicleId: null }
+        : {})
+    });
+
+    if (state.station.open) {
+      get().addNotification({
+        type: 'INFO',
+        title: 'İstasyon Açıldı',
+        message: 'Yoldan müşteri kabul ediliyor.'
+      });
+      return;
+    }
+
     get().addNotification({
       type: 'INFO',
-      title: state.station.open ? 'İstasyon Açıldı' : 'İstasyon Kapatıldı',
-      message: state.station.open
-        ? 'Yoldan müşteri kabul ediliyor.'
-        : 'Tabelaya KAPALI yazıldı; sahadaki müşteriler tamamlandıktan sonra kimse gelmeyecek.'
+      title: 'İstasyon Kapatıldı',
+      message:
+        cleared.left > 0
+          ? `Tabelaya KAPALI yazıldı. Sahadaki ${cleared.left} araç işini bırakıp çıktı` +
+            (cleared.unpaidLiters > 0
+              ? ` — ${cleared.unpaidLiters} L yakıt ödenmeden gitti.`
+              : '.')
+          : 'Tabelaya KAPALI yazıldı; yoldan kimse gelmeyecek.'
     });
   },
 
@@ -889,6 +926,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     set({
       landMode: { active: true, hovered: null, action: 'NONE', price: 0, canBuy: false },
       buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
+      editMode: false,
       activeModal: 'NONE'
     });
   },
@@ -896,6 +934,25 @@ export const useGameStore = create<GameStore>((set, get) => {
   exitLandMode: () => {
     sounds.playClick();
     set({ landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false } });
+  },
+
+  toggleEditMode: () => {
+    sounds.playClick();
+    const on = !get().editMode;
+
+    // Buying land and rearranging it are two different jobs, and a structure
+    // panel left open belongs to neither.
+    set({
+      editMode: on,
+      selectedBuildingId: null,
+      selectedPumpId: null,
+      ...(on
+        ? {
+            landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
+            activeModal: 'NONE' as const
+          }
+        : {})
+    });
   },
 
   hoverParcel: (col, row) => {
