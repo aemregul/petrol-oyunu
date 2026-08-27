@@ -18,6 +18,10 @@ const STATUS_COLORS: Record<string, string> = {
 /**
  * The forecourt pump. Hand-built rather than a kit model: no CC0 pack ships a
  * fuel dispenser, and this is the object the player looks at most.
+ *
+ * Built as a filling-station dispenser is: a red cabinet in house colours with
+ * a white skirt, a pitched cap over the top, and a till panel and holster on
+ * each face — both sides of an island serve a car.
  */
 export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
   const [hovered, setHovered] = useState(false);
@@ -32,8 +36,9 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
   const isFueling = pump.state === 'FUELING';
   const isBroken = pump.state === 'BROKEN';
 
-  // Body darkens and gains trim as the pump is upgraded.
-  const bodyColor = pump.level >= 3 ? '#161c2e' : pump.level >= 2 ? '#1e293b' : '#334155';
+  // House red, deepening as the pump is upgraded.
+  const bodyColor = pump.level >= 3 ? '#a4161a' : pump.level >= 2 ? '#c1121f' : '#d92b2b';
+  const trimMetal = pump.level >= 3 ? 0.45 : pump.level >= 2 ? 0.3 : 0.18;
   const grime = Math.max(0, (70 - pump.health) / 70);
 
   // One coloured nozzle per fuel this pump can actually dispense.
@@ -55,15 +60,22 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
       }}
       onPointerOut={() => setHovered(false)}
     >
-      {/* Concrete island with a painted safety kerb */}
+      {/* Concrete island, edged in painted yellow */}
       <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
         <boxGeometry args={[2.4, 0.3, 4.4]} />
-        <meshStandardMaterial color="#6b7688" roughness={0.9} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.95} />
       </mesh>
-      <mesh position={[0, 0.31, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[2.5, 4.5]} />
-        <meshBasicMaterial color="#eab308" transparent opacity={0.35} />
-      </mesh>
+      {[
+        { pos: [1.14, 0.306, 0], size: [0.12, 0.02, 4.4] },
+        { pos: [-1.14, 0.306, 0], size: [0.12, 0.02, 4.4] },
+        { pos: [0, 0.306, 2.14], size: [2.4, 0.02, 0.12] },
+        { pos: [0, 0.306, -2.14], size: [2.4, 0.02, 0.12] }
+      ].map((strip, i) => (
+        <mesh key={i} position={strip.pos as [number, number, number]}>
+          <boxGeometry args={strip.size as [number, number, number]} />
+          <meshStandardMaterial color="#eab308" roughness={0.8} />
+        </mesh>
+      ))}
 
       {/* Bollards guarding each end of the island */}
       {[-1.85, 1.85].map((z) => (
@@ -73,62 +85,102 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
         </mesh>
       ))}
 
-      {/* Dispenser body */}
-      <mesh position={[0, 1.45, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.0, 2.3, 1.5]} />
-        <meshStandardMaterial color={bodyColor} roughness={0.45} metalness={0.35} />
+      {/* White skirt the cabinet stands on */}
+      <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.08, 0.24, 1.48]} />
+        <meshStandardMaterial color="#e7ebf0" roughness={0.6} />
+      </mesh>
+
+      {/* Cabinet */}
+      <mesh position={[0, 1.49, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.0, 1.9, 1.4]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.45} metalness={trimMetal} />
+      </mesh>
+
+      {/* White band around the waist */}
+      <mesh position={[0, 0.86, 0]}>
+        <boxGeometry args={[1.02, 0.2, 1.42]} />
+        <meshStandardMaterial color="#e7ebf0" roughness={0.6} />
       </mesh>
 
       {/* Wear shows as grime around the base */}
       {grime > 0 && (
-        <mesh position={[0, 0.6, 0]}>
-          <boxGeometry args={[1.04, 0.5, 1.54]} />
+        <mesh position={[0, 0.62, 0]}>
+          <boxGeometry args={[1.04, 0.36, 1.44]} />
           <meshStandardMaterial color="#3f3a33" roughness={1} transparent opacity={0.3 + grime * 0.4} />
         </mesh>
       )}
 
-      {/* Brand band in the fuel colours it serves */}
-      {nozzles.map((n, i) => (
-        <mesh key={n.fuel} position={[0, 2.35 - i * 0.16, 0]}>
-          <boxGeometry args={[1.03, 0.13, 1.53]} />
-          <meshStandardMaterial
-            color={n.color}
-            emissive={n.color}
-            emissiveIntensity={0.35}
-            toneMapped={false}
-          />
-        </mesh>
+      {/* Overhanging cap, pitched the way these are roofed */}
+      <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.3, 0.14, 1.7]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.45} metalness={trimMetal} />
+      </mesh>
+      <mesh
+        position={[0, 2.71, 0]}
+        rotation={[0, Math.PI / 4, 0]}
+        scale={[0.92, 0.28, 1.2]}
+        castShadow
+      >
+        <coneGeometry args={[1, 1, 4]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.45} metalness={trimMetal} />
+      </mesh>
+
+      {/* Status reads along the underside of the cap */}
+      <mesh position={[0, 2.4, 0]}>
+        <boxGeometry args={[1.02, 0.08, 1.42]} />
+        <meshStandardMaterial
+          color={statusColor}
+          emissive={statusColor}
+          emissiveIntensity={isFueling ? 1.4 : 0.55}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* Both faces serve a car, so both carry a till panel and a holster */}
+      {[1, -1].map((side) => (
+        <group key={side} position={[side * 0.508, 0, 0]} rotation={[0, (side * Math.PI) / 2, 0]}>
+          {/* Screen, in a dark surround */}
+          <mesh position={[0, 1.94, 0]}>
+            <planeGeometry args={[1.02, 0.78]} />
+            <meshStandardMaterial color="#1c1f26" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 1.96, 0.012]}>
+            <planeGeometry args={[0.88, 0.6]} />
+            <meshStandardMaterial
+              color={isBroken ? '#3f1d1d' : '#eef2f6'}
+              emissive={isBroken ? '#7f1d1d' : '#dbe6f0'}
+              emissiveIntensity={isBroken ? 0.5 : 0.45}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
       ))}
 
-      {/* Metering screens on both faces */}
-      {[0.52, -0.52].map((x) => (
-        <mesh key={x} position={[x, 1.62, 0]} rotation={[0, x > 0 ? Math.PI / 2 : -Math.PI / 2, 0]}>
-          <planeGeometry args={[1.0, 0.62]} />
-          <meshStandardMaterial
-            color={isBroken ? '#3f1d1d' : '#082f49'}
-            emissive={isBroken ? '#7f1d1d' : '#0ea5e9'}
-            emissiveIntensity={isBroken ? 0.4 : 0.8}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
+      {/* Nozzles racked on both faces, one per fuel */}
+      {[1, -1].map((side) =>
+        nozzles.map((n) => {
+          const z = (-0.42 + n.index * 0.42) * side;
+          return (
+            <group key={`${side}${n.fuel}`} position={[side * 0.56, 1.08, z]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.18, 0.4, 0.18]} />
+                <meshStandardMaterial color="#1c1f26" roughness={0.75} />
+              </mesh>
+              <mesh position={[side * 0.03, 0.25, 0]} castShadow>
+                <boxGeometry args={[0.16, 0.14, 0.15]} />
+                <meshStandardMaterial color={n.color} roughness={0.5} />
+              </mesh>
 
-      {/* Nozzles in their holsters, one per supported fuel */}
-      {nozzles.map((n) => {
-        const z = -0.45 + n.index * 0.45;
-        return (
-          <group key={n.fuel} position={[0.58, 1.15, z]}>
-            <mesh castShadow>
-              <boxGeometry args={[0.2, 0.42, 0.16]} />
-              <meshStandardMaterial color="#111827" roughness={0.7} />
-            </mesh>
-            <mesh position={[0.02, 0.26, 0]}>
-              <boxGeometry args={[0.16, 0.12, 0.14]} />
-              <meshStandardMaterial color={n.color} roughness={0.5} />
-            </mesh>
-          </group>
-        );
-      })}
+              {/* The hose hangs in a loop from the holster, as they do */}
+              <mesh position={[side * 0.05, -0.08, 0]} rotation={[0, Math.PI / 2, Math.PI]}>
+                <torusGeometry args={[0.16, 0.038, 6, 12, Math.PI]} />
+                <meshStandardMaterial color="#0f172a" roughness={0.9} />
+              </mesh>
+            </group>
+          );
+        })
+      )}
 
       {/* Hose running out to the car while it is being served */}
       {isFueling && (
@@ -137,17 +189,6 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
           <meshStandardMaterial color="#0f172a" roughness={0.9} />
         </mesh>
       )}
-
-      {/* Status beacon on top */}
-      <mesh position={[0, 2.68, 0]}>
-        <boxGeometry args={[0.8, 0.14, 1.2]} />
-        <meshStandardMaterial
-          color={statusColor}
-          emissive={statusColor}
-          emissiveIntensity={isFueling ? 1.5 : 0.6}
-          toneMapped={false}
-        />
-      </mesh>
 
       {(hovered || isSelected) && (
         <mesh position={[0, 0.33, 0]} rotation={[-Math.PI / 2, 0, 0]}>
