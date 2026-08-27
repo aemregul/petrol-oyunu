@@ -113,6 +113,16 @@ export const PerformanceOverlay: React.FC = () => {
             </button>
           </div>
 
+          {/* Enough to buy the whole catalogue several times over, so nothing
+              is left untested for want of cash. */}
+          <button
+            onClick={() => handleAddCheats(1_000_000_000)}
+            className="bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 justify-center"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>+1.000.000.000 TL</span>
+          </button>
+
           <button
             onClick={devUnlockEverything}
             className="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 justify-center"

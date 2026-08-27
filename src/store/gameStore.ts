@@ -35,6 +35,7 @@ import {
   defaultMouthX,
   getLayout,
   closeForecourt,
+  evictFromPump,
   DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
 import {
@@ -80,6 +81,9 @@ function flushEffects(state: GameState, effects: SimEffects): void {
 
   state.notifications = [...created.reverse(), ...state.notifications].slice(0, 20);
 }
+
+/** The level at which rearranging what is already built unlocks. */
+export const EDIT_MODE_LEVEL = 5;
 
 export type ActiveModalType =
   | 'NONE'
@@ -135,6 +139,12 @@ interface GameStore {
     origin: [number, number];
     rotation: 0 | 90 | 180 | 270;
     wasMoved: boolean;
+    /** Set when what is being carried is a bay rather than a building. */
+    pump?: {
+      supportedFuels: FuelType[];
+      flowRateLps: number;
+      employeeId: string | null;
+    };
   } | null;
   landMode: LandModeState;
   /**
@@ -417,7 +427,6 @@ export const useGameStore = create<GameStore>((set, get) => {
           rotation: 0,
           isValid: evaluatePlacement(state.gameState, buildingType, position, 0).valid
         },
-        editMode: false,
         activeModal: 'NONE'
       };
     });
@@ -433,20 +442,40 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (relocating && buildMode.buildingType === relocating.type) {
       const catalog = GAME_CONFIG.buildings[relocating.type];
       const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-      const id = 'bld_' + Math.random().toString(36).substring(2, 7);
 
-      state.buildings[id] = {
-        id,
-        type: relocating.type,
-        level: relocating.level,
-        position: relocating.origin,
-        rotation: relocating.rotation,
-        size: catalog?.size ?? [2, 2],
-        health: relocating.health,
-        movedByPlayer: relocating.wasMoved,
-        constructionState: 'ACTIVE',
-        builtAtTimestamp: Date.now()
-      };
+      if (relocating.pump) {
+        const id = 'pump_' + Math.random().toString(36).substring(2, 7);
+        state.pumps[id] = {
+          id,
+          level: relocating.level,
+          position: relocating.origin,
+          rotation: relocating.rotation,
+          supportedFuels: relocating.pump.supportedFuels,
+          state: 'IDLE',
+          health: relocating.health,
+          employeeId: relocating.pump.employeeId,
+          currentVehicleId: null,
+          flowRateLps: relocating.pump.flowRateLps
+        };
+        const attendant = relocating.pump.employeeId
+          ? state.employees[relocating.pump.employeeId]
+          : null;
+        if (attendant) attendant.assignedPumpId = id;
+      } else {
+        const id = 'bld_' + Math.random().toString(36).substring(2, 7);
+        state.buildings[id] = {
+          id,
+          type: relocating.type,
+          level: relocating.level,
+          position: relocating.origin,
+          rotation: relocating.rotation,
+          size: catalog?.size ?? [2, 2],
+          health: relocating.health,
+          movedByPlayer: relocating.wasMoved,
+          constructionState: 'ACTIVE',
+          builtAtTimestamp: Date.now()
+        };
+      }
 
       SaveManager.saveGame(state);
       set({ gameState: state });
@@ -581,19 +610,30 @@ export const useGameStore = create<GameStore>((set, get) => {
         builtAtTimestamp: Date.now()
       };
     } else if (catalog.category === 'pump') {
-      const newPumpId = 'pump_' + (Object.keys(state.pumps).length + 1);
+      // A bay set back down keeps the grades it dispensed and the wear it had;
+      // only a newly bought one starts as a plain petrol pump.
+      const newPumpId = 'pump_' + Math.random().toString(36).substring(2, 7);
       state.pumps[newPumpId] = {
         id: newPumpId,
-        level: 1,
+        level: carried?.level ?? 1,
         position: buildMode.position,
         rotation: buildMode.rotation,
-        supportedFuels: ['gasoline'],
+        supportedFuels: carried?.pump?.supportedFuels ?? ['gasoline'],
         state: 'IDLE',
-        health: 100,
+        health: carried?.health ?? 100,
         employeeId: null,
         currentVehicleId: null,
-        flowRateLps: 8
+        flowRateLps: carried?.pump?.flowRateLps ?? 8
       };
+
+      // The attendant who worked this bay follows it to its new spot.
+      const attendant = carried?.pump?.employeeId
+        ? state.employees[carried.pump.employeeId]
+        : null;
+      if (attendant) {
+        attendant.assignedPumpId = newPumpId;
+        state.pumps[newPumpId].employeeId = attendant.id;
+      }
     } else {
       // A wide ramp replaces the mouth it stands in for rather than adding a
       // second one beside it, so the ramp it supersedes is torn out first. The
@@ -642,8 +682,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
     }
 
-    // Award XP
-    const xpReward = Math.min(150, Math.round((catalog.price / 1000) * 3));
+    // Building something new is progress; shuffling what is already there is
+    // not, so a move earns nothing.
+    const xpReward = carried ? 0 : Math.min(150, Math.round((catalog.price / 1000) * 3));
     state.player.xp += xpReward;
 
     const effects = createEffects();
@@ -662,8 +703,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     get().addNotification({
       type: 'INFO',
-      title: 'İnşaat Tamamlandı',
-      message: `${catalog.name} başarıyla kuruldu. (+${xpReward} XP)`
+      title: carried ? 'Taşıma Tamamlandı' : 'İnşaat Tamamlandı',
+      message: carried
+        ? `${catalog.name} yeni yerine kondu.`
+        : `${catalog.name} başarıyla kuruldu. (+${xpReward} XP)`
     });
 
     return true;
@@ -826,10 +869,13 @@ export const useGameStore = create<GameStore>((set, get) => {
    */
   relocateStructure: (id) => {
     const { gameState } = get();
-    const building = gameState.buildings[id];
-    if (!building) return false;
+    // Bays live in their own collection but move exactly like anything else.
+    const isPump = !!gameState.pumps[id];
+    const source = isPump ? gameState.pumps[id] : gameState.buildings[id];
+    if (!source) return false;
 
-    const catalog = GAME_CONFIG.buildings[building.type];
+    const type = isPump ? 'pump_standard' : gameState.buildings[id].type;
+    const catalog = GAME_CONFIG.buildings[type];
     if (!catalog) return false;
 
     const fee = Math.round((catalog.price * GAME_CONFIG.economy.moveFeeRatio) / 10) * 10;
@@ -843,8 +889,20 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    const moved = state.buildings[id];
-    delete state.buildings[id];
+    let unpaidLiters = 0;
+
+    const moved = isPump ? state.pumps[id] : state.buildings[id];
+    if (isPump) {
+      // Whoever was being served at this bay has to be let go before it is
+      // lifted, or they wait for a dispenser that is no longer there.
+      unpaidLiters = evictFromPump(state, id);
+      for (const employee of Object.values(state.employees)) {
+        if (employee.assignedPumpId === id) employee.assignedPumpId = null;
+      }
+      delete state.pumps[id];
+    } else {
+      delete state.buildings[id];
+    }
 
     if (fee > 0) {
       TransactionService.executeCashTransaction(state, {
@@ -854,29 +912,51 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     }
 
+    const pump = isPump ? (moved as GameState['pumps'][string]) : null;
+    const building = isPump ? null : (moved as GameState['buildings'][string]);
+
     set({
       gameState: state,
       selectedBuildingId: null,
+      selectedPumpId: null,
       // Straight back into placement, holding what was just lifted, so the
       // level and the wear it had are not quietly reset by a rebuild.
       buildMode: {
         active: true,
-        buildingType: moved.type,
-        position: snapPlacement(state, moved.type, moved.position),
+        buildingType: type,
+        position: snapPlacement(state, type, moved.position),
         rotation: moved.rotation,
         isValid: false
       },
       relocating: {
-        type: moved.type,
+        type,
         level: moved.level,
         health: moved.health,
         // Kept so backing out puts it back exactly where it was.
         origin: moved.position,
         rotation: moved.rotation,
         // Whether the layout was still placing it before the player stepped in.
-        wasMoved: moved.movedByPlayer ?? false
+        wasMoved: building?.movedByPlayer ?? false,
+        ...(pump
+          ? {
+              pump: {
+                supportedFuels: pump.supportedFuels,
+                flowRateLps: pump.flowRateLps,
+                employeeId: pump.employeeId
+              }
+            }
+          : {})
       }
     });
+
+    if (unpaidLiters > 0) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Pompa Söküldü',
+        message: `Hizmet gören araç gönderildi — ${unpaidLiters} L yakıt ödenmeden gitti.`
+      });
+    }
+
     return true;
   },
 
@@ -926,7 +1006,6 @@ export const useGameStore = create<GameStore>((set, get) => {
     set({
       landMode: { active: true, hovered: null, action: 'NONE', price: 0, canBuy: false },
       buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
-      editMode: false,
       activeModal: 'NONE'
     });
   },
@@ -939,6 +1018,18 @@ export const useGameStore = create<GameStore>((set, get) => {
   toggleEditMode: () => {
     sounds.playClick();
     const on = !get().editMode;
+
+    // Rearranging a forecourt is a late-game luxury. Early on the plot is
+    // small enough that where things go is a decision to get right, not one to
+    // undo — and the move fee means it stays a cost even once it is unlocked.
+    if (on && get().gameState.player.level < EDIT_MODE_LEVEL) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Düzenleme Kilitli',
+        message: `Yapıları taşımak için Seviye ${EDIT_MODE_LEVEL} gerekiyor.`
+      });
+      return;
+    }
 
     // Buying land and rearranging it are two different jobs, and a structure
     // panel left open belongs to neither.

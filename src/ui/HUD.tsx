@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { Award, Building2, Cloud, CloudRain, Crosshair, Fuel, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
@@ -39,6 +39,7 @@ export const HUD: React.FC = () => {
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const editMode = useGameStore((s) => s.editMode);
   const toggleEditMode = useGameStore((s) => s.toggleEditMode);
+  const canEdit = gameState.player.level >= EDIT_MODE_LEVEL;
 
   const { player, dayState, tanks } = gameState;
 
@@ -327,21 +328,6 @@ export const HUD: React.FC = () => {
           </div>
         )}
 
-        {editMode && !buildMode.active && (
-          <div className="bg-sky-950/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-5 py-2.5 shadow-2xl pointer-events-auto flex items-center gap-3 animate-fade-in">
-            <Move className="w-4 h-4 text-sky-400" />
-            <span className="text-xs font-bold text-white">
-              Düzenleme modu — taşımak istediğin yapıya tıkla
-            </span>
-            <button
-              onClick={toggleEditMode}
-              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-600"
-            >
-              Bitir
-            </button>
-          </div>
-        )}
-
         {/* Whatever the player has clicked on: what it is worth, and the two
             things they can do with it. */}
         {selected && !buildMode.active && (
@@ -423,12 +409,23 @@ export const HUD: React.FC = () => {
               move button on every structure panel. */}
           <button
             onClick={toggleEditMode}
+            disabled={!canEdit}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              editMode ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+              !canEdit
+                ? 'text-slate-600 cursor-not-allowed'
+                : editMode
+                  ? 'bg-sky-600 text-white shadow-lg'
+                  : 'text-slate-300 hover:bg-slate-800'
             }`}
-            title="Yapıları taşımak için aç, sonra taşımak istediğin yapıya tıkla"
+            title={
+              canEdit
+                ? 'Yapıları taşımak için aç, sonra taşımak istediğin yapıya tıkla'
+                : `Seviye ${EDIT_MODE_LEVEL} gerekiyor`
+            }
           >
-            <Move className={`w-4 h-4 ${editMode ? 'text-white' : 'text-sky-400'}`} />
+            <Move
+              className={`w-4 h-4 ${editMode ? 'text-white' : canEdit ? 'text-sky-400' : 'text-slate-600'}`}
+            />
             <span>Düzenle</span>
           </button>
 

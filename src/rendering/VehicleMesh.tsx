@@ -1,4 +1,4 @@
-import React, { useState, useRef, Suspense } from 'react';
+import React, { useRef, Suspense } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { VehicleEntity } from '../domain/types/gameState';
@@ -20,10 +20,7 @@ interface VehicleMeshProps {
 }
 
 export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
-  const [hovered, setHovered] = useState(false);
-  const selectedVehicleId = useGameStore((s) => s.selectedVehicleId);
   const openFuelingPanel = useGameStore((s) => s.openFuelingPanelForVehicle);
-  const isSelected = selectedVehicleId === vehicle.id;
 
   // The parking offset lives in the route, so world position is used as-is.
   const posX = vehicle.worldPosition[0] * 2;
@@ -100,11 +97,6 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         e.stopPropagation();
         if (needsService) openFuelingPanel(vehicle.id);
       }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHovered(true);
-      }}
-      onPointerOut={() => setHovered(false)}
     >
       {/* Vehicle body: Kenney CC0 model, primitives kept as a fallback */}
       <ModelErrorBoundary fallback={<FallbackBody color={carColor} />}>
@@ -112,18 +104,6 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
           <VehicleModel archetype={vehicle.archetype} speed={isMoving ? vehicle.speed : 0} />
         </Suspense>
       </ModelErrorBoundary>
-
-      {/* Selection / Hover Indicator */}
-      {(hovered || isSelected || needsService) && (
-        <mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[2.2, 2.5, 32]} />
-          <meshBasicMaterial
-            color={isSelected ? '#38bdf8' : needsService ? '#22c55e' : '#e2e8f0'}
-            opacity={isSelected || hovered ? 0.85 : 0.5}
-            transparent
-          />
-        </mesh>
-      )}
 
       {/* Request bubble, only while the customer is waiting to be served */}
       {(needsService || isFueling) && (
@@ -136,7 +116,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
           <div
             className={`flex flex-col items-center transition-transform transform ${
               needsService ? 'cursor-pointer' : 'cursor-default'
-            } ${hovered ? 'scale-110' : 'scale-100'}`}
+            }`}
             onClick={(e) => {
               e.stopPropagation();
               if (needsService) openFuelingPanel(vehicle.id);

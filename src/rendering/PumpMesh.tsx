@@ -25,6 +25,12 @@ const STATUS_COLORS: Record<string, string> = {
  */
 export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
   const selectPump = useGameStore((s) => s.selectPump);
+  const editMode = useGameStore((s) => s.editMode);
+  const placing = useGameStore((s) => s.buildMode.active);
+  const relocateStructure = useGameStore((s) => s.relocateStructure);
+
+  // A bay is picked up the same way as anything else on the forecourt.
+  const editable = editMode && !placing;
 
   const posX = pump.position[0] * 2;
   const posZ = pump.position[1] * 2;
@@ -49,9 +55,19 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
       rotation={[0, (pump.rotation * Math.PI) / 180, 0]}
       onClick={(e) => {
         e.stopPropagation();
-        selectPump(pump.id);
+        if (editable) relocateStructure(pump.id);
+        else selectPump(pump.id);
       }}
     >
+      {/* Shown only while rearranging, so the forecourt is left alone
+          otherwise — the same treatment every other structure gets. */}
+      {editable && (
+        <mesh position={[0, 0.32, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[2.4, 4.4]} />
+          <meshBasicMaterial color="#38bdf8" opacity={0.28} transparent depthWrite={false} />
+        </mesh>
+      )}
+
       {/* Concrete island, edged in painted yellow */}
       <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
         <boxGeometry args={[2.4, 0.3, 4.4]} />

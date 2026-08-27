@@ -2049,6 +2049,10 @@ function blockAppeal(state: GameState, side: DrivewaySide): number {
  * player pulls most: charge above the region and the road keeps driving.
  */
 export function stopChance(state: GameState, side: DrivewaySide = 'near'): number {
+  // A shut station is one nobody pulls into. The road outside it carries on
+  // exactly as before — closing the doors is not closing the highway.
+  if (!state.station.open) return 0;
+
   const appeal = blockAppeal(state, side);
   if (appeal === 0) return 0;
 
@@ -2078,12 +2082,12 @@ function pickSpawnSide(state: GameState): DrivewaySide {
  *
  * How many drive past is the road's business: the hour and the weather, and
  * nothing the player owns. Whether any of them turns in is decided separately,
- * so a station with high prices — or no pumps at all — still sits beside a
- * working road rather than an empty one.
+ * so a station with high prices — or no pumps at all, or its shutters down —
+ * still sits beside a working road rather than an empty one.
  */
 function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): void {
   const vehicleCount = Object.keys(state.vehicles).length;
-  if (vehicleCount >= MAX_ACTIVE_VEHICLES || !state.station.open) return;
+  if (vehicleCount >= MAX_ACTIVE_VEHICLES) return;
 
   const hourlyMult = calculateHourlyTrafficMultiplier(hourOfDay(state.dayState.gameTime));
   const weatherMult =
@@ -2317,54 +2321,87 @@ export function closeForecourt(state: GameState): { left: number; unpaidLiters: 
   let unpaidLiters = 0;
 
   for (const vehicle of Object.values(state.vehicles)) {
-    // Traffic on the road is none of the station's business, and anyone
-    // already on their way out needs no second telling.
-    if (
-      vehicle.state === 'SPAWN' ||
-      vehicle.state === 'PASSING' ||
-      vehicle.state === 'EXIT' ||
-      vehicle.state === 'DESPAWN'
-    ) {
-      continue;
-    }
-
-    const reserved = vehicle.request.calculatedLiters;
-    const dispensed = vehicle.request.dispensedLiters;
-
-    if (reserved > 0) {
-      // Whatever went into the car leaves the tank unpaid; the rest of the
-      // reservation goes back on the shelf.
-      if (dispensed > 0) {
-        TransactionService.dispenseFuel(state, vehicle.fuelType, dispensed);
-        vehicle.currentFuel = Math.min(vehicle.tankCapacity, vehicle.currentFuel + dispensed);
-        unpaidLiters += dispensed;
-      }
-      TransactionService.releaseFuelReservation(
-        state,
-        vehicle.fuelType,
-        Math.max(0, reserved - dispensed)
-      );
-      vehicle.request.calculatedLiters = 0;
-      vehicle.request.dispensedLiters = 0;
-    }
-
-    if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {
-      releasePump(state.pumps[vehicle.targetPumpId]);
-    }
-    vehicle.targetPumpId = null;
-
-    for (const employee of Object.values(state.employees)) {
-      if (employee.currentVehicleId === vehicle.id) employee.currentVehicleId = null;
-    }
-
-    vehicle.assignedActor = null;
-    vehicle.shoppingIntent = false;
-    setVehicleState(vehicle, 'EXIT');
-    setRoute(vehicle, exitRoute(state, vehicle));
+    if (!isOnForecourt(vehicle)) continue;
+    unpaidLiters += dismissVehicle(state, vehicle);
     left++;
   }
 
   return { left, unpaidLiters: Number(unpaidLiters.toFixed(1)) };
+}
+
+/**
+ * Traffic on the road is none of the station's business, and anyone already on
+ * their way out needs no second telling.
+ */
+function isOnForecourt(vehicle: VehicleEntity): boolean {
+  return (
+    vehicle.state !== 'SPAWN' &&
+    vehicle.state !== 'PASSING' &&
+    vehicle.state !== 'EXIT' &&
+    vehicle.state !== 'DESPAWN'
+  );
+}
+
+/**
+ * Sends one car away mid-service, giving back everything it was holding.
+ * Returns the litres that went into it and will never be paid for.
+ */
+function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
+  const reserved = vehicle.request.calculatedLiters;
+  const dispensed = vehicle.request.dispensedLiters;
+  let unpaid = 0;
+
+  if (reserved > 0) {
+    // Whatever went into the car leaves the tank unpaid; the rest of the
+    // reservation goes back on the shelf.
+    if (dispensed > 0) {
+      TransactionService.dispenseFuel(state, vehicle.fuelType, dispensed);
+      vehicle.currentFuel = Math.min(vehicle.tankCapacity, vehicle.currentFuel + dispensed);
+      unpaid = dispensed;
+    }
+    TransactionService.releaseFuelReservation(
+      state,
+      vehicle.fuelType,
+      Math.max(0, reserved - dispensed)
+    );
+    vehicle.request.calculatedLiters = 0;
+    vehicle.request.dispensedLiters = 0;
+  }
+
+  if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {
+    releasePump(state.pumps[vehicle.targetPumpId]);
+  }
+  vehicle.targetPumpId = null;
+
+  for (const employee of Object.values(state.employees)) {
+    if (employee.currentVehicleId === vehicle.id) employee.currentVehicleId = null;
+  }
+
+  vehicle.assignedActor = null;
+  vehicle.shoppingIntent = false;
+  setVehicleState(vehicle, 'EXIT');
+  setRoute(vehicle, exitRoute(state, vehicle));
+
+  return unpaid;
+}
+
+/**
+ * Clears a bay before it is picked up or sold.
+ *
+ * A pump can be carried off while a car is at it, and the car has no way of
+ * knowing: it would sit waiting on a dispenser that no longer exists, holding
+ * a fuel reservation nobody will ever release. So whoever was using it, or on
+ * their way to it, is sent on their way first.
+ */
+export function evictFromPump(state: GameState, pumpId: string): number {
+  let unpaidLiters = 0;
+
+  for (const vehicle of Object.values(state.vehicles)) {
+    if (vehicle.targetPumpId !== pumpId || !isOnForecourt(vehicle)) continue;
+    unpaidLiters += dismissVehicle(state, vehicle);
+  }
+
+  return Number(unpaidLiters.toFixed(1));
 }
 
 /**
