@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
+import { cameraOffsets } from './cameraFrame';
 
 /**
  * Orbits an isometric-style camera around a pannable ground target. Angle,
@@ -32,9 +33,7 @@ export const IsometricCamera: React.FC = () => {
     targetRef.current.z += (cameraTarget[1] - targetRef.current.z) * ease;
 
     const rad = (angleRef.current * Math.PI) / 180;
-    const zoomOut = 7 - zoomRef.current;
-    const distance = 26 + zoomOut * 7;
-    const height = 20 + zoomOut * 5;
+    const { distance, height } = cameraOffsets(zoomRef.current);
 
     desiredPos.current.set(
       targetRef.current.x + Math.sin(rad) * distance,

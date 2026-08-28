@@ -45,6 +45,8 @@ import {
 } from '../domain/services/placement';
 import {
   stationBounds,
+  ownedBounds,
+  FAR_SIDE_FRONT,
   parcelKey,
   isBuyable,
   parcelPrice,
@@ -52,6 +54,7 @@ import {
   isOwned
 } from '../domain/services/land';
 import { sounds } from '../audio/soundEffects';
+import { zoomToFit } from '../rendering/cameraFrame';
 
 const SOUND_PLAYERS: Record<SoundCue, () => void> = {
   click: () => sounds.playClick(),
@@ -84,6 +87,46 @@ function flushEffects(state: GameState, effects: SimEffects): void {
 
 /** The level at which rearranging what is already built unlocks. */
 export const EDIT_MODE_LEVEL = 5;
+
+/**
+ * How far the camera may be panned, in world units: the land the player owns
+ * plus a margin, so the edges of the plot can be brought to the middle of the
+ * screen rather than only to its corner. The highway itself always stays
+ * reachable, even before anything is bought across it.
+ */
+/** Camera target and zoom that hold every parcel the player owns on screen. */
+function frameOwnedLand(state: GameState): {
+  cameraTarget: [number, number];
+  cameraZoom: number;
+} {
+  const owned = ownedBounds(state.station.plots.ownedParcels);
+  const minX = owned.minX * 2;
+  const maxX = owned.width * 2;
+  const minZ = owned.minZ * 2;
+  const maxZ = owned.height * 2;
+
+  return {
+    cameraTarget: [(minX + maxX) / 2, (minZ + maxZ) / 2],
+    cameraZoom: zoomToFit(Math.max(maxX - minX, maxZ - minZ))
+  };
+}
+
+function panBounds(ownedParcels: string[]): {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+} {
+  const owned = ownedBounds(ownedParcels);
+  const margin = 24;
+
+  return {
+    minX: owned.minX * 2 - margin,
+    maxX: owned.width * 2 + margin,
+    minZ: Math.min(owned.minZ * 2, FAR_SIDE_FRONT * 2) - margin,
+    maxZ: owned.height * 2 + margin
+  };
+}
 
 export type ActiveModalType =
   | 'NONE'
@@ -316,8 +359,11 @@ export const useGameStore = create<GameStore>((set, get) => {
   landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
   editMode: false,
   cameraAngle: 225, // Yol sol üstten sağ alta iner, istasyon sağında kalır
-  cameraZoom: 4,
-  cameraTarget: [16, 12], // Küçük başlangıç arsasının merkezi (dünya birimi)
+  // Framed on the land in the save rather than on the starting forecourt: a
+  // player coming back to a grown plot should not open on a corner of it.
+  // A new game owns the 2x2 starting block, which frames to the same view
+  // this used to hold outright.
+  ...frameOwnedLand(revived.state),
   perfMetrics: {
     fps: 60,
     activeVehicles: 0,
@@ -362,10 +408,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       const worldX = (screenDeltaX * cos + screenDeltaY * sin) * scale;
       const worldZ = (-screenDeltaX * sin + screenDeltaY * cos) * scale;
 
+      // How far the view may travel follows the land, rather than a box drawn
+      // around the starting plot: a parcel bought across the highway sits at
+      // negative z, well outside that box, and could never be centred on.
+      const limit = panBounds(state.gameState.station.plots.ownedParcels);
+
       return {
         cameraTarget: [
-          Math.max(-30, Math.min(90, state.cameraTarget[0] - worldX)),
-          Math.max(-30, Math.min(80, state.cameraTarget[1] - worldZ))
+          Math.max(limit.minX, Math.min(limit.maxX, state.cameraTarget[0] - worldX)),
+          Math.max(limit.minZ, Math.min(limit.maxZ, state.cameraTarget[1] - worldZ))
         ]
       };
     });
@@ -373,7 +424,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   resetCamera: () => {
     sounds.playClick();
-    set({ cameraTarget: [16, 12], cameraZoom: 4, cameraAngle: 225 });
+    // Centre on everything the player owns and pull back far enough to hold
+    // it all. Returning to a fixed spot over the starting forecourt is no use
+    // once the plot has grown, least of all across the highway.
+    set({ ...frameOwnedLand(get().gameState), cameraAngle: 225 });
   },
 
   addNotification: (notif) => {
