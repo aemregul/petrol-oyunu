@@ -204,6 +204,10 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
 /**
  * `height` is where the board hangs, in world units — only for the hand-built
  * meshes, whose height is known here. A type with a model measures its own.
+ *
+ * Not everything gets a board. A bay of batteries, a substation, a marked-out
+ * lorry park: these read as what they are from their own shape, and a name
+ * plate over each one turns the forecourt into a wall of labels.
  */
 const SIGNAGE: Record<
   string,
@@ -219,11 +223,7 @@ const SIGNAGE: Record<
   oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, color: '#d97706', textColor: '#ffffff' },
   tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, color: '#0369a1', textColor: '#ffffff' },
   air_water: { text: 'HAVA & SU', height: 3.4, color: '#0f172a', textColor: '#ffffff' },
-  car_park: { text: 'OTOPARK', height: 1.6, color: '#0f172a', textColor: '#ffffff' },
-  truck_park: { text: 'TIR PARKI', height: 3.4, color: '#d97706', textColor: '#ffffff' },
-  ev_substation: { text: '⚡ ALTYAPI', height: 8.6, color: '#eab308', textColor: '#020617' },
   hotel: { text: 'OTEL', color: '#4f46e5', textColor: '#ffffff' },
-  ev_storage: { text: 'ENERJİ DEPOLAMA', height: 3.6, color: '#059669', textColor: '#ffffff' },
   ev_charger_ac: { text: 'AC ŞARJ', height: 3, color: '#059669', textColor: '#ffffff' },
   ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, color: '#ea580c', textColor: '#ffffff' }
 };

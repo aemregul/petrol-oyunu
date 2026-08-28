@@ -89,7 +89,7 @@ export const PylonSign: React.FC = () => {
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     return tex;
   }, [name, isOpen]);
 
@@ -122,11 +122,17 @@ export const PylonSign: React.FC = () => {
           [1, -1].map((facing) => (
             <mesh
               key={facing}
-              position={[0, 0, facing * 0.27]}
+              position={[0, 0, facing * 0.3]}
               rotation={[0, facing > 0 ? 0 : Math.PI, 0]}
             >
               <planeGeometry args={[BOARD_W, BOARD_H]} />
-              <meshBasicMaterial map={texture} toneMapped={false} />
+              <meshBasicMaterial
+                map={texture}
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
             </mesh>
           ))}
       </group>

@@ -173,7 +173,7 @@ export const PriceTotem: React.FC<PriceTotemProps> = ({ level }) => {
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     return tex;
   }, [boardKey, spec.width, spec.height, rows, stationName, isOpen]);
 
@@ -204,11 +204,17 @@ export const PriceTotem: React.FC<PriceTotemProps> = ({ level }) => {
         [1, -1].map((facing) => (
           <mesh
             key={facing}
-            position={[0, plinth + height / 2, facing * (depth / 2 + 0.012)]}
+            position={[0, plinth + height / 2, facing * (depth / 2 + 0.04)]}
             rotation={[0, facing > 0 ? 0 : Math.PI, 0]}
           >
             <planeGeometry args={[width - faceInset, height - faceInset]} />
-            <meshBasicMaterial map={texture} toneMapped={false} />
+            <meshBasicMaterial
+              map={texture}
+              toneMapped={false}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
           </mesh>
         ))}
 

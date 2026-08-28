@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import * as THREE from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
 
 /**
@@ -353,10 +354,32 @@ export const EvSubstation: React.FC<FacilityProps> = () => (
   </group>
 );
 
-/** Battery bank: a row of cabinets on a plinth with cooling fins. */
+/** A lightning bolt, drawn once and shared by every battery cabinet. */
+const BOLT_SHAPE = (() => {
+  const bolt = new THREE.Shape();
+  bolt.moveTo(0.05, 0.5);
+  bolt.lineTo(-0.24, -0.04);
+  bolt.lineTo(-0.04, -0.04);
+  bolt.lineTo(-0.14, -0.5);
+  bolt.lineTo(0.24, 0.06);
+  bolt.lineTo(0.03, 0.06);
+  bolt.closePath();
+  return bolt;
+})();
+
+/**
+ * Battery bank: a row of cabinets on a plinth.
+ *
+ * It carries no name board. What it is has to be legible from the cabinets
+ * themselves, so each one is framed in the green these units are marked in and
+ * struck with a bolt — the two things every battery enclosure on a forecourt
+ * actually wears.
+ */
 export const EnergyStorage: React.FC<FacilityProps> = ({ building }) => {
   const { w, d } = dims(building);
   const cabinets = [-w * 0.28, 0, w * 0.28];
+  const face = d * 0.25;
+  const panelW = w * 0.2;
 
   return (
     <group>
@@ -370,9 +393,42 @@ export const EnergyStorage: React.FC<FacilityProps> = ({ building }) => {
             <boxGeometry args={[w * 0.24, 2.1, d * 0.5]} />
             <meshStandardMaterial color="#334155" roughness={0.5} metalness={0.35} />
           </mesh>
-          {/* Charge indicator strip */}
-          <mesh position={[0, 2.1, d * 0.26]}>
-            <planeGeometry args={[w * 0.16, 0.18]} />
+
+          {/* Green surround on both faces, with the door recessed inside it */}
+          {[1, -1].map((facing) => (
+            <group
+              key={facing}
+              position={[0, 1.35, facing * (face + 0.03)]}
+              rotation={[0, facing > 0 ? 0 : Math.PI, 0]}
+            >
+              <mesh>
+                <planeGeometry args={[panelW, 1.72]} />
+                <meshStandardMaterial
+                  color="#22c55e"
+                  emissive="#22c55e"
+                  emissiveIntensity={0.75}
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh position={[0, 0, 0.012]}>
+                <planeGeometry args={[panelW - 0.18, 1.54]} />
+                <meshStandardMaterial color="#1e293b" roughness={0.6} />
+              </mesh>
+              <mesh position={[0, 0, 0.024]} scale={[panelW * 1.15, panelW * 1.15, 1]}>
+                <shapeGeometry args={[BOLT_SHAPE]} />
+                <meshStandardMaterial
+                  color="#22c55e"
+                  emissive="#22c55e"
+                  emissiveIntensity={1.1}
+                  toneMapped={false}
+                />
+              </mesh>
+            </group>
+          ))}
+
+          {/* Charge indicator across the top of the cabinet */}
+          <mesh position={[0, 2.46, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[w * 0.16, d * 0.3]} />
             <meshStandardMaterial
               color="#22c55e"
               emissive="#22c55e"

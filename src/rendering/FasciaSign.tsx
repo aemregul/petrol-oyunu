@@ -37,6 +37,18 @@ interface FasciaSignProps {
 const FONT = '"Chakra Petch", system-ui, sans-serif';
 const THICKNESS = 0.14;
 
+/**
+ * How far the lettered face stands off the board behind it.
+ *
+ * It used to be a hundredth of a unit, which is below what the depth buffer
+ * can tell apart at the distance these are viewed from: the board and its
+ * lettering took turns winning, and the sign broke into moving diagonal
+ * stripes as the camera turned. A wider gap fixes the common case and the
+ * polygon offset below fixes the rest, by biasing the face toward the camera
+ * in depth regardless of how far away it is.
+ */
+const FACE_GAP = 0.04;
+
 /** How deep a board of a given width is drawn. */
 export function fasciaBoardHeight(width: number): number {
   return Math.min(1.1, Math.max(0.6, width * 0.2));
@@ -84,7 +96,7 @@ export const FasciaSign: React.FC<FasciaSignProps> = ({
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     return tex;
   }, [text, color, textColor, width, boardHeight]);
 
@@ -101,9 +113,15 @@ export const FasciaSign: React.FC<FasciaSignProps> = ({
           <boxGeometry args={[width + 0.16, boardHeight + 0.16, THICKNESS]} />
           <meshStandardMaterial color="#1e293b" roughness={0.8} />
         </mesh>
-        <mesh position={[0, 0, THICKNESS / 2 + 0.01]}>
+        <mesh position={[0, 0, THICKNESS / 2 + FACE_GAP]}>
           <planeGeometry args={[width, boardHeight]} />
-          <meshBasicMaterial map={texture} toneMapped={false} />
+          <meshBasicMaterial
+            map={texture}
+            toneMapped={false}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
       </group>
     );
@@ -120,11 +138,17 @@ export const FasciaSign: React.FC<FasciaSignProps> = ({
       {[1, -1].map((facing) => (
         <mesh
           key={facing}
-          position={[0, 0, facing * (THICKNESS / 2 + 0.01)]}
+          position={[0, 0, facing * (THICKNESS / 2 + FACE_GAP)]}
           rotation={[0, facing > 0 ? 0 : Math.PI, 0]}
         >
           <planeGeometry args={[width, boardHeight]} />
-          <meshBasicMaterial map={texture} toneMapped={false} />
+          <meshBasicMaterial
+            map={texture}
+            toneMapped={false}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
       ))}
     </group>
