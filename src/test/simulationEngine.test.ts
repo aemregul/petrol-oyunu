@@ -1139,3 +1139,194 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(vehicle.worldPosition[2]).toBeCloseTo(getLayout(state).roadLaneZ, 3);
   });
 });
+
+describe('withdrawing a service mid-visit', () => {
+  // Selling or carting off the hardware somebody is being served by is the
+  // player's own way of losing a customer. The car must leave at once — not
+  // wait out a patience timer at a post that no longer exists — and it must
+  // cost the station its name the way any lost customer does.
+
+  it('sends a charging customer away, at a price, when their post is removed', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+
+    state.buildings.dc = {
+      id: 'dc', type: 'ev_charger_dc', level: 1, position: [13, 8], rotation: 0,
+      size: [1, 2], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    state.buildings.sub = {
+      id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc'),
+      6000
+    );
+    const car = Object.values(state.vehicles).find((v) => v.chargingBuildingId === 'dc')!;
+    const reputation = state.player.reputation;
+    const lost = state.dayState.todayStats.customersLost;
+
+    delete state.buildings.dc;
+    advance(state, 1);
+
+    expect(car.chargingBuildingId).toBeNull();
+    expect(['EXIT', 'DESPAWN']).toContain(car.state);
+    expect(state.player.reputation).toBeLessThan(reputation);
+    expect(state.dayState.todayStats.customersLost).toBe(lost + 1);
+  });
+
+  it('cuts off a plugged-in charge when the substation is sold, not just the queue', () => {
+    // The guard used to check only that the charger building still existed, so
+    // selling the substation left customers charging at dead hardware — and
+    // paying for it.
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+
+    state.buildings.dc = {
+      id: 'dc', type: 'ev_charger_dc', level: 1, position: [13, 8], rotation: 0,
+      size: [1, 2], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    state.buildings.sub = {
+      id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc'),
+      6000
+    );
+    const car = Object.values(state.vehicles).find((v) => v.chargingBuildingId === 'dc')!;
+    const served = state.dayState.todayStats.customersServed;
+
+    delete state.buildings.sub;
+    advance(state, 1);
+
+    expect(car.chargingBuildingId).toBeNull();
+    expect(['EXIT', 'DESPAWN']).toContain(car.state);
+    // And they were not billed for electricity that never flowed.
+    expect(state.dayState.todayStats.customersServed).toBe(served);
+  });
+
+  it('never releases a reservation the evicted customer did not hold', () => {
+    // A reservation is made in beginFueling and nowhere else. Clearing a
+    // queue used to release each queued car's *intended* litres, which ate
+    // the live hold of the customer actually at the pump.
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.reputation = 5;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.8;
+
+    advanceUntil(
+      state,
+      (s) =>
+        Object.values(s.vehicles).some((v) => v.state === 'AT_PUMP') &&
+        Object.values(s.vehicles).some((v) => v.state === 'QUEUE'),
+      4000
+    );
+    const atPump = Object.values(state.vehicles).find((v) => v.state === 'AT_PUMP')!;
+    const effects = createEffects();
+    expect(beginFueling(state, atPump, 'LITERS', 20, 'PLAYER', effects)).toBe(true);
+    expect(state.tanks.gasoline.reservedStock).toBeCloseTo(20, 1);
+
+    // Selling the pumps clears the queue — but only the queue's own holds,
+    // of which there are none.
+    state.pumps = {};
+    advance(state, 1);
+
+    expect(
+      Object.values(state.vehicles).filter((v) => v.state === 'QUEUE')
+    ).toHaveLength(0);
+    expect(state.tanks.gasoline.reservedStock).toBeCloseTo(20, 1);
+  });
+
+  it('loses the visitor inside a facility that is sold, unless an upgrade absorbed it', () => {
+    // A shop-only forecourt: no pumps, one shop. The drivers who stop are
+    // there for the shop and nothing else.
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.pumps = {};
+    state.market.active = true;
+    state.buildings.mk = {
+      id: 'mk', type: 'mini_market', level: 1, position: [10, 8], rotation: 0,
+      size: [5, 5], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.state === 'OPTIONAL_SHOP'),
+      6000
+    );
+    const shopper = Object.values(state.vehicles).find((v) => v.state === 'OPTIONAL_SHOP')!;
+    expect(shopper.visitBuildingId).toBe('mk');
+
+    const lost = state.dayState.todayStats.customersLost;
+    const reputation = state.player.reputation;
+    delete state.buildings.mk;
+    advance(state, 1);
+
+    expect(['EXIT', 'DESPAWN']).toContain(shopper.state);
+    expect(state.dayState.todayStats.customersLost).toBe(lost + 1);
+    expect(state.player.reputation).toBeLessThan(reputation);
+  });
+
+  it('moves a visit into the rest complex that absorbed its shop', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.pumps = {};
+    state.market.active = true;
+    state.buildings.mk = {
+      id: 'mk', type: 'mini_market', level: 1, position: [10, 8], rotation: 0,
+      size: [5, 5], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.state === 'OPTIONAL_SHOP'),
+      6000
+    );
+    const shopper = Object.values(state.vehicles).find((v) => v.state === 'OPTIONAL_SHOP')!;
+
+    // The shop is built over, not torn down: its customer keeps shopping.
+    delete state.buildings.mk;
+    state.buildings.rc = {
+      id: 'rc', type: 'rest_complex', level: 1, position: [10, 8], rotation: 0,
+      size: [12, 6], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    const lost = state.dayState.todayStats.customersLost;
+    advance(state, 0.5);
+
+    expect(shopper.visitBuildingId).toBe('rc');
+    expect(state.dayState.todayStats.customersLost).toBe(lost);
+  });
+
+  it('clears the queue at once when the last pump on the block is sold', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.reputation = 5;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.8;
+
+    advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((v) => v.state === 'QUEUE'),
+      4000
+    );
+    const queued = Object.values(state.vehicles).find((v) => v.state === 'QUEUE')!;
+    const lost = state.dayState.todayStats.customersLost;
+
+    state.pumps = {};
+    advance(state, 1);
+
+    // Gone immediately — a full patience bar is no reason to keep a driver
+    // waiting for a pump that has been carted off in front of them.
+    expect(['EXIT', 'DESPAWN']).toContain(queued.state);
+    expect(state.dayState.todayStats.customersLost).toBeGreaterThan(lost);
+    expect(state.player.reputation).toBeLessThan(5);
+  });
+});

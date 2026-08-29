@@ -113,6 +113,12 @@ export interface VehicleEntity {
     calculatedPrice: number;
     dispensedLiters: number;
     isFinished: boolean;
+    /**
+     * Litres actually held against the tank right now. Zero until fueling
+     * begins: `calculatedLiters` before that is only what the driver intends
+     * to buy, and releasing an intention would eat somebody else's hold.
+     */
+    reservedLiters?: number;
   };
   patience: number;
   maxPatience: number;
@@ -136,6 +142,12 @@ export interface VehicleEntity {
   blockedSeconds?: number;
   /** Charging point this driver is plugged into, for electric customers. */
   chargingBuildingId?: string | null;
+  /**
+   * The facility an OPTIONAL_SHOP customer is actually inside. The till bills
+   * the parade in aggregate, but the person is standing in one building — and
+   * if the player sells that building, it is this visitor who storms off.
+   */
+  visitBuildingId?: string | null;
   /** Seconds of charging still to go. */
   chargeSecondsLeft?: number;
   /**

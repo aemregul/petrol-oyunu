@@ -1723,7 +1723,8 @@ export function beginFueling(
     calculatedLiters: reservation.reservedLiters,
     calculatedPrice: Number((reservation.reservedLiters * unitPrice).toFixed(2)),
     dispensedLiters: 0,
-    isFinished: false
+    isFinished: false,
+    reservedLiters: reservation.reservedLiters
   };
   vehicle.assignedActor = actor;
 
@@ -1857,6 +1858,12 @@ export function finalizeSale(
   TransactionService.dispenseFuel(state, vehicle.fuelType, dispensed);
   vehicle.currentFuel = Math.min(vehicle.tankCapacity, vehicle.currentFuel + dispensed);
 
+  // An interrupted fill settled for less than it reserved; the difference
+  // goes back on the shelf now, not at the end of the day.
+  const heldOver = Math.max(0, (vehicle.request.reservedLiters ?? 0) - dispensed);
+  if (heldOver > 0) TransactionService.releaseFuelReservation(state, vehicle.fuelType, heldOver);
+  vehicle.request.reservedLiters = 0;
+
   const speedRatio = clamp((vehicle.patience / vehicle.maxPatience) * 100, 0, 100);
   const accuracy = vehicle.request.isFinished ? 100 : 80;
   const facilities = blockFacilities(state, vehicleSide(vehicle));
@@ -1942,6 +1949,7 @@ export function finalizeSale(
   if (vehicle.shoppingIntent) {
     setVehicleState(vehicle, 'OPTIONAL_SHOP');
     vehicle.waitingTimeSeconds = 0;
+    vehicle.visitBuildingId = pickVisitBuilding(state, vehicleSide(vehicle));
   } else {
     sendAway(state, vehicle);
   }
@@ -1951,6 +1959,32 @@ export function finalizeSale(
   trackMissionMetric(state, 'FUEL_REVENUE', totalSale, effects);
   trackMissionMetric(state, 'TIPS_EARNED', tip, effects);
   if (served >= 1) playCue(effects, 'cash');
+}
+
+/**
+ * Which of the side's facilities this customer walks into.
+ *
+ * Revenue is billed in aggregate, but a customer is one person inside one
+ * building — and when the player sells that building out from under them, it
+ * is that building's visitor who leaves unserved. Weighted by the same service
+ * odds the till uses, so the busy facilities hold the most customers.
+ */
+function pickVisitBuilding(state: GameState, side: DrivewaySide): string | null {
+  const weight = (type: string) =>
+    GAME_CONFIG.buildingEffects[type]?.service?.chance ??
+    (type === 'mini_market' || type === 'toilet' ? 0.2 : 0);
+
+  const candidates = Object.values(state.buildings).filter(
+    (b) => drivewaySideAt(b.position[1]) === side && weight(b.type) > 0
+  );
+  if (candidates.length === 0) return null;
+
+  let roll = Math.random() * candidates.reduce((sum, b) => sum + weight(b.type), 0);
+  for (const b of candidates) {
+    roll -= weight(b.type);
+    if (roll <= 0) return b.id;
+  }
+  return candidates[candidates.length - 1].id;
 }
 
 /** Rings up the mini-market basket for a customer leaving the shop. */
@@ -2646,14 +2680,24 @@ function loseCustomer(
     releasePump(state.pumps[vehicle.targetPumpId]);
     vehicle.targetPumpId = null;
   }
-  if (vehicle.request.calculatedLiters > vehicle.request.dispensedLiters) {
+
+  // Only what was actually held against the tank goes back. A reservation
+  // exists once fueling has begun and not before — a queued car's intended
+  // litres, or an electric customer's kWh, were never held, and releasing
+  // them would eat some other customer's live hold and oversell the tank.
+  const reserved = vehicle.request.reservedLiters ?? 0;
+  if (reserved > vehicle.request.dispensedLiters) {
     TransactionService.releaseFuelReservation(
       state,
       vehicle.fuelType,
-      vehicle.request.calculatedLiters - vehicle.request.dispensedLiters
+      reserved - vehicle.request.dispensedLiters
     );
   }
+  vehicle.request.reservedLiters = 0;
 
+  vehicle.chargingBuildingId = null;
+  vehicle.chargeSecondsLeft = 0;
+  vehicle.visitBuildingId = null;
   vehicle.assignedActor = null;
   sendAway(state, vehicle);
 
@@ -2705,7 +2749,7 @@ function isOnForecourt(vehicle: VehicleEntity): boolean {
  * Returns the litres that went into it and will never be paid for.
  */
 function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
-  const reserved = vehicle.request.calculatedLiters;
+  const reserved = vehicle.request.reservedLiters ?? 0;
   const dispensed = vehicle.request.dispensedLiters;
   let unpaid = 0;
 
@@ -2722,6 +2766,7 @@ function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
       vehicle.fuelType,
       Math.max(0, reserved - dispensed)
     );
+    vehicle.request.reservedLiters = 0;
     vehicle.request.calculatedLiters = 0;
     vehicle.request.dispensedLiters = 0;
   }
@@ -2750,15 +2795,26 @@ function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
  * a fuel reservation nobody will ever release. So whoever was using it, or on
  * their way to it, is sent on their way first.
  */
-export function evictFromPump(state: GameState, pumpId: string): number {
+export function evictFromPump(
+  state: GameState,
+  pumpId: string
+): { unpaidLiters: number; evicted: number } {
   let unpaidLiters = 0;
+  let evicted = 0;
 
   for (const vehicle of Object.values(state.vehicles)) {
     if (vehicle.targetPumpId !== pumpId || !isOnForecourt(vehicle)) continue;
     unpaidLiters += dismissVehicle(state, vehicle);
+    evicted++;
+
+    // Selling or carting off the pump somebody was using is the player's own
+    // way of losing a customer, and it costs what losing one always costs.
+    state.player.reputation = clamp(state.player.reputation - 0.015, 1, 5);
+    state.dayState.todayStats.customersLost++;
+    state.player.statistics.totalCustomersLost++;
   }
 
-  return Number(unpaidLiters.toFixed(1));
+  return { unpaidLiters: Number(unpaidLiters.toFixed(1)), evicted };
 }
 
 /**
@@ -2928,6 +2984,7 @@ function tickVehicles(
           vehicle.shoppingIntent = true;
           vehicle.waitingTimeSeconds = 0;
           setVehicleState(vehicle, 'OPTIONAL_SHOP');
+          vehicle.visitBuildingId = pickVisitBuilding(state, side);
         } else {
           const joining =
             queued.length < maxQueueLength(state, block)
@@ -2953,6 +3010,31 @@ function tickVehicles(
         driveInTraffic(state, vehicle, block, dt);
         vehicle.waitingTimeSeconds += dt;
         vehicle.patience -= dt;
+
+        // The service this queue is for can be sold out from under it. The
+        // driver can see the hardware being carted off — they leave then, not
+        // when their patience runs out, and it costs the station its name the
+        // same as any other lost customer: the player withdrew the service
+        // while people were waiting on it.
+        const wantsCharge = GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger;
+        if (wantsCharge && chargingPoints(state, side).length === 0) {
+          loseCustomer(
+            state,
+            vehicle,
+            'Şarj ünitesi kaldırıldı — elektrikli müşteri hizmet alamadan ayrıldı.',
+            effects
+          );
+          break;
+        }
+        if (!wantsCharge && !blockHasPumps(state, side)) {
+          loseCustomer(
+            state,
+            vehicle,
+            'Pompa kaldırıldı — kuyruktaki müşteri yakıt alamadan ayrıldı.',
+            effects
+          );
+          break;
+        }
 
         if (vehicle.patience <= 0) {
           loseCustomer(
@@ -3010,6 +3092,22 @@ function tickVehicles(
       }
 
       case 'PUMP_RESERVED': {
+        // The post they were promised can be sold, carried off, or cut off at
+        // the substation while they are still rolling up to it. A powered
+        // point is one chargingPoints still lists; anything else is dead.
+        if (
+          vehicle.chargingBuildingId &&
+          !chargingPoints(state, side).some((p) => p.id === vehicle.chargingBuildingId)
+        ) {
+          loseCustomer(
+            state,
+            vehicle,
+            'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.',
+            effects
+          );
+          break;
+        }
+
         if (driveInTraffic(state, vehicle, block, dt)) {
           setVehicleState(vehicle, 'AT_PUMP');
           const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
@@ -3036,8 +3134,20 @@ function tickVehicles(
           break;
         }
 
-        // Charging needs nobody's attention: the driver plugs in and waits.
+        // Charging needs nobody's attention: the driver plugs in and waits —
+        // unless the post has been sold, or the substation feeding it has,
+        // which is the one thing that sends a plugged-in customer away
+        // unserved.
         if (vehicle.chargingBuildingId) {
+          if (!chargingPoints(state, side).some((p) => p.id === vehicle.chargingBuildingId)) {
+            loseCustomer(
+              state,
+              vehicle,
+              'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.',
+              effects
+            );
+            break;
+          }
           vehicle.chargeSecondsLeft = (vehicle.chargeSecondsLeft ?? 0) - dt;
           if (vehicle.chargeSecondsLeft <= 0) finalizeCharge(state, vehicle, effects);
           break;
@@ -3070,9 +3180,30 @@ function tickVehicles(
       }
 
       case 'OPTIONAL_SHOP': {
+        // The building they are inside can be sold or carted off around them.
+        // The one exception is an upgrade: a café absorbed into a rest complex
+        // is still open — the coffee moves with it.
+        if (vehicle.visitBuildingId && !state.buildings[vehicle.visitBuildingId]) {
+          const complex = Object.values(state.buildings).find(
+            (b) => b.type === 'rest_complex' && drivewaySideAt(b.position[1]) === side
+          );
+          if (complex) {
+            vehicle.visitBuildingId = complex.id;
+          } else {
+            loseCustomer(
+              state,
+              vehicle,
+              'Kullandığı tesis kaldırıldı — müşteri hizmet alamadan ayrıldı.',
+              effects
+            );
+            break;
+          }
+        }
+
         vehicle.waitingTimeSeconds += dt;
         if (vehicle.waitingTimeSeconds >= 6) {
           completeMarketVisit(state, vehicle, effects);
+          vehicle.visitBuildingId = null;
           sendAway(state, vehicle);
         }
         break;

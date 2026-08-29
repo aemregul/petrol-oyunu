@@ -828,10 +828,12 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
 
+    let evicted = { unpaidLiters: 0, evicted: 0 };
     if (pump) {
-      // Let go of whoever was using it before it disappears underneath them.
-      const served = state.pumps[id].currentVehicleId;
-      if (served && state.vehicles[served]) delete state.vehicles[served];
+      // Whoever was using it drives off unserved — with the reputation hit
+      // that losing a customer always carries — rather than vanishing where
+      // they stood, which is what used to happen.
+      evicted = evictFromPump(state, id);
       for (const employee of Object.values(state.employees)) {
         if (employee.assignedPumpId === id) employee.assignedPumpId = null;
       }
@@ -855,6 +857,16 @@ export const useGameStore = create<GameStore>((set, get) => {
       title: 'Yapı Satıldı',
       message: `${name} elden çıkarıldı, ${value.toLocaleString('tr-TR')} TL kasaya girdi.`
     });
+    if (evicted.evicted > 0) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Müşteri Kaybedildi!',
+        message:
+          `Kullanılan pompa satıldı — ${evicted.evicted} müşteri hizmet alamadan ayrıldı.` +
+          (evicted.unpaidLiters > 0 ? ` ${evicted.unpaidLiters} L yakıt ödenmeden gitti.` : '') +
+          ` (-${(0.015 * evicted.evicted).toFixed(3)} İtibar)`
+      });
+    }
     return true;
   },
 
@@ -943,13 +955,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    let unpaidLiters = 0;
+    let evicted = { unpaidLiters: 0, evicted: 0 };
 
     const moved = isPump ? state.pumps[id] : state.buildings[id];
     if (isPump) {
       // Whoever was being served at this bay has to be let go before it is
       // lifted, or they wait for a dispenser that is no longer there.
-      unpaidLiters = evictFromPump(state, id);
+      evicted = evictFromPump(state, id);
       for (const employee of Object.values(state.employees)) {
         if (employee.assignedPumpId === id) employee.assignedPumpId = null;
       }
@@ -1003,11 +1015,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
     });
 
-    if (unpaidLiters > 0) {
+    if (evicted.evicted > 0) {
       get().addNotification({
         type: 'WARNING',
-        title: 'Pompa Söküldü',
-        message: `Hizmet gören araç gönderildi — ${unpaidLiters} L yakıt ödenmeden gitti.`
+        title: 'Müşteri Kaybedildi!',
+        message:
+          `Pompa söküldü — ${evicted.evicted} müşteri hizmet alamadan ayrıldı.` +
+          (evicted.unpaidLiters > 0 ? ` ${evicted.unpaidLiters} L yakıt ödenmeden gitti.` : '') +
+          ` (-${(0.015 * evicted.evicted).toFixed(3)} İtibar)`
       });
     }
 
