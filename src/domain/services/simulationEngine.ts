@@ -26,6 +26,14 @@ import {
 } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import {
+  routeAround,
+  routeAroundOrNull,
+  canReach,
+  wallRects,
+  inRects,
+  Rect as PathRect
+} from './pathfinding';
+import {
   GAME_EVENTS,
   GameEventConfig,
   DAILY_MISSION_TEMPLATES
@@ -387,14 +395,29 @@ export function getLayout(state: {
 /** How far off the circulation lane the queue may wait, in grid units. */
 const QUEUE_LAY_BYS = [2, 3.2, 4.4];
 
-/** Half a lane, in grid units: how much room a driving car actually needs. */
+/** Half a lane, in grid units: the room a lane is laid out with. */
 export const LANE_HALF_WIDTH = 1.4;
+
+/**
+ * What a car itself needs either side of its centre, in grid units — measured
+ * to the corner of the body, so it holds however the car is turned. Narrower
+ * than a lane, and the difference is the gap a lane may still be squeezed into
+ * on a forecourt the player has built up.
+ */
+const CAR_HALF_SPAN = 1.1;
+
+/**
+ * How much of the apron behind the kerb belongs to the frontage rather than to
+ * the traffic: the price board stands here and its planting beds run either
+ * side of it. Nothing drives across this.
+ */
+const FRONTAGE_DEPTH = 2;
 
 /**
  * Buildings a car drives under rather than into. Everything else is solid, so
  * a lane has to be routed around it.
  */
-const DRIVE_THROUGH_TYPES = ['canopy'];
+export const DRIVE_THROUGH_TYPES = ['canopy'];
 
 /**
  * The z spans a lane has to keep clear of, counting only what actually stands
@@ -432,6 +455,30 @@ function solidSpans(
   }
 
   return spans;
+}
+
+/**
+ * The first lane position in the list with anything at all to spare, or the
+ * one it prefers if none of them has. Used where a lane has a place it belongs
+ * and should only move when something is actually standing on it.
+ */
+function firstClearLaneZ(
+  candidates: number[],
+  spans: Array<[number, number]>,
+  fallback: number
+): number {
+  const clear = candidates.find((z) => laneClearance(z, spans) > 0);
+  if (clear !== undefined) return clear;
+
+  // Nowhere is clear, so take the least bad rather than the first. A lane that
+  // grazes the corner of a building is not good, but it is a great deal better
+  // than one that runs down the middle of it.
+  return (
+    candidates.reduce(
+      (best, z) => (laneClearance(z, spans) > laneClearance(best, spans) ? z : best),
+      candidates[0] ?? fallback
+    ) ?? fallback
+  );
 }
 
 /** How much room a lane at this z would have from the nearest solid thing. */
@@ -479,11 +526,17 @@ function queueLayByZ(
   exitLaneZ: number,
   inward: number,
   pumps: Array<{ position: [number, number] }>,
-  side: DrivewaySide
+  side: DrivewaySide,
+  spans: Array<[number, number]>
 ): number {
   const relevant = pumps.filter((p) => drivewaySideAt(p.position[1]) === side);
   const clearance = (z: number) =>
-    relevant.reduce((worst, p) => Math.min(worst, Math.abs(p.position[1] - z)), Infinity);
+    Math.min(
+      relevant.reduce((worst, p) => Math.min(worst, Math.abs(p.position[1] - z)), Infinity),
+      // A line of cars parked inside the shop is as wrong as one driving
+      // through it, so the lay-by clears the buildings too.
+      laneClearance(z, spans)
+    );
 
 
   const options = QUEUE_LAY_BYS.map((offset) => laneZ + inward * offset).filter(
@@ -514,6 +567,13 @@ export interface BlockLayout {
   roadLaneZ: number;
   roadStartX: number;
   roadEndX: number;
+  /**
+   * How much room the approach lane has from the nearest solid thing, in grid
+   * units. Negative means it runs through something — which the layout cannot
+   * always avoid, so placement uses this to refuse the building that would
+   * cause it rather than letting cars drive through walls.
+   */
+  laneClear: number;
   /** The concrete a vehicle has to stay on. */
   minX: number;
   maxX: number;
@@ -568,24 +628,84 @@ export function blockLayout(
 
   // The return lane runs along the back, but only as far back as it can while
   // still clearing whatever the player has built along it.
-  const backLane = clearLaneZ(
+  const backSpans = spans.map(
+    ([a, b]) =>
+      [inward * (a - front) - LANE_HALF_WIDTH, inward * (b - front) + LANE_HALF_WIDTH] as [
+        number,
+        number
+      ]
+  );
+  const roomiest = clearLaneZ(
     [depth - 3, depth - 4.4, depth - 5.8, depth - 7.2].filter((d) => d >= 7),
-    spans.map(([a, b]) => [
-      inward * (a - front) - LANE_HALF_WIDTH,
-      inward * (b - front) + LANE_HALF_WIDTH
-    ]),
+    backSpans,
     Math.max(7, depth - 3)
   );
+
+  // Squeezing right up against the back boundary is a last resort, not a
+  // preference — it is only reached when everything further forward is
+  // occupied, so the usual choice is left exactly as it was.
+  const backLane =
+    laneClearance(roomiest, backSpans) > 0 || laneClearance(depth - 2, backSpans) <= 0
+      ? roomiest
+      : depth - 2;
+
+  // The approach lane crosses the whole front of the plot, from the mouth the
+  // cars come in at to the far end of the bays, so anything standing along
+  // that stretch is in its way. It used to be pinned four units in whatever
+  // was built there — which is a lane running through the walls of a shop.
+  const queueHeadX = side === 'far' ? box.maxX - headIn : box.minX + headIn;
+  const drivenX: [number, number] = [
+    Math.min(mouths.entry.x, mouths.exit.x, queueHeadX, ...bayXs),
+    Math.max(mouths.entry.x, mouths.exit.x, queueHeadX, ...bayXs)
+  ];
+  const frontSpans = solidSpans(state, side, drivenX);
+
+  // Kept in front of the return lane: the two must not swap places, or the
+  // cars arriving and the cars leaving would be running down each other's
+  // side of the forecourt.
+  //
+  // Unlike the return lane it takes the first position that works rather than
+  // the roomiest: the approach lane belongs just inside the mouth, and a lane
+  // that drifted deeper into the plot every time something was built near it
+  // would rearrange the whole forecourt for no reason. Its own spot is tried
+  // first, and only if that is occupied does it hunt for a gap — finely, and
+  // measured by what a car actually needs rather than by the width of a lane,
+  // because a forecourt built up at the front may leave nothing wider.
+  const gaps: number[] = [4];
+  const nearestLane = FRONTAGE_DEPTH + CAR_HALF_SPAN;
+  for (let d = nearestLane; d < backLane - 2.5; d += 0.4) gaps.push(Number(d.toFixed(1)));
+
+  const frontLane = firstClearLaneZ(
+    gaps,
+    frontSpans.map(([a, b]) => [
+      inward * (a - front) - CAR_HALF_SPAN,
+      inward * (b - front) + CAR_HALF_SPAN
+    ]),
+    4
+  );
+
+  // Widened by what a car takes up, so the clearance test asks whether one
+  // fits rather than whether its centre line happens to miss the wall — the
+  // same measure the lane itself was chosen with.
+  const padded = frontSpans.map(
+    ([a, b]) => [a - CAR_HALF_SPAN, b + CAR_HALF_SPAN] as [number, number]
+  );
+
+  const laneZ = front + inward * frontLane;
+  const exitLaneZ = front + inward * backLane;
+  const laneClear = laneClearance(laneZ, padded);
+  const layByZ = queueLayByZ(laneZ, exitLaneZ, inward, pumps, side, padded);
 
   return side === 'far'
     ? {
         side,
         ...mouths,
-        laneZ: box.maxZ - 4,
-        exitLaneZ: box.maxZ - backLane,
-        queueHeadX: box.maxX - headIn,
+        laneZ,
+        exitLaneZ,
+        laneClear,
+        queueHeadX,
         queueStep: LAYOUT.queueSpacing,
-        queueZ: queueLayByZ(box.maxZ - 4, box.maxZ - backLane, -1, pumps, side),
+        queueZ: layByZ,
         roadLaneZ: farRoadLaneZ,
         roadStartX: box.maxX + LAYOUT.roadMargin,
         roadEndX: box.minX - LAYOUT.roadMargin,
@@ -594,11 +714,12 @@ export function blockLayout(
     : {
         side,
         ...mouths,
-        laneZ: box.minZ + 4,
-        exitLaneZ: box.minZ + backLane,
-        queueHeadX: box.minX + headIn,
+        laneZ,
+        exitLaneZ,
+        laneClear,
+        queueHeadX,
         queueStep: -LAYOUT.queueSpacing,
-        queueZ: queueLayByZ(box.minZ + 4, box.minZ + backLane, 1, pumps, side),
+        queueZ: layByZ,
         roadLaneZ: LAYOUT.roadZ,
         roadStartX: box.minX - LAYOUT.roadMargin,
         roadEndX: box.maxX + LAYOUT.roadMargin,
@@ -949,11 +1070,36 @@ function blockFor(state: GameState, vehicle: VehicleEntity): BlockLayout {
  * concrete. Derived from the block so widening the station lengthens the
  * queue — and so the block across the road gets its own limit.
  */
-function maxQueueLength(block: BlockLayout): number {
+function maxQueueLength(state: GameState, block: BlockLayout): number {
   const m = LAYOUT.apronMargin;
   const usable =
     block.queueStep < 0 ? block.queueHeadX - (block.minX + m) : block.maxX - m - block.queueHeadX;
-  return Math.max(1, Math.min(5, Math.floor(usable / LAYOUT.queueSpacing) + 1));
+  const fits = Math.max(1, Math.min(5, Math.floor(usable / LAYOUT.queueSpacing) + 1));
+
+  // A stretch of the lay-by can be inside something the player built, and
+  // those slots are not slots. Counting them would send cars to wait in a
+  // wall; leaving them out means a blocked lay-by simply holds fewer.
+  const rects = wallRects(state, block.side);
+  if (rects.length === 0) return fits;
+
+  let clear = 0;
+  for (let slot = 0; slot < fits + 8; slot++) {
+    const at = queueSlotAt(block, slot);
+    if (!at || inRects(rects, at[0], at[2])) continue;
+    if (++clear >= fits) break;
+  }
+  return Math.max(1, clear);
+}
+
+/** Slot `index` down the lay-by, or null once it runs off the concrete. */
+function queueSlotAt(block: BlockLayout, index: number): [number, number, number] | null {
+  const raw: [number, number, number] = [
+    block.queueHeadX + index * block.queueStep,
+    0,
+    block.queueZ
+  ];
+  const at = clampToApron(block, raw);
+  return Math.abs(at[0] - raw[0]) > 0.01 ? null : at;
 }
 
 export function queueSlotPosition(
@@ -962,7 +1108,29 @@ export function queueSlotPosition(
   side: DrivewaySide = 'near'
 ): [number, number, number] {
   const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
-  return clampToApron(block, [block.queueHeadX + index * block.queueStep, 0, block.queueZ]);
+  // Only walls: a car queueing right beside a pump island is exactly where it
+  // is meant to be waiting.
+  const rects = wallRects(state, block.side);
+
+  // The lay-by is a straight line, and on a built-up forecourt part of that
+  // line can be inside a shop. The queue keeps its line and steps past the
+  // occupied stretch rather than bending or standing in the wall — one more
+  // car length back is still a queue; a car parked indoors is not.
+  //
+  // Counted rather than nudged: nudging each car past the blocked stretch on
+  // its own would put the two behind it on the same spot.
+  let clear = -1;
+  let last: [number, number, number] | null = null;
+  for (let slot = 0; slot < index + 9; slot++) {
+    const at = queueSlotAt(block, slot);
+    if (!at || inRects(rects, at[0], at[2])) continue;
+    last = at;
+    if (++clear === index) return at;
+  }
+
+  // Asked for a place further back than the lay-by has: the queue is capped to
+  // the slots that exist, so this is the tail rather than a spot in a wall.
+  return last ?? clampToApron(block, [block.queueHeadX, 0, block.queueZ]);
 }
 
 /**
@@ -974,15 +1142,106 @@ function nextLaneIndex(state: GameState, states: VehicleState[]): number {
   return Object.values(state.vehicles).filter((v) => states.includes(v.state)).length;
 }
 
+/**
+ * The strip of apron just inside the kerb, minus the mouths that cross it.
+ *
+ * The price board stands here and its planting runs either side. It is on the
+ * plot, so nothing stopped a way round from being drawn straight across it —
+ * which is a car cutting the corner over the flower beds and rejoining the
+ * road wherever it likes. There are two ways over the verge and these are they.
+ */
+function frontageKeepOut(block: BlockLayout): PathRect[] {
+  const front = block.side === 'far' ? block.maxZ : block.minZ;
+  const inward = block.side === 'far' ? -1 : 1;
+
+  // Reaches out over the verge as well as in over the apron, so the plot's own
+  // boundary line falls inside it. Cars were running along that line — it is
+  // the one place a strip that stopped exactly there could not cover.
+  const outer = front - inward * LAYOUT.vergeDepth;
+  const inner = front + inward * FRONTAGE_DEPTH;
+
+  const minZ = Math.min(outer, inner);
+  const maxZ = Math.max(outer, inner);
+
+  // A shade wider than the paved bridge itself: a car turning in swings over
+  // the edge of the mouth, and a gap measured to the millimetre is one the
+  // search cannot thread.
+  const margin = 0.6;
+  const openings = [block.entry, block.exit]
+    .map(
+      (mouth) =>
+        [mouth.x - mouth.width / 2 - margin, mouth.x + mouth.width / 2 + margin] as const
+    )
+    .sort((a, b) => a[0] - b[0]);
+
+  const out: PathRect[] = [];
+  let x = block.minX - LAYOUT.roadMargin;
+
+  for (const [from, to] of openings) {
+    if (from > x) out.push({ minX: x, maxX: from, minZ, maxZ });
+    x = Math.max(x, to);
+  }
+  out.push({ minX: x, maxX: block.maxX + LAYOUT.roadMargin, minZ, maxZ });
+
+  return out.filter((r) => r.maxX - r.minX > 0.01);
+}
+
+/**
+ * The route as the lanes describe it, redrawn around anything the player has
+ * built across it. A leg with nothing in it comes back untouched, so an empty
+ * forecourt drives exactly as it did before there was anything to drive round.
+ */
+function driveable(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  waypoints: Array<[number, number, number]>,
+  ignorePumpId?: string,
+  ignoreBuildingId?: string
+): Array<[number, number, number]> | null {
+  return routeAroundOrNull(
+    state,
+    vehicle,
+    block.side,
+    waypoints,
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block),
+    ignorePumpId,
+    ignoreBuildingId
+  );
+}
+
+/** Whether this car could actually get to a spot from where it stands. */
+function reachable(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  waypoints: Array<[number, number, number]>,
+  ignorePumpId?: string
+): boolean {
+  return canReach(
+    state,
+    vehicle,
+    block.side,
+    waypoints,
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block),
+    ignorePumpId
+  );
+}
+
 /** Highway -> entrance driveway -> circulation lane. */
-function approachRoute(state: GameState, vehicle: VehicleEntity): Array<[number, number, number]> {
+function approachRoute(
+  state: GameState,
+  vehicle: VehicleEntity
+): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
   const laneX = drivewayLaneX(block.entry, nextLaneIndex(state, ['SPAWN', 'ROAD_APPROACH']));
 
-  return [
+  return driveable(state, vehicle, block, [
     [laneX, 0, block.roadLaneZ],
     [laneX, 0, block.laneZ]
-  ];
+  ]);
 }
 
 /**
@@ -994,7 +1253,7 @@ function pumpRoute(
   state: GameState,
   vehicle: VehicleEntity,
   pump: PumpEntity
-): Array<[number, number, number]> {
+): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
   // Park on the side the traffic came from, so the car pulls in rather than
   // swinging across the pump island.
@@ -1004,11 +1263,13 @@ function pumpRoute(
   // Pull straight out of the waiting bay before turning along the lane. Cutting
   // the corner would take the car back down the line it was just standing in,
   // through everyone still waiting there.
-  return [
-    [vehicle.worldPosition[0], 0, block.laneZ],
-    [bay[0], 0, block.laneZ],
-    bay
-  ];
+  return driveable(
+    state,
+    vehicle,
+    block,
+    [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
+    pump.id
+  );
 }
 
 /**
@@ -1018,24 +1279,82 @@ function pumpRoute(
 function chargerRoute(
   state: GameState,
   vehicle: VehicleEntity,
-  point: [number, number]
-): Array<[number, number, number]> {
+  point: [number, number],
+  postId?: string
+): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
   const offset = block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET;
   const bay = clampToApron(block, [point[0] + offset, 0, point[1]]);
 
-  return [
-    [vehicle.worldPosition[0], 0, block.laneZ],
-    [bay[0], 0, block.laneZ],
-    bay
-  ];
+  return driveable(
+    state,
+    vehicle,
+    block,
+    [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
+    undefined,
+    postId
+  );
+}
+
+/**
+ * The same spot, moved off a building if that is where it landed.
+ *
+ * A lane is a line across the whole plot and a building can stand on part of
+ * it, which leaves waypoints inside the walls. Sending a car to one of those
+ * is asking it to park in the lobby, and no way round can be found to a place
+ * that is itself inside the building — so the waypoint slides along until it
+ * is somewhere a car can actually stand.
+ */
+function offWalls(
+  state: GameState,
+  block: BlockLayout,
+  point: [number, number, number]
+): [number, number, number] {
+  const rects = wallRects(state, block.side);
+  if (!inRects(rects, point[0], point[2])) return point;
+
+  // Never toward the frontage: the strip inside the kerb carries the price
+  // board and its planting, and a lane slid onto that is a car driving over
+  // the flower beds. Deeper into the plot first, and only then forward as far
+  // as the planting.
+  const front = block.side === 'far' ? block.maxZ : block.minZ;
+  const inward = block.side === 'far' ? -1 : 1;
+  const nearestToRoad = front + inward * FRONTAGE_DEPTH;
+
+  for (let step = 0.4; step <= 16; step += 0.4) {
+    for (const z of [point[2] + inward * step, point[2] - inward * step]) {
+      if ((z - nearestToRoad) * inward < 0) continue;
+      const at = clampToApron(block, [point[0], 0, z]);
+      if (!inRects(rects, at[0], at[2])) return at;
+    }
+  }
+  return point;
+}
+
+/**
+ * Sends a car on its way, or takes it off the plot when there is no way out.
+ *
+ * Every exit used to fall back to a straight line when no way round could be
+ * found, which is a car driving out through the side of the hotel. A forecourt
+ * built so tightly that a car cannot leave it is the player's doing; the car
+ * simply goes, rather than going through the wall in front of everybody.
+ */
+function sendAway(state: GameState, vehicle: VehicleEntity): void {
+  const route = exitRoute(state, vehicle);
+  if (route === null) {
+    setVehicleState(vehicle, 'DESPAWN');
+    return;
+  }
+
+  setVehicleState(vehicle, 'EXIT');
+  setRoute(vehicle, route);
 }
 
 /** Pump -> return lane -> exit driveway -> off down the highway. */
 function exitRoute(
   state: GameState,
   from: VehicleEntity
-): Array<[number, number, number]> {
+): Array<[number, number, number]> | null {
   const block = blockFor(state, from);
   const laneX = drivewayLaneX(block.exit, nextLaneIndex(state, ['EXIT']));
 
@@ -1053,13 +1372,20 @@ function exitRoute(
 
   const throughLane = atFrontOfPlot ? block.laneZ : block.exitLaneZ;
 
-  return [
-    clampToApron(block, [from.worldPosition[0], 0, throughLane]),
-    clampToApron(block, [laneX, 0, throughLane]),
-    // Leaving the plot down the exit driveway and away along the highway.
-    [laneX, 0, block.roadLaneZ],
-    [block.roadEndX, 0, block.roadLaneZ]
-  ];
+  return routeAroundOrNull(
+    state,
+    from,
+    block.side,
+    [
+      offWalls(state, block, clampToApron(block, [from.worldPosition[0], 0, throughLane])),
+      offWalls(state, block, clampToApron(block, [laneX, 0, throughLane])),
+      // Leaving the plot down the exit driveway and away along the highway.
+      [laneX, 0, block.roadLaneZ],
+      [block.roadEndX, 0, block.roadLaneZ]
+    ],
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block)
+  );
 }
 
 function setRoute(vehicle: VehicleEntity, waypoints: Array<[number, number, number]>): void {
@@ -1516,8 +1842,7 @@ function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEf
 
   vehicle.chargingBuildingId = null;
   vehicle.chargeSecondsLeft = 0;
-  setVehicleState(vehicle, 'EXIT');
-  setRoute(vehicle, exitRoute(state, vehicle));
+  sendAway(state, vehicle);
 }
 
 export function finalizeSale(
@@ -1618,8 +1943,7 @@ export function finalizeSale(
     setVehicleState(vehicle, 'OPTIONAL_SHOP');
     vehicle.waitingTimeSeconds = 0;
   } else {
-    setVehicleState(vehicle, 'EXIT');
-    setRoute(vehicle, exitRoute(state, vehicle));
+    sendAway(state, vehicle);
   }
 
   trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
@@ -2128,8 +2452,22 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   );
   if (spawnBlocked) return;
 
-  // Only a driver this station could actually serve is worth stopping.
-  const stops = servable.length > 0 && Math.random() < stopChance(state, side);
+  // Only a driver this station could actually serve is worth stopping — and
+  // only one who could get in. A forecourt walled off by what the player has
+  // built has no way through to the bays, and a driver reads that from the
+  // road rather than pulling in and finding out.
+  const wayIn = canReach(
+    state,
+    { worldPosition: [block.roadStartX, 0, block.roadLaneZ] } as VehicleEntity,
+    side,
+    [
+      [drivewayLaneX(block.entry, 0), 0, block.laneZ],
+      queueSlotPosition(state, 0, side)
+    ],
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block)
+  );
+  const stops = wayIn && servable.length > 0 && Math.random() < stopChance(state, side);
   const archetypes = stops
     ? servable
     : (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter(
@@ -2232,7 +2570,8 @@ function findAvailablePump(
   state: GameState,
   fuelType: FuelType,
   mods: EventModifiers,
-  side: DrivewaySide = 'near'
+  side: DrivewaySide = 'near',
+  driver?: VehicleEntity
 ): PumpEntity | null {
   if (mods.pumpsDisabled) return null;
 
@@ -2246,17 +2585,37 @@ function findAvailablePump(
       pumpSide(p) === side
   );
   if (candidates.length === 0) return null;
+
   // Prefer the healthiest pump so worn hardware naturally rotates out of service.
-  return candidates.sort((a, b) => b.health - a.health)[0];
+  const ordered = candidates.sort((a, b) => b.health - a.health);
+  if (!driver) return ordered[0];
+
+  // A bay with something built across the way to it is not an available bay.
+  // Left in the list it would be claimed and then driven to through a wall.
+  return ordered.find((pump) => pumpRoute(state, driver, pump) !== null) ?? null;
 }
 
-function reservePumpFor(state: GameState, vehicle: VehicleEntity, pump: PumpEntity): void {
+/** The spot alongside an island where a car actually stands to be served. */
+function pumpBay(block: BlockLayout, pump: PumpEntity): [number, number, number] {
+  const offset = block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET;
+  return clampToApron(block, [pump.position[0] + offset, 0, pump.position[1]]);
+}
+
+function reservePumpFor(
+  state: GameState,
+  vehicle: VehicleEntity,
+  pump: PumpEntity
+): boolean {
+  const route = pumpRoute(state, vehicle, pump);
+  if (!route) return false;
+
   pump.currentVehicleId = vehicle.id;
   setPumpState(pump, 'RESERVED');
   vehicle.targetPumpId = pump.id;
-  setRoute(vehicle, pumpRoute(state, vehicle, pump));
+  setRoute(vehicle, route);
   setVehicleState(vehicle, 'PUMP_RESERVED');
   setPumpState(pump, 'VEHICLE_ARRIVING');
+  return true;
 }
 
 /**
@@ -2296,8 +2655,7 @@ function loseCustomer(
   }
 
   vehicle.assignedActor = null;
-  setVehicleState(vehicle, 'EXIT');
-  setRoute(vehicle, exitRoute(state, vehicle));
+  sendAway(state, vehicle);
 
   notify(effects, 'WARNING', 'Müşteri Kaybedildi!', `${reason} (-0.015 İtibar)`);
 }
@@ -2379,8 +2737,7 @@ function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
 
   vehicle.assignedActor = null;
   vehicle.shoppingIntent = false;
-  setVehicleState(vehicle, 'EXIT');
-  setRoute(vehicle, exitRoute(state, vehicle));
+  sendAway(state, vehicle);
 
   return unpaid;
 }
@@ -2458,8 +2815,16 @@ function tickVehicles(
 
     switch (vehicle.state) {
       case 'SPAWN': {
+        const approach = approachRoute(state, vehicle);
+        if (!approach) {
+          setVehicleState(vehicle, 'PASSING');
+          setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+          turnAway(state);
+          break;
+        }
+
         setVehicleState(vehicle, 'ROAD_APPROACH');
-        setRoute(vehicle, approachRoute(state, vehicle));
+        setRoute(vehicle, approach);
         break;
       }
 
@@ -2479,7 +2844,7 @@ function tickVehicles(
         if (
           stillOnRoad &&
           !findAvailablePump(state, vehicle.fuelType, mods, side) &&
-          queued.length >= maxQueueLength(block)
+          queued.length >= maxQueueLength(state, block)
         ) {
           setVehicleState(vehicle, 'PASSING');
           setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
@@ -2497,56 +2862,89 @@ function tickVehicles(
         }
         if (!arrived) break;
 
+        // A forecourt the player has walled in has no way through to the bays,
+        // and forcing a line to them would be a car driving through the wall.
+        // The driver turns round at the mouth instead.
+        if (!reachable(state, vehicle, block, [queueSlotPosition(state, 0, side)])) {
+          sendAway(state, vehicle);
+          turnAway(state);
+          break;
+        }
+
         // An electric customer wants a socket, not a nozzle.
         if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
           const point = findFreeCharger(state, side);
-          if (point) {
+          const toCharger = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
+          const toQueue =
+            queued.length < maxQueueLength(state, block)
+              ? driveable(state, vehicle, block, [
+                  queueSlotPosition(state, queued.length, side)
+                ])
+              : null;
+
+          if (point && toCharger) {
             vehicle.chargingBuildingId = point.id;
             vehicle.chargeSecondsLeft =
               point.kind === 'dc'
                 ? GAME_CONFIG.ev.dcChargeSeconds
                 : GAME_CONFIG.ev.acChargeSeconds;
             setVehicleState(vehicle, 'PUMP_RESERVED');
-            setRoute(vehicle, chargerRoute(state, vehicle, point.position));
-          } else if (queued.length < maxQueueLength(block)) {
+            setRoute(vehicle, toCharger);
+          } else if (toQueue) {
             setVehicleState(vehicle, 'QUEUE');
-            setRoute(vehicle, [queueSlotPosition(state, queued.length, side)]);
+            setRoute(vehicle, toQueue);
             queued.push(vehicle);
           } else {
-            setVehicleState(vehicle, 'EXIT');
-            setRoute(vehicle, exitRoute(state, vehicle));
+            sendAway(state, vehicle);
             turnAway(state);
           }
           break;
         }
 
-        const pump = findAvailablePump(state, vehicle.fuelType, mods, side);
+        const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle);
         const deadForecourt = !pump && blockHasPumps(state, side) && cannotServe(state, vehicle);
 
-        if (pump) {
-          reservePumpFor(state, vehicle, pump);
+        if (pump && reservePumpFor(state, vehicle, pump)) {
+          // Reserved and on its way.
         } else if (deadForecourt) {
           // Nothing here works, but the driver has no way of knowing that from
           // the road. They pull up to a bay, see it, and go — rather than
           // joining a queue for fuel that is never coming.
-          const bay = Object.values(state.pumps).find((p) => pumpSide(p) === side)!;
+          const walkUp = Object.values(state.pumps)
+            .filter((p) => pumpSide(p) === side)
+            .map((p) => ({ p, route: pumpRoute(state, vehicle, p) }))
+            .find((candidate) => candidate.route !== null);
+
+          if (!walkUp) {
+            sendAway(state, vehicle);
+            turnAway(state);
+            break;
+          }
           setVehicleState(vehicle, 'PUMP_RESERVED');
-          setRoute(vehicle, pumpRoute(state, vehicle, bay));
+          setRoute(vehicle, walkUp.route!);
         } else if (!blockHasPumps(state, side)) {
           // Nothing here to fuel with, so this driver came for the shop.
           // Queueing for a pump that does not exist would only strand them.
           vehicle.shoppingIntent = true;
           vehicle.waitingTimeSeconds = 0;
           setVehicleState(vehicle, 'OPTIONAL_SHOP');
-        } else if (queued.length < maxQueueLength(block)) {
-          setVehicleState(vehicle, 'QUEUE');
-          setRoute(vehicle, [queueSlotPosition(state, queued.length, side)]);
-          queued.push(vehicle);
         } else {
-          // Forecourt is full — this driver never even stops.
-          setVehicleState(vehicle, 'EXIT');
-          setRoute(vehicle, exitRoute(state, vehicle));
-          turnAway(state);
+          const joining =
+            queued.length < maxQueueLength(state, block)
+              ? driveable(state, vehicle, block, [
+                  queueSlotPosition(state, queued.length, side)
+                ])
+              : null;
+
+          if (joining) {
+            setVehicleState(vehicle, 'QUEUE');
+            setRoute(vehicle, joining);
+            queued.push(vehicle);
+          } else {
+            // Forecourt is full, or walled off — this driver never even stops.
+            sendAway(state, vehicle);
+            turnAway(state);
+          }
         }
         break;
       }
@@ -2569,31 +2967,42 @@ function tickVehicles(
         const slot = queued.indexOf(vehicle);
         if (slot >= 0) {
           const slotPos = queueSlotPosition(state, slot, side);
-          if (!vehicle.targetWaypoint || vehicle.targetWaypoint[0] !== slotPos[0]) {
-            setRoute(vehicle, [slotPos]);
+          // Judged by where the car is ultimately headed, not by its next
+          // waypoint: with something to steer round, the next waypoint is a
+          // corner of the way round rather than the slot itself.
+          const heading =
+            vehicle.route.length > 0
+              ? vehicle.route[vehicle.route.length - 1]
+              : vehicle.targetWaypoint;
+
+          if (!heading || heading[0] !== slotPos[0] || heading[2] !== slotPos[2]) {
+            const shuffleUp = driveable(state, vehicle, block, [slotPos]);
+            // No way to the slot it has been given: better to stay where it is
+            // than to shuffle forward through a wall.
+            if (shuffleUp) setRoute(vehicle, shuffleUp);
           }
         }
 
         // Only the head of the queue may claim a point that has come free.
         if (slot === 0 && GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
           const point = findFreeCharger(state, side);
-          if (point) {
+          const toPost = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
+          if (point && toPost) {
             vehicle.chargingBuildingId = point.id;
             vehicle.chargeSecondsLeft =
               point.kind === 'dc'
                 ? GAME_CONFIG.ev.dcChargeSeconds
                 : GAME_CONFIG.ev.acChargeSeconds;
             setVehicleState(vehicle, 'PUMP_RESERVED');
-            setRoute(vehicle, chargerRoute(state, vehicle, point.position));
+            setRoute(vehicle, toPost);
             queued.shift();
           }
           break;
         }
 
         if (slot === 0) {
-          const pump = findAvailablePump(state, vehicle.fuelType, mods, side);
-          if (pump) {
-            reservePumpFor(state, vehicle, pump);
+          const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle);
+          if (pump && reservePumpFor(state, vehicle, pump)) {
             queued.shift();
           }
         }
@@ -2664,8 +3073,7 @@ function tickVehicles(
         vehicle.waitingTimeSeconds += dt;
         if (vehicle.waitingTimeSeconds >= 6) {
           completeMarketVisit(state, vehicle, effects);
-          setVehicleState(vehicle, 'EXIT');
-          setRoute(vehicle, exitRoute(state, vehicle));
+          sendAway(state, vehicle);
         }
         break;
       }

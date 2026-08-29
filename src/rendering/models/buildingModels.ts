@@ -43,6 +43,15 @@ export interface BuildingModelConfig {
    * of the building reads as a billboard rather than as a shop.
    */
   signYaw?: number;
+  /**
+   * A box in the model's own coordinates whose triangles are dropped at load.
+   *
+   * The kits decorate their buildings with fixtures that carry a meaning we do
+   * not want — a chemist's cross on the block that serves as the hotel. The
+   * marking is geometry, not texture, so it comes off by leaving its triangles
+   * out of the index rather than by painting over it.
+   */
+  stripRegion?: { min: [number, number, number]; max: [number, number, number] };
   /** Extra turn applied after the entity's own rotation, in degrees. */
   rotationOffset?: number;
   tint?: string;
@@ -87,7 +96,9 @@ export const BUILDING_MODELS: Record<string, BuildingModelConfig> = {
   hotel: {
     url: `${COMMERCIAL}/building-n.glb`,
     fit: 'footprint',
-    maxHeight: 11
+    maxHeight: 11,
+    // The green chemist's cross on the west facade: a hotel does not wear one.
+    stripRegion: { min: [-0.62, 1.34, -0.58], max: [-0.46, 1.9, -0.02] }
   },
   trash_can: {
     url: `${ROADS}/dumpster.glb`,

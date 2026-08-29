@@ -19,6 +19,45 @@ interface BuildingModelProps {
 }
 
 /**
+ * Returns the geometry without the triangles that sit wholly inside a box.
+ *
+ * Only whole triangles go: a triangle with one corner inside the box is part
+ * of the wall behind the fixture, and dropping it would open a hole.
+ */
+function stripBox(
+  geometry: THREE.BufferGeometry,
+  region: { min: [number, number, number]; max: [number, number, number] }
+): THREE.BufferGeometry {
+  const index = geometry.getIndex();
+  const position = geometry.getAttribute('position');
+  if (!index) return geometry;
+
+  const min = new THREE.Vector3(...region.min);
+  const max = new THREE.Vector3(...region.max);
+  const inside = (i: number): boolean => {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    return x >= min.x && x <= max.x && y >= min.y && y <= max.y && z >= min.z && z <= max.z;
+  };
+
+  const kept: number[] = [];
+  for (let t = 0; t < index.count; t += 3) {
+    const a = index.getX(t);
+    const b = index.getX(t + 1);
+    const c = index.getX(t + 2);
+    if (inside(a) && inside(b) && inside(c)) continue;
+    kept.push(a, b, c);
+  }
+
+  if (kept.length === index.count) return geometry;
+
+  const trimmed = geometry.clone();
+  trimmed.setIndex(kept);
+  return trimmed;
+}
+
+/**
  * Renders a catalogue building from its Kenney model, sized to the footprint
  * the game reserved for it and resting on the ground.
  *
@@ -39,6 +78,11 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, footprint, s
       if (!(child instanceof THREE.Mesh)) return;
       child.castShadow = true;
       child.receiveShadow = true;
+
+      // Geometry is shared with the cached original, so it is only ever
+      // replaced with a copy — editing it in place would strip the fixture
+      // from every other model loaded from the same file.
+      if (config.stripRegion) child.geometry = stripBox(child.geometry, config.stripRegion);
 
       // Clone the material so a tint never leaks to other instances.
       const material = (child.material as THREE.MeshStandardMaterial).clone();

@@ -154,7 +154,10 @@
       "Bash(head -20 /tmp/mksave.log)",
       "Read(//private/tmp/**)",
       "Bash(cp /tmp/mksave.mjs ./mksave.mts)",
-      "Bash(npx vite-node -e ' *)"
+      "Bash(npx vite-node -e ' *)",
+      "Bash(DBGWAY=1 npx vite-node ./dbgwhy.mts)",
+      "Bash(cat > *)",
+      "Bash(DBGEV=1 npx vite-node ./d2.mts)"
     ],
     "additionalDirectories": [
       "/private/tmp"

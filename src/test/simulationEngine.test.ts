@@ -917,8 +917,10 @@ describe('simulationEngine - highway lanes and driveways', () => {
     };
     expect(chargingPoints(state, 'near')).toHaveLength(0);
 
+    // Behind the bays rather than across the way in: a substation parked on
+    // the driveway is a blocked driveway, and cars stay on the road.
     state.buildings.sub = {
-      id: 'sub', type: 'ev_substation', level: 1, position: [13, 3], rotation: 0,
+      id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
       size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
     };
     expect(chargingPoints(state, 'near')).toHaveLength(1);
@@ -954,6 +956,83 @@ describe('simulationEngine - highway lanes and driveways', () => {
           expect(Number.isFinite(block!.queueZ)).toBe(true);
         }
       }
+    }
+  });
+
+  it('steers round a building standing in the way instead of through it', () => {
+    // The café is put where the lane runs and where the route to the pump
+    // crosses, so a car that cannot steer round it has to drive through it.
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.reputation = 5;
+    state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.75;
+    state.station.plots.ownedParcels = ['0,0', '1,0', '0,1', '1,1'];
+    state.station.plots.pavedParcels = ['0,0', '1,0', '0,1', '1,1'];
+    state.pumps.pump_1.position = [12, 8];
+
+    const cafe = { minX: 4.5, maxX: 9.5, minZ: 2, maxZ: 6 };
+    state.buildings.blocker = {
+      id: 'blocker', type: 'cafe', level: 1, position: [7, 4], size: [5, 4],
+      health: 100, rotation: 0, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    } as GameState['buildings'][string];
+
+    const effects = createEffects();
+    const trespassers: string[] = [];
+    let arrived = false;
+
+    for (let i = 0; i < 12000; i++) {
+      runSimulationTick(state, 0.05, effects);
+      for (const v of Object.values(state.vehicles)) {
+        const [x, , z] = v.worldPosition;
+        if (v.state === 'AT_PUMP' || v.state === 'QUEUE') arrived = true;
+        if (x > cafe.minX && x < cafe.maxX && z > cafe.minZ && z < cafe.maxZ) {
+          trespassers.push(`${v.state} @ ${x.toFixed(1)},${z.toFixed(1)}`);
+        }
+      }
+      if (trespassers.length > 0) break;
+    }
+
+    // Cars must still get in and be served — steering round it is the point,
+    // not refusing to come.
+    expect(arrived).toBe(true);
+    expect(trespassers, 'kahvecinin içinden geçen araç').toEqual([]);
+  });
+
+  it('leaves the approach lane where it belongs when nothing is on it', () => {
+    // The lane sits just inside the mouth. Everything downstream — the bays,
+    // the lay-by, the tuning that stops the forecourt seizing up — is measured
+    // from it, so it must not wander because something was built nearby.
+    const state = createInitialGameState();
+    expect(blockLayout(state, 'near')!.laneZ).toBe(4);
+    expect(blockLayout(state, 'near')!.laneClear).toBeGreaterThan(0);
+  });
+
+  it('moves the approach lane off a building standing where it used to run', () => {
+    // The lane used to be pinned four units in from the road whatever was
+    // there, so a shop on that line meant cars driving through its walls.
+    const state = createInitialGameState();
+    state.buildings = {};
+    state.pumps = {};
+
+    expect(blockLayout(state, 'near')!.laneZ).toBe(4);
+
+    state.buildings.blocker = {
+      id: 'blocker', type: 'cafe', level: 1, position: [8, 4], size: [3, 3],
+      health: 100, rotation: 0, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    } as GameState['buildings'][string];
+
+    const after = blockLayout(state, 'near')!;
+
+    // Clear of the café — which stands from z 2.5 to 5.5 — with room for the
+    // width of a car, on the lane, the lay-by and the way back out.
+    expect(after.laneClear).toBeGreaterThan(0);
+    for (const [name, laneZ] of [
+      ['giriş şeridi', after.laneZ],
+      ['çıkış şeridi', after.exitLaneZ],
+      ['kuyruk cebi', after.queueZ]
+    ] as const) {
+      const clear = laneZ < 2.5 ? 2.5 - laneZ : laneZ > 5.5 ? laneZ - 5.5 : -1;
+      expect(clear, `${name} kahvecinin içinden geçiyor (z=${laneZ})`).toBeGreaterThan(0);
     }
   });
 
