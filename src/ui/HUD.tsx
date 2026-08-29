@@ -229,42 +229,25 @@ export const HUD: React.FC = () => {
           </button>
         </div>
 
-        {landMode.active && (
-          <div className="bg-slate-900/95 border-2 border-emerald-500 backdrop-blur-md rounded-2xl px-6 py-3 shadow-2xl pointer-events-auto flex items-center gap-4 animate-fade-in">
-            <div>
-              <div className="text-xs uppercase font-bold text-emerald-400">Arsa Satın Alma</div>
-              <div className="text-sm font-extrabold text-white">
-                Komşu bir parselin üstüne gelip tıklayın
-              </div>
-            </div>
-            {gameState.station.roadLevel < 2 && (
-              <button
-                onClick={upgradeRoad}
-                className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex flex-col items-start leading-tight"
-                title={`Seviye ${GAME_CONFIG.roadUpgrade.minLevel}, ${GAME_CONFIG.roadUpgrade.minReputation.toFixed(2)} itibar gerekir`}
-              >
-                <span>Yolu Genişlet — ₺{GAME_CONFIG.roadUpgrade.price.toLocaleString('tr-TR')}</span>
-                <span className="text-[10px] font-semibold text-amber-100/80">
-                  Çift şerit + yolun karşısı açılır
-                </span>
-              </button>
-            )}
-            <button
-              onClick={exitLandMode}
-              className="bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold px-3 py-2 rounded-xl"
-            >
-              Kapat
-            </button>
-          </div>
+        {/* Buying land needs no caption telling the player to click a parcel —
+            the parcels light up on their own. What it does need is the one
+            action that has nowhere else to live. */}
+        {landMode.active && gameState.station.roadLevel < 2 && (
+          <button
+            onClick={upgradeRoad}
+            className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto flex flex-col items-start leading-tight animate-fade-in"
+            title={`Seviye ${GAME_CONFIG.roadUpgrade.minLevel}, ${GAME_CONFIG.roadUpgrade.minReputation.toFixed(2)} itibar gerekir`}
+          >
+            <span>Yolu Genişlet — ₺{GAME_CONFIG.roadUpgrade.price.toLocaleString('tr-TR')}</span>
+            <span className="text-[10px] font-semibold text-amber-100/80">
+              Çift şerit + yolun karşısı açılır
+            </span>
+          </button>
         )}
 
         {/* Center / Right: Build Mode Placement Bar (When active) */}
         {buildMode.active && (
-          <div className="bg-slate-900/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-6 py-3 shadow-2xl pointer-events-auto flex items-center gap-4 animate-fade-in">
-            <div>
-              <div className="text-xs uppercase font-bold text-sky-400">İnşaat Konumlandırma</div>
-              <div className="text-sm font-extrabold text-white">Yerleşimi Onayla veya Döndür</div>
-            </div>
+          <div className="bg-slate-900/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-4 py-3 shadow-2xl pointer-events-auto flex items-center gap-3 animate-fade-in">
             <button
               onClick={rotateBuildPreview}
               className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-600 flex items-center gap-1.5"
