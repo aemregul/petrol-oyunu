@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { DECAL, decal } from './decal';
 import {
   LAYOUT,
   getLayout,
@@ -99,7 +100,7 @@ const Driveway: React.FC<{
     <group position={[x, 0, 0]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.022, midZ]} receiveShadow>
         <planeGeometry args={[DRIVEWAY_WIDTH, depth]} />
-        <meshStandardMaterial color="#2b3340" roughness={0.8} />
+        <meshStandardMaterial color="#2b3340" roughness={0.8} {...decal(0.5)} />
       </mesh>
 
       {/* Painted arrow, sized from the mouth so it never runs off the tarmac.
@@ -121,11 +122,11 @@ const Driveway: React.FC<{
             <>
               <mesh position={[0, -0.75 * r, 0]}>
                 <planeGeometry args={[r * 0.62, shaftLength]} />
-                <meshBasicMaterial color="#f1f5f9" />
+                <meshBasicMaterial color="#f1f5f9" {...DECAL} />
               </mesh>
               <mesh position={[0, total / 2 - r, 0]} rotation={[0, 0, Math.PI / 2]}>
                 <circleGeometry args={[r, 3]} />
-                <meshBasicMaterial color="#f1f5f9" />
+                <meshBasicMaterial color="#f1f5f9" {...DECAL} />
               </mesh>
             </>
           );
@@ -189,7 +190,7 @@ const Carriageway: React.FC<{
               position={[0, 0.02, z]}
             >
               <planeGeometry args={[600, 0.22]} />
-              <meshBasicMaterial color="#e8edf3" />
+              <meshBasicMaterial color="#e8edf3" {...DECAL} />
             </mesh>
           );
         }
@@ -203,7 +204,7 @@ const Carriageway: React.FC<{
                 position={[(a + b) / 2 - centreX, 0.02, z]}
               >
                 <planeGeometry args={[b - a, 0.22]} />
-                <meshBasicMaterial color="#e8edf3" />
+                <meshBasicMaterial color="#e8edf3" {...DECAL} />
               </mesh>
             ))}
 
@@ -215,7 +216,7 @@ const Carriageway: React.FC<{
                   position={[x - centreX, 0.02, z]}
                 >
                   <planeGeometry args={[0.85, 0.22]} />
-                  <meshBasicMaterial color="#e8edf3" />
+                  <meshBasicMaterial color="#e8edf3" {...DECAL} />
                 </mesh>
               ))
             )}
@@ -227,7 +228,7 @@ const Carriageway: React.FC<{
       {laneDashes.map((x) => (
         <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.02, 0]}>
           <planeGeometry args={[3.2, 0.24]} />
-          <meshBasicMaterial color="#e0b114" />
+          <meshBasicMaterial color="#e0b114" {...DECAL} />
         </mesh>
       ))}
     </group>

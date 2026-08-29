@@ -3,6 +3,7 @@ import { PumpEntity, FuelType } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
 import { Html } from '@react-three/drei';
 import { GAME_CONFIG } from '../config/gameConfig';
+import { DECAL, decal } from './decal';
 
 interface PumpMeshProps {
   pump: PumpEntity;
@@ -64,7 +65,13 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
       {editable && (
         <mesh position={[0, 0.32, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[2.4, 4.4]} />
-          <meshBasicMaterial color="#38bdf8" opacity={0.28} transparent depthWrite={false} />
+          <meshBasicMaterial
+            color="#38bdf8"
+            opacity={0.28}
+            transparent
+            depthWrite={false}
+            {...DECAL}
+          />
         </mesh>
       )}
 
@@ -151,7 +158,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
           {/* Screen, in a dark surround */}
           <mesh position={[0, 1.94, 0]}>
             <planeGeometry args={[1.02, 0.78]} />
-            <meshStandardMaterial color="#1c1f26" roughness={0.8} />
+            <meshStandardMaterial color="#1c1f26" roughness={0.8} {...DECAL} />
           </mesh>
           <mesh position={[0, 1.96, 0.012]}>
             <planeGeometry args={[0.88, 0.6]} />
@@ -160,6 +167,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
               emissive={isBroken ? '#7f1d1d' : '#dbe6f0'}
               emissiveIntensity={isBroken ? 0.5 : 0.45}
               toneMapped={false}
+              {...decal(2)}
             />
           </mesh>
         </group>

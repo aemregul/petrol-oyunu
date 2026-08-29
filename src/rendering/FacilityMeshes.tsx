@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
+import { DECAL, decal } from './decal';
 
 /**
  * Hand-built facility geometry for the pieces no CC0 kit covers: wash tunnels,
@@ -46,13 +47,13 @@ const ParkingBays: React.FC<{
       {lines.map((x) => (
         <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.01, 0]}>
           <planeGeometry args={[0.2, d * 0.88]} />
-          <meshBasicMaterial color={color} transparent opacity={0.8} />
+          <meshBasicMaterial color={color} transparent opacity={0.8} {...DECAL} />
         </mesh>
       ))}
       {/* Stop line across the head of the bays */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, -d * 0.44]}>
         <planeGeometry args={[w, 0.2]} />
-        <meshBasicMaterial color={color} transparent opacity={0.8} />
+        <meshBasicMaterial color={color} transparent opacity={0.8} {...DECAL} />
       </mesh>
       <mesh position={[0, 0.12, -d / 2 + 0.18]} castShadow>
         <boxGeometry args={[w, 0.24, 0.36]} />
@@ -412,7 +413,7 @@ export const EnergyStorage: React.FC<FacilityProps> = ({ building }) => {
               </mesh>
               <mesh position={[0, 0, 0.012]}>
                 <planeGeometry args={[panelW - 0.18, 1.54]} />
-                <meshStandardMaterial color="#1e293b" roughness={0.6} />
+                <meshStandardMaterial color="#1e293b" roughness={0.6} {...DECAL} />
               </mesh>
               <mesh position={[0, 0, 0.024]} scale={[panelW * 1.15, panelW * 1.15, 1]}>
                 <shapeGeometry args={[BOLT_SHAPE]} />
@@ -421,6 +422,7 @@ export const EnergyStorage: React.FC<FacilityProps> = ({ building }) => {
                   emissive="#22c55e"
                   emissiveIntensity={1.1}
                   toneMapped={false}
+                  {...decal(2)}
                 />
               </mesh>
             </group>
@@ -460,7 +462,7 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
       </mesh>
       <mesh position={[0, 0.31, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[w * 0.92, d * 0.92]} />
-        <meshBasicMaterial color={accent} transparent opacity={0.25} />
+        <meshBasicMaterial color={accent} transparent opacity={0.25} {...DECAL} />
       </mesh>
 
       <mesh position={[0, 0.3 + height / 2, 0]} castShadow receiveShadow>
@@ -569,12 +571,12 @@ const OneWayRamp: React.FC<FacilityProps & { role: 'entry' | 'exit' }> = ({
       {/* Two lanes running the same way, split by a dashed centre line */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
         <planeGeometry args={[0.22, d * 0.9]} />
-        <meshBasicMaterial color="#fbbf24" />
+        <meshBasicMaterial color="#fbbf24" {...DECAL} />
       </mesh>
       {[-w / 2 + 0.35, w / 2 - 0.35].map((x) => (
         <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.01, 0]}>
           <planeGeometry args={[0.22, d * 0.9]} />
-          <meshBasicMaterial color="#e2e8f0" />
+          <meshBasicMaterial color="#e2e8f0" {...DECAL} />
         </mesh>
       ))}
 
@@ -595,11 +597,11 @@ const OneWayRamp: React.FC<FacilityProps & { role: 'entry' | 'exit' }> = ({
           >
             <mesh position={[0, -0.75 * r, 0]}>
               <planeGeometry args={[r * 0.62, shaftLength]} />
-              <meshBasicMaterial color={accent} />
+              <meshBasicMaterial color={accent} {...DECAL} />
             </mesh>
             <mesh position={[0, total / 2 - r, 0]} rotation={[0, 0, Math.PI / 2]}>
               <circleGeometry args={[r, 3]} />
-              <meshBasicMaterial color={accent} />
+              <meshBasicMaterial color={accent} {...DECAL} />
             </mesh>
           </group>
         );

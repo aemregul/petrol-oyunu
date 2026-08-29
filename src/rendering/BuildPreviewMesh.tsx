@@ -1,5 +1,6 @@
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
+import { DECAL } from './decal';
 import { GAME_CONFIG } from '../config/gameConfig';
 
 export const BuildPreviewMesh: React.FC = () => {
@@ -21,7 +22,7 @@ export const BuildPreviewMesh: React.FC = () => {
       {/* Semi-transparent placement footprint */}
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[width, depth]} />
-        <meshBasicMaterial color={color} opacity={0.5} transparent />
+        <meshBasicMaterial color={color} opacity={0.5} transparent {...DECAL} />
       </mesh>
 
       {/* Wireframe box preview */}

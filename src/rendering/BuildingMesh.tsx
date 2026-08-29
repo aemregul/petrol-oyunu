@@ -7,6 +7,7 @@ import { ModelErrorBoundary } from './models/ModelErrorBoundary';
 import { PriceTotem } from './PriceTotem';
 import { LightPole } from './LightPole';
 import { FasciaSign } from './FasciaSign';
+import { DECAL } from './decal';
 import { PylonSign } from './PylonSign';
 import { priceSignPosition } from '../domain/services/simulationEngine';
 import {
@@ -164,7 +165,7 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
       {/* Painted border in the fuel's colour so the grade is obvious */}
       <mesh position={[0, 0.13, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[w * 0.36, w * 0.42, 4]} />
-        <meshBasicMaterial color={accent} transparent opacity={0.75} />
+        <meshBasicMaterial color={accent} transparent opacity={0.75} {...DECAL} />
       </mesh>
 
       {/* Two filler caps */}
@@ -339,6 +340,7 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
             opacity={hovered ? 0.42 : 0.15}
             transparent
             depthWrite={false}
+            {...DECAL}
           />
         </mesh>
       )}

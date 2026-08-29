@@ -13,6 +13,7 @@ import {
   parseParcelKey
 } from '../domain/services/land';
 import { PointerState } from './BuildPlacementPlane';
+import { DECAL } from './decal';
 
 const S = 2;
 
@@ -109,6 +110,7 @@ export const LandParcelLayer: React.FC<LandParcelLayerProps> = ({ pointerState }
                 transparent
                 opacity={isHovered ? 0.42 : 0.16}
                 depthWrite={false}
+                {...DECAL}
               />
             </mesh>
 
