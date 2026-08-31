@@ -1,3 +1,4 @@
+import { TONE_BUTTON } from './gameStyle';
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
@@ -57,20 +58,17 @@ export const PumpPanel: React.FC = () => {
     const module = GAME_CONFIG.pumpFuelModules[fuel];
     const locked = gameState.player.level < module.minLevel;
     const conf = GAME_CONFIG.fuels[fuel];
-    const tone =
-      fuel === 'diesel'
-        ? 'bg-orange-600 hover:bg-orange-500'
-        : 'bg-blue-600 hover:bg-blue-500';
+    const tone = fuel === 'diesel' ? TONE_BUTTON.amber : TONE_BUTTON.blue;
 
     return (
       <button
         key={fuel}
         onClick={() => addPumpFuel(pump.id, fuel)}
         disabled={locked}
-        className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all ${
+        className={`w-full py-2.5 rounded-xl font-extrabold text-xs transition-all ${
           locked
-            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            : `${tone} text-white shadow-lg`
+            ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+            : `game-btn ${tone}`
         }`}
       >
         {locked
@@ -82,18 +80,18 @@ export const PumpPanel: React.FC = () => {
 
   return (
     <div className="absolute left-4 top-20 w-80 pointer-events-auto animate-fade-in">
-      <div className="bg-slate-900/95 border border-slate-700/80 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden">
+      <div className="game-surface !rounded-3xl overflow-hidden">
         {/* Header */}
-        <div className="bg-red-700/90 px-4 py-3 flex items-center justify-between">
+        <div className="bg-red-950/70 border-b-2 border-red-500/30 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+            <div className="game-icon-badge w-8 h-8 !bg-red-500/20 border-red-400/40">
               <Fuel className="w-4 h-4 text-white" />
             </div>
-            <span className="font-black text-white text-sm tracking-wide">Pompa #{pumpNo}</span>
+            <span className="game-title text-red-100 text-sm">Pompa #{pumpNo}</span>
           </div>
           <button
             onClick={() => selectPump(null)}
-            className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+            className="w-7 h-7 rounded-lg bg-black/25 border border-white/25 hover:bg-black/40 text-white flex items-center justify-center transition-all"
           >
             <X className="w-4 h-4" />
           </button>
@@ -147,7 +145,7 @@ export const PumpPanel: React.FC = () => {
             {repairCost !== null && (
               <button
                 onClick={() => repairPump(pump.id)}
-                className="w-full py-2.5 rounded-xl font-bold text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg transition-all"
+                className={`game-btn w-full py-2.5 rounded-xl font-extrabold text-xs ${TONE_BUTTON.red}`}
               >
                 Onar — ₺{repairCost.toLocaleString('tr-TR')}
               </button>
@@ -156,7 +154,7 @@ export const PumpPanel: React.FC = () => {
               <button
                 onClick={() => upgradePump(pump.id)}
                 title={upgrade.effectsDescription}
-                className="w-full py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition-all"
+                className={`game-btn w-full py-2.5 rounded-xl font-extrabold text-xs ${TONE_BUTTON.green}`}
               >
                 Pompa S{pump.level + 1} — ₺{upgrade.cost.toLocaleString('tr-TR')}
               </button>
@@ -165,7 +163,7 @@ export const PumpPanel: React.FC = () => {
             {moduleRow('lpg')}
             <button
               onClick={() => sellStructure(pump.id)}
-              className="w-full py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 flex items-center justify-center gap-1.5 transition-all"
+              className="game-btn w-full py-2.5 rounded-xl font-extrabold text-xs bg-slate-800 hover:bg-slate-700 text-amber-400 border-2 border-slate-700 flex items-center justify-center gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Sat — ₺{structureValue(pump.id).toLocaleString('tr-TR')}</span>

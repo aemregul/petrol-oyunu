@@ -10,6 +10,61 @@
   }
 }
 
+/*
+ * The game look, in one place.
+ *
+ * Every piece of HUD is a solid slab rather than a pane of frosted glass: a
+ * thick border, a light top edge and a hard shadow sitting directly under it.
+ * That trio is what makes a rectangle read as an object you could press, and
+ * it is the whole difference between a dashboard and a game.
+ */
+@layer components {
+  /* Dark slab: HUD cards, side panels, modal shells. */
+  .game-surface {
+    @apply bg-slate-900 border-2 border-slate-700 rounded-2xl;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.07),
+      0 4px 0 rgb(2 6 23 / 0.6),
+      0 8px 18px rgb(2 6 23 / 0.45);
+  }
+
+  /*
+   * Coloured glass: notifications and live events. Lighter-handed than the
+   * slabs — the scene stays visible through it, a lit rim along the top edge
+   * does the work a hard drop shadow would do, and the colour comes from the
+   * tint rather than from shouting.
+   */
+  .game-glass {
+    @apply rounded-2xl border backdrop-blur-xl;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.12),
+      0 6px 20px rgb(2 6 23 / 0.45);
+  }
+
+  /* Anything meant to be pressed sinks onto its own shadow when held. */
+  .game-btn {
+    @apply transition-all duration-75;
+    box-shadow:
+      0 3px 0 rgb(2 6 23 / 0.55),
+      0 6px 14px rgb(2 6 23 / 0.3);
+  }
+  .game-btn:active:not(:disabled) {
+    @apply translate-y-[3px];
+    box-shadow: 0 1px 3px rgb(2 6 23 / 0.35);
+  }
+
+  /* The circle an icon sits in on a coloured pill. */
+  .game-icon-badge {
+    @apply rounded-full bg-black/25 border border-white/30 flex items-center justify-center shrink-0;
+  }
+
+  /* Shouty label type: short, wide and set off the background. */
+  .game-title {
+    @apply font-extrabold uppercase tracking-wide;
+    text-shadow: 0 1px 2px rgb(2 6 23 / 0.55);
+  }
+}
+
 /* Custom modern scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

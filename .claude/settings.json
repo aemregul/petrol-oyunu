@@ -204,7 +204,9 @@
       "Bash(awk '{ print length\\($0\\), $0 }')",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001 1500 900)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001)",
-      "Bash(node -e \"const l=require\\('/Users/emre/petrol-oyunu/node_modules/lucide-react/dist/cjs/lucide-react.js'\\); const want=['Box','Boxes','Grid3x3','Grid2x2','LayoutGrid','Camera','Video','Eye','Mountain','Axis3d','Scan','SquareStack','Crosshair','RotateCcw','RotateCw','Frame','Orbit','View']; want.forEach\\(n=>console.log\\(n.padEnd\\(14\\), n in l ? 'OK':'--'\\)\\)\")"
+      "Bash(node -e \"const l=require\\('/Users/emre/petrol-oyunu/node_modules/lucide-react/dist/cjs/lucide-react.js'\\); const want=['Box','Boxes','Grid3x3','Grid2x2','LayoutGrid','Camera','Video','Eye','Mountain','Axis3d','Scan','SquareStack','Crosshair','RotateCcw','RotateCw','Frame','Orbit','View']; want.forEach\\(n=>console.log\\(n.padEnd\\(14\\), n in l ? 'OK':'--'\\)\\)\")",
+      "Bash(grep -n \"className=\\\\\"\\\\|className={\\\\`\" src/ui/PumpPanel.tsx)",
+      "Bash(grep -rn 'className=\"[^\"]*\\\\${' src/ui/)"
     ],
     "additionalDirectories": [
       "/private/tmp"

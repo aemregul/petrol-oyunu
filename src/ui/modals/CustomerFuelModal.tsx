@@ -114,7 +114,7 @@ export const CustomerFuelModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-sm shadow-2xl text-slate-100 flex flex-col overflow-hidden">
+      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl text-slate-100 flex flex-col overflow-hidden">
         {/* Header: who is at the pump */}
         <div className="px-5 pt-4 flex items-start justify-between">
           <div>
@@ -144,7 +144,7 @@ export const CustomerFuelModal: React.FC = () => {
               sounds.playClick();
               setActiveModal('NONE');
             }}
-            className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all"
+            className="w-7 h-7 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all"
           >
             <X className="w-4 h-4" />
           </button>
@@ -214,7 +214,7 @@ export const CustomerFuelModal: React.FC = () => {
                   onClick={() => start('MONEY', amount)}
                   className={`px-4 rounded-xl font-black text-xs transition-all ${
                     rightFuelChosen && amount > 0
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg'
+                      ? 'game-btn bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 border-2 border-emerald-300/60 text-white shadow-lg'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   }`}
                 >
@@ -225,7 +225,7 @@ export const CustomerFuelModal: React.FC = () => {
                   onClick={() => start('FULL', demandLiters)}
                   className={`px-4 rounded-xl font-black text-xs transition-all ${
                     rightFuelChosen
-                      ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg'
+                      ? 'game-btn bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 border-2 border-red-300/60 text-white shadow-lg'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   }`}
                 >
@@ -264,7 +264,7 @@ export const CustomerFuelModal: React.FC = () => {
             className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
               vehicle.windowsCleaned
                 ? 'bg-slate-800/60 text-emerald-400 cursor-default'
-                : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                : 'game-btn bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -275,14 +275,14 @@ export const CustomerFuelModal: React.FC = () => {
           {isFinished ? (
             <button
               onClick={() => completeVehicleFueling(vehicle.id)}
-              className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider bg-red-600 hover:bg-red-500 text-white shadow-xl shadow-red-600/30 transition-all"
+              className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider game-btn bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 border-2 border-red-300/60 text-white shadow-xl shadow-red-600/30 transition-all"
             >
               Teslim Et — ₺{Math.round(runningTotal).toLocaleString('tr-TR')}
             </button>
           ) : (
             <button
               onClick={() => dismissCustomer(vehicle.id)}
-              className="w-full py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
+              className="w-full py-2.5 rounded-xl font-bold text-xs game-btn bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
             >
               Müşteriyi Gönder
             </button>

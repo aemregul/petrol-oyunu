@@ -44,6 +44,7 @@ export default {
         'float-up': 'floatUp 1.2s ease-out forwards',
         'fade-in': 'fadeIn 0.25s ease-out forwards',
         'fade-out': 'fadeOut 0.6s ease-in forwards',
+        breathe: 'breathe 2.2s ease-in-out infinite',
         'toast-in': 'toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'toast-out': 'toastOut 0.9s cubic-bezier(0.4, 0, 0.6, 1) forwards'
       },
@@ -59,6 +60,12 @@ export default {
         fadeOut: {
           '0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
           '100%': { opacity: '0', transform: 'translateY(-6px) scale(0.95)' }
+        },
+        // Just enough swell to catch the eye at the edge of vision. Anything
+        // bigger reads as a wobble and starts fighting the game for attention.
+        breathe: {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.025)' }
         },
         // Toasts arrive from the edge they live on rather than growing out of
         // nothing, so a new one reads as "something came in" at the corner of

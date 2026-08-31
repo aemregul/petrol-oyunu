@@ -1,48 +1,23 @@
 import React from 'react';
 import { ShieldAlert, AlertTriangle, Info, Award } from 'lucide-react';
 import type { GameNotification } from '../domain/types/gameState';
+import type { Tone } from './gameStyle';
 
 export type NotificationStyle = {
-  /** Toast pill background and border. */
-  pill: string;
+  /** Which of the game palette's tones this type shouts in. */
+  tone: Tone;
   /** The dot standing in for the icon in the log. */
   dot: string;
   icon: React.ElementType;
-  /** Icon and title colour — the type is read from this before the words are. */
+  /** Title colour in the log, where the row sits on the dark modal instead. */
   tint: string;
-  /** Body colour, tinted to match the pill so the two lines read as one block. */
-  body: string;
 };
 
 export const NOTIFICATION_STYLES: Record<GameNotification['type'], NotificationStyle> = {
-  CRITICAL: {
-    pill: 'bg-red-950/90 border-red-500/50 shadow-red-950/40',
-    dot: 'bg-red-500',
-    icon: ShieldAlert,
-    tint: 'text-red-300',
-    body: 'text-red-100/75'
-  },
-  WARNING: {
-    pill: 'bg-amber-950/90 border-amber-500/50 shadow-amber-950/40',
-    dot: 'bg-amber-500',
-    icon: AlertTriangle,
-    tint: 'text-amber-300',
-    body: 'text-amber-100/75'
-  },
-  REWARD: {
-    pill: 'bg-emerald-950/90 border-emerald-500/50 shadow-emerald-950/40',
-    dot: 'bg-emerald-500',
-    icon: Award,
-    tint: 'text-emerald-300',
-    body: 'text-emerald-100/75'
-  },
-  INFO: {
-    pill: 'bg-slate-900/90 border-slate-600/60 shadow-slate-950/40',
-    dot: 'bg-sky-500',
-    icon: Info,
-    tint: 'text-sky-300',
-    body: 'text-slate-300'
-  }
+  CRITICAL: { tone: 'red', dot: 'bg-red-500', icon: ShieldAlert, tint: 'text-red-300' },
+  WARNING: { tone: 'amber', dot: 'bg-amber-500', icon: AlertTriangle, tint: 'text-amber-300' },
+  REWARD: { tone: 'green', dot: 'bg-emerald-500', icon: Award, tint: 'text-emerald-300' },
+  INFO: { tone: 'blue', dot: 'bg-sky-500', icon: Info, tint: 'text-sky-300' }
 };
 
 export const styleFor = (type: GameNotification['type']): NotificationStyle =>

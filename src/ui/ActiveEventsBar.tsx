@@ -2,6 +2,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { ActiveGameEvent } from '../domain/types/gameState';
 import { FUEL_DEAL_DISCOUNT } from '../domain/services/simulationEngine';
+import { TONE_GLASS, TONE_TEXT, PILL_BODY, type Tone } from './gameStyle';
 import {
   TrendingUp,
   TrendingDown,
@@ -37,22 +38,11 @@ const EVENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> =
   Star
 };
 
-const CATEGORY_STYLES: Record<
-  ActiveGameEvent['category'],
-  { ring: string; text: string; bar: string }
-> = {
-  ECONOMY: { ring: 'border-sky-500/40 bg-sky-500/10', text: 'text-sky-300', bar: 'bg-sky-500' },
-  TRAFFIC: {
-    ring: 'border-indigo-500/40 bg-indigo-500/10',
-    text: 'text-indigo-300',
-    bar: 'bg-indigo-500'
-  },
-  INCIDENT: { ring: 'border-red-500/40 bg-red-500/10', text: 'text-red-300', bar: 'bg-red-500' },
-  OPPORTUNITY: {
-    ring: 'border-emerald-500/40 bg-emerald-500/10',
-    text: 'text-emerald-300',
-    bar: 'bg-emerald-500'
-  }
+const CATEGORY_TONES: Record<ActiveGameEvent['category'], Tone> = {
+  ECONOMY: 'blue',
+  TRAFFIC: 'violet',
+  INCIDENT: 'red',
+  OPPORTUNITY: 'green'
 };
 
 /** Shows what is currently affecting the station and how long it has left. */
@@ -67,32 +57,32 @@ const LiveWindow: React.FC<{
   detail: string;
   secondsLeft: number;
   total: number;
-  tone: 'sky' | 'emerald';
+  tone: Tone;
   icon: React.ElementType;
-}> = ({ title, detail, secondsLeft, total, tone, icon: Icon }) => {
-  const ring = tone === 'emerald' ? 'border-emerald-500/60 bg-emerald-500/10' : 'border-sky-500/60 bg-sky-500/10';
-  const text = tone === 'emerald' ? 'text-emerald-400' : 'text-sky-400';
-  const bar = tone === 'emerald' ? 'bg-emerald-400' : 'bg-sky-400';
-
-  return (
-    <div className={`border backdrop-blur-md rounded-2xl px-3.5 py-2.5 shadow-xl w-64 flex flex-col gap-2 ${ring}`}>
+}> = ({ title, detail, secondsLeft, total, tone, icon: Icon }) => (
+  // These two last a minute and are worth dropping everything for, so unlike
+  // the day-long events they breathe the whole time they are up.
+  <div className="animate-breathe">
+    <div className={`game-glass px-3 py-2.5 w-64 flex flex-col gap-2 ${TONE_GLASS[tone]}`}>
       <div className="flex items-center gap-2.5">
-        <Icon className={`w-4 h-4 shrink-0 ${text}`} />
-        <span className="text-xs font-extrabold text-white flex-1 truncate">{title}</span>
-        <span className={`text-[10px] font-mono font-bold shrink-0 ${text}`}>
-          {Math.ceil(secondsLeft)} sn
+        <Icon className={`w-4 h-4 shrink-0 ${TONE_TEXT[tone]}`} />
+        <span className={`game-title text-[12px] flex-1 leading-tight break-words ${TONE_TEXT[tone]}`}>
+          {title}
+        </span>
+        <span className={`text-[11px] font-mono font-extrabold shrink-0 tabular-nums ${TONE_TEXT[tone]}`}>
+          {Math.ceil(secondsLeft)} s
         </span>
       </div>
-      <p className="text-[10px] text-slate-300 leading-snug">{detail}</p>
-      <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+      <p className={`text-[11px] font-semibold leading-snug ${PILL_BODY}`}>{detail}</p>
+      <div className="h-1.5 rounded-full bg-black/40 overflow-hidden">
         <div
-          className={`h-full rounded-full ${bar}`}
+          className="h-full rounded-full bg-white/60"
           style={{ width: `${Math.max(0, Math.min(1, secondsLeft / total)) * 100}%` }}
         />
       </div>
     </div>
-  );
-};
+  </div>
+);
 
 export const ActiveEventsBar: React.FC = () => {
   const activeEvents = useGameStore((s) => s.gameState.activeEvents);
@@ -109,7 +99,7 @@ export const ActiveEventsBar: React.FC = () => {
           detail="Tedarikçi alış fiyatını indirdi. Satış fiyatınız değişmez — depoları şimdi doldurun."
           secondsLeft={dealLeft}
           total={60}
-          tone="emerald"
+          tone="green"
           icon={TrendingDown}
         />
       )}
@@ -119,13 +109,13 @@ export const ActiveEventsBar: React.FC = () => {
           detail="Yola araç yığıldı; çok daha fazla sürücü uğruyor."
           secondsLeft={rushLeft}
           total={60}
-          tone="sky"
+          tone="blue"
           icon={Car}
         />
       )}
       {activeEvents.map((event) => {
         const Icon = EVENT_ICONS[event.icon] || Sparkles;
-        const style = CATEGORY_STYLES[event.category];
+        const tone = CATEGORY_TONES[event.category];
         const remainingRatio =
           event.totalHours > 0 ? Math.max(0, event.remainingHours / event.totalHours) : 0;
 
@@ -138,22 +128,22 @@ export const ActiveEventsBar: React.FC = () => {
         return (
           <div
             key={event.id}
-            className={`border backdrop-blur-md rounded-2xl px-3.5 py-2.5 shadow-xl w-64 flex flex-col gap-2 ${style.ring}`}
+            className={`game-glass px-3 py-2.5 w-64 flex flex-col gap-2 ${TONE_GLASS[tone]}`}
             title={event.description}
           >
             <div className="flex items-center gap-2.5">
-              <Icon className={`w-4 h-4 shrink-0 ${style.text}`} />
-              <span className="text-xs font-extrabold text-white flex-1 truncate">
+              <Icon className={`w-4 h-4 shrink-0 ${TONE_TEXT[tone]}`} />
+              <span className={`game-title text-[12px] flex-1 leading-tight break-words ${TONE_TEXT[tone]}`}>
                 {event.name}
               </span>
-              <span className={`text-[10px] font-mono font-bold shrink-0 ${style.text}`}>
+              <span className={`text-[11px] font-mono font-extrabold shrink-0 tabular-nums ${TONE_TEXT[tone]}`}>
                 {timeLabel}
               </span>
             </div>
 
-            <div className="w-full h-1 bg-slate-800/80 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-black/30 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-500 ${style.bar}`}
+                className="h-full rounded-full bg-white/60 transition-all duration-500"
                 style={{ width: `${remainingRatio * 100}%` }}
               />
             </div>

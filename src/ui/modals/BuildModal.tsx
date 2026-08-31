@@ -41,7 +41,7 @@ const LandAndRoadCards: React.FC<{
         </div>
         <button
           onClick={onBuyLand}
-          className="w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 transition-all"
+          className="w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider game-btn bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 border-2 border-emerald-300/60 text-white flex items-center justify-center gap-1.5 transition-all"
         >
           <MapIcon className="w-3.5 h-3.5" />
           <span>Haritada Aç</span>
@@ -86,7 +86,7 @@ const LandAndRoadCards: React.FC<{
             disabled={!canAffordRoad}
             className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
               canAffordRoad
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20'
+                ? 'game-btn bg-gradient-to-b from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400 border-2 border-amber-200/70 text-slate-950 shadow-lg shadow-amber-500/20'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
             }`}
           >
@@ -130,11 +130,11 @@ export const BuildModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
+      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="bg-slate-800/80 px-6 py-4 border-b border-slate-700/80 flex justify-between items-center">
+        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center">
               <Hammer className="w-5 h-5" />
             </div>
             <div>
@@ -144,14 +144,14 @@ export const BuildModal: React.FC = () => {
           </div>
           <button
             onClick={handleClose}
-            className="w-8 h-8 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all"
+            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Category Tabs */}
-        <div className="flex border-b border-slate-800 p-2 gap-2 bg-slate-950/40 overflow-x-auto">
+        <div className="flex border-b-2 border-slate-800 p-2.5 gap-2 bg-slate-950/40 overflow-x-auto shrink-0">
           {[
             { id: 'all', name: 'Tümü' },
             { id: 'pump', name: 'Pompalar' },
@@ -167,10 +167,10 @@ export const BuildModal: React.FC = () => {
                 sounds.playClick();
                 setCategory(tab.id as any);
               }}
-              className={`px-4 py-2 rounded-xl font-bold text-xs whitespace-nowrap transition-all ${
+              className={`game-btn px-4 py-2 rounded-xl font-extrabold text-xs whitespace-nowrap ${
                 category === tab.id
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-gradient-to-b from-amber-300 to-amber-500 border-2 border-amber-200/70 text-slate-950'
+                  : 'bg-slate-800 border-2 border-slate-700 text-slate-300 hover:bg-slate-700'
               }`}
             >
               {tab.name}
@@ -229,7 +229,7 @@ export const BuildModal: React.FC = () => {
                     disabled={!canAfford}
                     className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
                       canAfford
-                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20'
+                        ? 'game-btn bg-gradient-to-b from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400 border-2 border-amber-200/70 text-slate-950 shadow-lg shadow-amber-500/20'
                         : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                     }`}
                   >

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import type { GameNotification } from '../domain/types/gameState';
 import { styleFor } from './notificationStyle';
+import { TONE_GLASS, TONE_TEXT, PILL_BODY } from './gameStyle';
 
 /**
  * How many notifications sit in the corner at once. Two, not three: a pill
@@ -107,34 +108,33 @@ export const NotificationToast: React.FC = () => {
     <div className="fixed bottom-16 left-4 z-40 flex flex-col-reverse gap-2 items-start pointer-events-none select-none">
       {live.map(({ notif, leaving }) => {
         const style = styleFor(notif.type);
-        const Icon = style.icon;
         return (
+          // Two elements, because one can only run one animation: the outer
+          // carries the arrival and departure, the inner does the breathing.
           <div
             // Keying on the count too remounts a re-fired toast, so its arrival
             // animation replays and the bumped "×N" catches the eye.
             key={`${notif.id}:${notif.count}`}
-            // No fixed height and nothing clipped: the pill grows to whatever
-            // the message needs. A warning the player can only half-read is
-            // worse than no warning at all.
-            className={`w-[22rem] border backdrop-blur-md rounded-2xl px-3 py-2 shadow-xl grid grid-cols-[auto_1fr] items-start gap-2.5 font-sans ${style.pill} ${
-              leaving ? 'animate-toast-out' : 'animate-toast-in'
-            }`}
+            className={leaving ? 'animate-toast-out' : 'animate-toast-in'}
           >
-            <Icon className={`w-4 h-4 mt-px shrink-0 ${style.tint}`} />
-            <div className="min-w-0">
-              <div className={`text-[13px] font-bold leading-snug break-words ${style.tint}`}>
-                {notif.title}
+            <div
+              // One flowing line rather than a headline over a paragraph, and
+              // only as wide as it needs: a short notice makes a short pill.
+              // Nothing is clipped — it wraps when the sentence is long, since
+              // a warning the player can only half-read is no warning at all.
+              className={`max-w-[21rem] w-fit px-3 py-1.5 font-sans game-glass ${
+                TONE_GLASS[style.tone]
+              } ${leaving ? '' : 'animate-breathe'}`}
+            >
+              <p className="text-[12px] leading-snug break-words">
+                <span className={`font-extrabold ${TONE_TEXT[style.tone]}`}>{notif.title}</span>
+                <span className={PILL_BODY}> — {notif.message}</span>
                 {notif.count > 1 && (
-                  <span className="ml-1.5 text-[11px] font-extrabold tabular-nums opacity-80">
+                  <span className={`ml-1 font-extrabold tabular-nums ${TONE_TEXT[style.tone]}`}>
                     ×{notif.count}
                   </span>
                 )}
-              </div>
-              <div
-                className={`text-[12px] font-medium leading-[1.45] break-words mt-0.5 ${style.body}`}
-              >
-                {notif.message}
-              </div>
+              </p>
             </div>
           </div>
         );

@@ -9,6 +9,7 @@ import { ActiveEventsBar } from './ActiveEventsBar';
 import { TankerStatusBar } from './TankerStatusBar';
 import { PumpPanel } from './PumpPanel';
 import { CAMERA_VIEWS, type CameraViewId } from '../rendering/cameraFrame';
+import { TONE_BUTTON } from './gameStyle';
 
 /** The face the camera button wears in each of the three views. */
 const VIEW_ICONS: Record<CameraViewId, React.ElementType> = {
@@ -110,7 +111,7 @@ export const HUD: React.FC = () => {
       {/* ================= TOP BAR ================= */}
       <div className="flex justify-between items-start w-full">
         {/* Top-Left: Day, Clock & Time Controls */}
-        <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md rounded-2xl p-2.5 shadow-2xl pointer-events-auto flex items-center gap-3.5">
+        <div className="game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
           <div className="flex items-center gap-2 border-r border-slate-700/80 pr-3">
             <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold font-mono text-sm border border-sky-500/30">
               G{dayState.currentDay}
@@ -143,7 +144,7 @@ export const HUD: React.FC = () => {
         </div>
 
         {/* Top-Center: Cash Balance & Today's Net Revenue */}
-        <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md rounded-2xl px-5 py-2.5 shadow-2xl pointer-events-auto flex items-center gap-4 text-center">
+        <div className="game-surface px-5 py-2.5 pointer-events-auto flex items-center gap-4 text-center">
           <div>
             <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">İstasyon Kasası</div>
             <div className="text-xl font-black font-mono text-emerald-400 tracking-tight flex items-center justify-center gap-1">
@@ -161,7 +162,7 @@ export const HUD: React.FC = () => {
         </div>
 
         {/* Top-Right: Reputation, Level & XP */}
-        <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md rounded-2xl p-2.5 shadow-2xl pointer-events-auto flex items-center gap-3.5">
+        <div className="game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
           {/* Reputation Stars */}
           <div className="flex items-center gap-1.5 border-r border-slate-700/80 pr-3">
             <span className="text-amber-400 text-base">★</span>
@@ -198,13 +199,13 @@ export const HUD: React.FC = () => {
               view switch and the two things the wheel cannot do. */}
           <button
             onClick={cycleCameraView}
-            className="w-12 h-12 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 backdrop-blur-md rounded-2xl shadow-2xl flex items-center justify-center text-slate-200 hover:text-white transition-all hover:scale-105"
+            className="game-surface game-btn w-12 h-12 hover:bg-slate-800 flex items-center justify-center text-slate-200 hover:text-white"
             title={`Bakış açısı: ${currentView.label} — sıradaki: ${nextView.label}`}
           >
             <ViewIcon className="w-5 h-5" />
           </button>
 
-          <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl flex flex-col gap-1 w-12">
+          <div className="game-surface p-1.5 flex flex-col gap-1 w-12">
             <button
               onClick={() => rotateCamera('LEFT')}
               className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
@@ -232,7 +233,7 @@ export const HUD: React.FC = () => {
           {/* Quick Clean Station Button */}
           <button
             onClick={cleanStation}
-            className="bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-white text-xs font-bold px-3 py-2 rounded-2xl shadow-2xl flex items-center gap-2 transition-all hover:scale-105"
+            className="game-surface game-btn hover:bg-slate-800 text-white text-xs font-extrabold px-3.5 py-2 flex items-center gap-2"
             title="İstasyon Sahasını Temizle (300 TL)"
           >
             <Sparkles className="w-4 h-4 text-emerald-400" />
@@ -246,7 +247,7 @@ export const HUD: React.FC = () => {
         {landMode.active && gameState.station.roadLevel < 2 && (
           <button
             onClick={upgradeRoad}
-            className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto flex flex-col items-start leading-tight animate-fade-in"
+            className={`game-btn rounded-2xl px-4 py-2.5 pointer-events-auto flex flex-col items-start leading-tight animate-fade-in text-white text-xs font-extrabold ${TONE_BUTTON.amber}`}
             title={`Seviye ${GAME_CONFIG.roadUpgrade.minLevel}, ${GAME_CONFIG.roadUpgrade.minReputation.toFixed(2)} itibar gerekir`}
           >
             <span>Yolu Genişlet — ₺{GAME_CONFIG.roadUpgrade.price.toLocaleString('tr-TR')}</span>
@@ -258,10 +259,10 @@ export const HUD: React.FC = () => {
 
         {/* Center / Right: Build Mode Placement Bar (When active) */}
         {buildMode.active && (
-          <div className="bg-slate-900/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-4 py-3 shadow-2xl pointer-events-auto flex items-center gap-3 animate-fade-in">
+          <div className="game-surface !border-sky-500 px-4 py-3 pointer-events-auto flex items-center gap-3 animate-fade-in">
             <button
               onClick={rotateBuildPreview}
-              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-600 flex items-center gap-1.5"
+              className={`game-btn rounded-xl px-3.5 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.slate}`}
             >
               <RotateCw className="w-3.5 h-3.5" />
               <span>Döndür (R)</span>
@@ -271,13 +272,13 @@ export const HUD: React.FC = () => {
                 if (wouldAbsorb.length > 0) setConfirmMerge(true);
                 else confirmBuildPlacement();
               }}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-1.5"
+              className={`game-btn rounded-xl px-4 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.green}`}
             >
               <span>Onayla & İnşa Et</span>
             </button>
             <button
               onClick={exitBuildMode}
-              className="bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold px-3 py-2 rounded-xl"
+              className={`game-btn rounded-xl px-3 py-2 text-xs font-extrabold ${TONE_BUTTON.red}`}
             >
               İptal
             </button>
@@ -287,7 +288,7 @@ export const HUD: React.FC = () => {
         {/* A rest complex replaces the parade it is built over, and that is
             not something to discover after paying for it. */}
         {confirmMerge && buildMode.active && (
-          <div className="bg-slate-900/97 border-2 border-amber-500 backdrop-blur-md rounded-2xl px-6 py-4 shadow-2xl pointer-events-auto max-w-md animate-fade-in">
+          <div className="game-surface !border-amber-500 px-6 py-4 pointer-events-auto max-w-md animate-fade-in">
             <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm mb-1">
               <ShieldAlert className="w-4 h-4" />
               Mevcut Yapılar Birleştirilecek
@@ -308,13 +309,13 @@ export const HUD: React.FC = () => {
                   setConfirmMerge(false);
                   confirmBuildPlacement();
                 }}
-                className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2 rounded-xl"
+                className={`game-btn rounded-xl px-4 py-2 text-xs font-extrabold ${TONE_BUTTON.amber}`}
               >
                 Anladım, Birleştir
               </button>
               <button
                 onClick={() => setConfirmMerge(false)}
-                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-600"
+                className={`game-btn rounded-xl px-3 py-2 text-xs font-extrabold ${TONE_BUTTON.slate}`}
               >
                 Vazgeç
               </button>
@@ -325,7 +326,7 @@ export const HUD: React.FC = () => {
         {/* Whatever the player has clicked on: what it is worth, and the two
             things they can do with it. */}
         {selected && !buildMode.active && (
-          <div className="bg-slate-900/95 border-2 border-sky-500 backdrop-blur-md rounded-2xl px-5 py-3 shadow-2xl pointer-events-auto flex items-center gap-4 animate-fade-in">
+          <div className="game-surface !border-sky-500 px-5 py-3 pointer-events-auto flex items-center gap-4 animate-fade-in">
             <div>
               <div className="text-xs uppercase font-bold text-sky-400">
                 {selected.name} · Sv{selected.level}
@@ -337,7 +338,7 @@ export const HUD: React.FC = () => {
             {selected.upgrade && (
               <button
                 onClick={() => upgradeBuilding(selected.id)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-1.5"
+                className={`game-btn rounded-xl px-4 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.green}`}
                 title={selected.upgrade.effectsDescription}
               >
                 <span>Sv{selected.level + 1} Yükselt · ₺{selected.upgrade.cost.toLocaleString('tr-TR')}</span>
@@ -345,7 +346,7 @@ export const HUD: React.FC = () => {
             )}
             <button
               onClick={() => sellStructure(selected.id)}
-              className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5"
+              className={`game-btn rounded-xl px-3.5 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.amber}`}
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Sat</span>
@@ -355,7 +356,7 @@ export const HUD: React.FC = () => {
                 selectBuilding(null);
                 selectPump(null);
               }}
-              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-600"
+              className={`game-btn rounded-xl px-3 py-2 text-xs font-extrabold ${TONE_BUTTON.slate}`}
             >
               Kapat
             </button>
@@ -366,7 +367,7 @@ export const HUD: React.FC = () => {
         {isGasolineCritical && (
           <button
             onClick={() => setActiveModal('FUEL_ORDER')}
-            className="bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto flex items-center gap-2 animate-pulse"
+            className={`game-btn rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-2 animate-breathe game-title text-white text-xs ${TONE_BUTTON.red}`}
           >
             <ShieldAlert className="w-4 h-4" />
             <span>KRİTİK STOK: Benzin Siparişi Ver!</span>
@@ -381,11 +382,11 @@ export const HUD: React.FC = () => {
 
       {/* ================= BOTTOM ACTION BAR ================= */}
       <div className="flex justify-center items-center w-full">
-        <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md rounded-2xl p-1.5 shadow-2xl pointer-events-auto flex items-center gap-1">
+        <div className="game-surface p-1.5 pointer-events-auto flex items-center gap-1">
           <button
             onClick={() => setActiveModal('OFFICE')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'OFFICE' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'OFFICE' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Building2 className="w-4 h-4 text-sky-400" />
@@ -394,8 +395,8 @@ export const HUD: React.FC = () => {
 
           <button
             onClick={() => setActiveModal('BUILD')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'BUILD' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'BUILD' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Hammer className="w-4 h-4 text-amber-400" />
@@ -411,8 +412,8 @@ export const HUD: React.FC = () => {
               !canEdit
                 ? 'text-slate-600 cursor-not-allowed'
                 : editMode
-                  ? 'bg-sky-600 text-white shadow-lg'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? `game-btn ${TONE_BUTTON.blue}`
+                  : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
             title={
               canEdit
@@ -429,7 +430,7 @@ export const HUD: React.FC = () => {
           <button
             onClick={() => (landMode.active ? exitLandMode() : enterLandMode())}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              landMode.active ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+              landMode.active ? `game-btn ${TONE_BUTTON.green}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <MapIcon className="w-4 h-4 text-emerald-400" />
@@ -438,8 +439,8 @@ export const HUD: React.FC = () => {
 
           <button
             onClick={() => setActiveModal('MISSIONS')}
-            className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'MISSIONS' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'MISSIONS' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Target className="w-4 h-4 text-rose-400" />
@@ -453,8 +454,8 @@ export const HUD: React.FC = () => {
 
           <button
             onClick={() => setActiveModal('FUEL_ORDER')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'FUEL_ORDER' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'FUEL_ORDER' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Fuel className="w-4 h-4 text-emerald-400" />
@@ -463,8 +464,8 @@ export const HUD: React.FC = () => {
 
           <button
             onClick={() => setActiveModal('STAFF')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'STAFF' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'STAFF' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Users className="w-4 h-4 text-indigo-400" />
@@ -473,8 +474,8 @@ export const HUD: React.FC = () => {
 
           <button
             onClick={() => setActiveModal('PRICING')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'PRICING' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'PRICING' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Tag className="w-4 h-4 text-purple-400" />
@@ -483,8 +484,8 @@ export const HUD: React.FC = () => {
 
           <button
             onClick={() => setActiveModal('BANK')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeModal === 'BANK' ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeModal === 'BANK' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Landmark className="w-4 h-4 text-emerald-400" />
@@ -496,7 +497,7 @@ export const HUD: React.FC = () => {
           <button
             onClick={() => setActiveModal('NOTIFICATIONS')}
             className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
-              activeModal === 'NOTIFICATIONS' ? 'bg-sky-600 text-white' : ''
+              activeModal === 'NOTIFICATIONS' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
             }`}
             title="Bildirimler"
           >
@@ -511,7 +512,7 @@ export const HUD: React.FC = () => {
           <button
             onClick={() => setActiveModal('SETTINGS')}
             className={`p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
-              activeModal === 'SETTINGS' ? 'bg-sky-600 text-white' : ''
+              activeModal === 'SETTINGS' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
             }`}
             title="Ayarlar"
           >
