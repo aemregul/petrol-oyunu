@@ -85,15 +85,19 @@ export const PerformanceOverlay: React.FC = () => {
           Draw Calls: <span className="text-white font-bold">{perfMetrics.drawCalls}</span>
         </div>
 
-        <button
-          onClick={toggleDebug}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded font-sans text-[9px] font-bold"
-        >
-          {showDebug ? 'Kapat' : 'Test Paneli'}
-        </button>
+        {/* Money and unlock cheats are development tooling; a production
+            build ships without the button that opens them. */}
+        {import.meta.env.DEV && (
+          <button
+            onClick={toggleDebug}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded font-sans text-[9px] font-bold"
+          >
+            {showDebug ? 'Kapat' : 'Test Paneli'}
+          </button>
+        )}
       </div>
 
-      {showDebug && (
+      {import.meta.env.DEV && showDebug && (
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-3 shadow-2xl mt-2 flex flex-col gap-2 animate-fade-in text-xs">
           <div className="font-bold text-white uppercase text-[10px]">Geliştirici & QA Test Butonları</div>
           <div className="flex gap-2">

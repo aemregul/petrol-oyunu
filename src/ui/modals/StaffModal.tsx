@@ -17,6 +17,13 @@ export const StaffModal: React.FC = () => {
 
   const attendants = Object.values(gameState.employees).filter((e) => e.role === 'PUMP_ATTENDANT');
   const managerConf = GAME_CONFIG.employees.manager;
+  const officeLevel = Object.values(gameState.buildings)
+    .filter((b) => b.type === 'office')
+    .reduce((best, b) => Math.max(best, b.level), 0);
+  const recentProfits = gameState.player.statistics.recentNetProfits ?? [];
+  const profitableDays = recentProfits.filter((n) => n > 0).length;
+  const profitBarMet =
+    recentProfits.length >= 3 && profitableDays >= managerConf.minProfitableDaysInLast3;
   const hasManager = !!gameState.station.managerId;
 
   const handleClose = () => {
@@ -196,6 +203,22 @@ export const StaffModal: React.FC = () => {
                       className={`w-4 h-4 ${attendants.length >= managerConf.minActiveAttendants ? 'text-emerald-400' : 'text-slate-600'}`}
                     />
                     <span>Aktif Pompacı: 2 ({attendants.length}/2)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2
+                      className={`w-4 h-4 ${officeLevel >= managerConf.minOfficeLevel ? 'text-emerald-400' : 'text-slate-600'}`}
+                    />
+                    <span>Yönetim Ofisi: Sv{managerConf.minOfficeLevel} ({officeLevel}/{managerConf.minOfficeLevel})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2
+                      className={`w-4 h-4 ${profitBarMet ? 'text-emerald-400' : 'text-slate-600'}`}
+                    />
+                    <span>
+                      Son 3 günün {managerConf.minProfitableDaysInLast3}'si kârlı (
+                      {profitableDays}/{managerConf.minProfitableDaysInLast3}
+                      {recentProfits.length < 3 ? ` — ${recentProfits.length}/3 gün veri` : ''})
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2

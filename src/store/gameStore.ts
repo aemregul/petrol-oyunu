@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { GameState, FuelType, VehicleArchetype, BuildingEntity, GameNotification } from '../domain/types/gameState';
 import { SaveManager } from '../domain/services/SaveManager';
 import { TransactionService } from '../domain/services/TransactionService';
-import { GAME_CONFIG } from '../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor, TANK_PACKAGE_LITERS } from '../config/gameConfig';
 import {
   calculateEndOfDayReputation,
   calculateRepairCost,
@@ -36,6 +36,7 @@ import {
   getLayout,
   closeForecourt,
   evictFromPump,
+  dailyPriceReputationDelta,
   DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
 import {
@@ -127,6 +128,13 @@ function panBounds(ownedParcels: string[]): {
     maxZ: owned.height * 2 + margin
   };
 }
+
+/** Which fuel a tank package feeds. */
+const TANK_BUILDING_FUELS: Record<string, FuelType> = {
+  tank_gasoline: 'gasoline',
+  tank_diesel: 'diesel',
+  tank_lpg: 'lpg'
+};
 
 export type ActiveModalType =
   | 'NONE'
@@ -377,8 +385,10 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   selectVehicle: (id) => set({ selectedVehicleId: id }),
-  selectPump: (id) => set({ selectedPumpId: id }),
-  selectBuilding: (id) => set({ selectedBuildingId: id }),
+  selectPump: (id) => set({ selectedPumpId: id, selectedBuildingId: null }),
+  // One thing is selected at a time: picking a building lets go of the pump
+  // and the other way round, or the panel stays stuck on the older choice.
+  selectBuilding: (id) => set({ selectedBuildingId: id, selectedPumpId: null }),
 
   rotateCamera: (dir) => {
     sounds.playClick();
@@ -638,11 +648,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       };
       const fuelType = TANK_FUELS[buildMode.buildingType];
 
-      if (fuelType) {
+      // A tank being set back down after a move kept its litres the whole
+      // time — only a newly bought package adds storage. Without this, every
+      // relocation quietly grew the tank by another package.
+      if (fuelType && !carried) {
         // Each package adds storage, so a second tank doubles the capacity
         // instead of silently replacing the first.
         const tank = state.tanks[fuelType];
-        tank.capacity += 1500;
+        tank.capacity += TANK_PACKAGE_LITERS[1];
         tank.level = Math.max(1, tank.level);
         if (!state.player.unlocks.includes(`fuel_${fuelType}`)) {
           state.player.unlocks.push(`fuel_${fuelType}`);
@@ -655,11 +668,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       state.buildings[tankId] = {
         id: tankId,
         type: buildMode.buildingType,
-        level: 1,
+        level: carried?.level ?? 1,
         position: buildMode.position,
         rotation: buildMode.rotation,
         size: catalog.size,
-        health: 100,
+        health: carried?.health ?? 100,
+        movedByPlayer: carried ? true : undefined,
         constructionState: 'ACTIVE',
         builtAtTimestamp: Date.now()
       };
@@ -786,7 +800,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     // Money sunk into upgrades counts towards the sale, at the same rate.
     let invested = catalog.price;
-    const upgrades = GAME_CONFIG.buildingUpgrades[type === 'pump_standard' ? 'pump_standard' : type];
+    const upgrades = GAME_CONFIG.buildingUpgrades[upgradePathFor(type)];
     for (let step = 2; step <= level; step++) {
       invested += upgrades?.[step]?.cost ?? 0;
     }
@@ -841,6 +855,16 @@ export const useGameStore = create<GameStore>((set, get) => {
     } else {
       delete state.buildings[id];
       if (building!.type === 'mini_market') state.market.active = false;
+
+      // A sold tank package takes its capacity with it; anything that no
+      // longer fits in what is left is pumped out and lost with the sale.
+      const tankFuel = TANK_BUILDING_FUELS[building!.type];
+      if (tankFuel) {
+        const tank = state.tanks[tankFuel];
+        tank.capacity = Math.max(0, tank.capacity - (TANK_PACKAGE_LITERS[building!.level] ?? 1500));
+        tank.stock = Math.min(tank.stock, tank.capacity);
+        tank.reservedStock = Math.min(tank.reservedStock, tank.stock);
+      }
     }
 
     TransactionService.executeCashTransaction(state, {
@@ -881,8 +905,22 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!building) return false;
 
     const next = building.level + 1;
-    const upgrade = GAME_CONFIG.buildingUpgrades[building.type]?.[next];
+    const upgrade = GAME_CONFIG.buildingUpgrades[upgradePathFor(building.type)]?.[next];
     const catalog = GAME_CONFIG.buildings[building.type];
+
+    // The ladder the level screen promises for tanks: 3.000 L at 4, 6.000 L
+    // at 8 — the same gate pumps carry, or the storage tuning means nothing.
+    if (TANK_BUILDING_FUELS[building.type]) {
+      const requiredLevel = next === 3 ? 8 : 4;
+      if (gameState.player.level < requiredLevel) {
+        get().addNotification({
+          type: 'WARNING',
+          title: 'Seviye Yetersiz',
+          message: `Tank Sv${next} yükseltmesi için Seviye ${requiredLevel} gerekiyor.`
+        });
+        return false;
+      }
+    }
     if (!upgrade || !catalog) {
       get().addNotification({
         type: 'WARNING',
@@ -911,6 +949,16 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     state.buildings[id].level = next;
     state.buildings[id].health = 100;
+
+    // A tank package upgrade is real litres, not a number on a plaque: the
+    // fuel it stores gains the difference between the old and new package.
+    const tankFuel = TANK_BUILDING_FUELS[building.type];
+    if (tankFuel) {
+      const grown =
+        (TANK_PACKAGE_LITERS[next] ?? 0) - (TANK_PACKAGE_LITERS[building.level] ?? 0);
+      state.tanks[tankFuel].capacity += grown;
+      state.tanks[tankFuel].level = Math.max(state.tanks[tankFuel].level, next);
+    }
 
     sounds.playBuildPlace();
     SaveManager.saveGame(state);
@@ -1315,6 +1363,17 @@ export const useGameStore = create<GameStore>((set, get) => {
     const upgradeConf = GAME_CONFIG.buildingUpgrades.pump_standard[nextLevel];
     if (!upgradeConf) return false;
 
+    // The ladder the level screen promises: S2 opens at 3, S3 at 8.
+    const requiredLevel = nextLevel === 3 ? 8 : 3;
+    if (gameState.player.level < requiredLevel) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Seviye Yetersiz',
+        message: `Pompa S${nextLevel} yükseltmesi için Seviye ${requiredLevel} gerekiyor.`
+      });
+      return false;
+    }
+
     if (gameState.player.cash < upgradeConf.cost) {
       get().addNotification({
         type: 'WARNING',
@@ -1466,6 +1525,34 @@ export const useGameStore = create<GameStore>((set, get) => {
     // Existing pumps should be able to serve everything we now stock.
     for (const pump of Object.values(state.pumps)) {
       pump.supportedFuels = ['gasoline', 'diesel', 'lpg'];
+    }
+
+    // The manager's hiring bar checks the office, the crew and the books;
+    // a test mode that leaves any of them short is a test mode that cannot
+    // test the manager.
+    for (const building of Object.values(state.buildings)) {
+      if (building.type === 'office' && building.level < 2) building.level = 2;
+    }
+    state.player.statistics.recentNetProfits = [1000, 1000, 1000];
+    const attendantCount = Object.values(state.employees).filter(
+      (e) => e.role === 'PUMP_ATTENDANT'
+    ).length;
+    for (let i = attendantCount; i < 2; i++) {
+      const id = 'emp_dev_' + Math.random().toString(36).substring(2, 7);
+      const tier = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
+      state.employees[id] = {
+        id,
+        name: `Test Pompacı ${i + 1}`,
+        role: 'PUMP_ATTENDANT',
+        level: 1,
+        wage: tier.dailyWage,
+        state: 'UNASSIGNED',
+        assignedPumpId: null,
+        currentVehicleId: null,
+        serviceCount: 0,
+        actionTimerSeconds: 0,
+        worldPosition: [0, 0, 0]
+      } as GameState['employees'][string];
     }
 
     state.player.unlocks = Array.from(
@@ -1771,11 +1858,33 @@ export const useGameStore = create<GameStore>((set, get) => {
     const { gameState } = get();
     const conf = GAME_CONFIG.employees.manager;
 
-    if (gameState.player.level < conf.minLevel || gameState.player.reputation < conf.minReputation) {
+    // Every advertised requirement is enforced, not just the first two — a
+    // hiring bar that the button ignores is a lie with a checkbox next to it.
+    const officeLevel = Object.values(gameState.buildings)
+      .filter((b) => b.type === 'office')
+      .reduce((best, b) => Math.max(best, b.level), 0);
+    const attendantCount = Object.values(gameState.employees).filter(
+      (e) => e.role === 'PUMP_ATTENDANT'
+    ).length;
+    const recent = gameState.player.statistics.recentNetProfits ?? [];
+    const profitableDays = recent.filter((n) => n > 0).length;
+
+    const missing: string[] = [];
+    if (gameState.player.level < conf.minLevel) missing.push(`Seviye ${conf.minLevel}`);
+    if (gameState.player.reputation < conf.minReputation)
+      missing.push(`${conf.minReputation.toFixed(2)} itibar`);
+    if (officeLevel < conf.minOfficeLevel)
+      missing.push(`Seviye ${conf.minOfficeLevel} Yönetim Ofisi`);
+    if (attendantCount < conf.minActiveAttendants)
+      missing.push(`${conf.minActiveAttendants} pompacı`);
+    if (recent.length < 3 || profitableDays < conf.minProfitableDaysInLast3)
+      missing.push(`son 3 günün ${conf.minProfitableDaysInLast3}'si kârlı olmalı`);
+
+    if (missing.length > 0) {
       get().addNotification({
         type: 'WARNING',
         title: 'Şartlar Sağlanmadı',
-        message: `Müdür için Seviye ${conf.minLevel} ve ${conf.minReputation} İtibar gerekiyor.`
+        message: `Müdür için eksik: ${missing.join(', ')}.`
       });
       return false;
     }
@@ -1874,7 +1983,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.vehicles = {};
     for (const tank of Object.values(state.tanks)) tank.reservedStock = 0;
 
-    const totalWages = Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0);
+    // The manager lives outside the employees collection, which is how their
+    // wage went uncollected for as long as the job existed.
+    const managerWage = state.station.managerId ? GAME_CONFIG.employees.manager.dailyWage : 0;
+    const totalWages =
+      Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0) + managerWage;
 
     let totalUpkeep = 0;
     for (const pump of Object.values(state.pumps)) {
@@ -1950,6 +2063,26 @@ export const useGameStore = create<GameStore>((set, get) => {
       avgScore,
       -lostPenalty
     );
+
+    // Word of mouth about the board: priced under the region, the name creeps
+    // up; gouging, it slides. The formula produced this figure from day one —
+    // it was simply never applied.
+    state.player.reputation = Math.min(
+      5,
+      Math.max(1, state.player.reputation + dailyPriceReputationDelta(state))
+    );
+
+    // The last three days' net, for anyone who asks whether the place is
+    // actually making money — the manager's hiring bar does.
+    const t = state.dayState.todayStats;
+    const netProfit =
+      t.fuelRevenue + t.tips + t.marketRevenue -
+      (t.fuelCost + t.marketCost + t.repairs + totalWages + totalUpkeep + totalLoans);
+    state.player.statistics.recentNetProfits = [
+      ...(state.player.statistics.recentNetProfits ?? []),
+      Math.round(netProfit)
+    ].slice(-3);
+
     state.player.statistics.daysCompleted++;
 
     trackMissionMetric(state, 'DAYS_COMPLETED', 1, effects);

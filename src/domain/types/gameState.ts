@@ -64,6 +64,8 @@ export interface PlayerState {
     daysCompleted: number;
     cleanActionsCount: number;
     repairActionsCount: number;
+    /** Net profit of the last three completed days, oldest first. */
+    recentNetProfits?: number[];
   };
   unlocks: string[];
 }

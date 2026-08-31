@@ -1805,7 +1805,7 @@ export function dispenseStep(
  * stock to draw down and no wholesale cost to book against it — the tariff is
  * the margin, which is why the substation and the points are the investment.
  */
-function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
+export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
   const point = vehicle.chargingBuildingId
     ? state.buildings[vehicle.chargingBuildingId]
     : null;
@@ -1825,18 +1825,33 @@ function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEf
   );
   vehicle.satisfaction = serviceScore;
 
+  // A charging customer tips for good service the same as a fuelling one —
+  // their archetype already says how readily.
+  const tipHabit = GAME_CONFIG.customerTypes[vehicle.archetype]?.tipChanceModifier ?? 1;
+  const tip = Math.round(
+    calculateCustomerTip(total, serviceScore, vehicle.archetype) *
+      getEventModifiers(state).tip *
+      tipHabit
+  );
+
   TransactionService.executeCashTransaction(state, {
     type: 'FUEL_SALE',
-    amount: total,
-    description: `${fast ? 'DC hızlı' : 'AC'} şarj - ${kwh.toFixed(0)} kWh`
+    amount: total + tip,
+    description: `${fast ? 'DC hızlı' : 'AC'} şarj - ${kwh.toFixed(0)} kWh${tip > 0 ? ` (+${tip} TL bahşiş)` : ''}`
   });
 
   state.player.statistics.totalRevenue += total;
+  state.player.statistics.totalTips += tip;
   state.player.statistics.totalCustomersServed++;
   state.dayState.todayStats.fuelRevenue += total;
+  state.dayState.todayStats.tips += tip;
   state.dayState.todayStats.customersServed++;
   state.dayState.todayStats.serviceScoreSum =
     (state.dayState.todayStats.serviceScoreSum || 0) + serviceScore;
+
+  // "Uses the facilities while waiting" was flavour text until now: the shop,
+  // the wash and the café never saw a kuruş from a charging customer.
+  rollSideServices(state, vehicle, effects);
 
   trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
   playCue(effects, 'cash');
@@ -1846,7 +1861,32 @@ function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEf
   sendAway(state, vehicle);
 }
 
+/**
+ * Everything else on the forecourt gets its chance at a customer on the way
+ * out: the wash, the café, the tyre bay. This is what those buildings are
+ * for — and it applies to a driver who charged just as much as to one who
+ * fuelled; if anything the EV driver had longer to kill in the shop.
+ */
+function rollSideServices(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
+  const facilities = blockFacilities(state, vehicleSide(vehicle));
+
+  for (const service of facilities.services) {
+    if (Math.random() >= service.chance) continue;
+
+    const spend = Math.round(service.avgSpend * (0.7 + Math.random() * 0.6));
+    TransactionService.executeCashTransaction(state, {
+      type: 'MARKET_SALE',
+      amount: spend,
+      description: `${service.name} hizmeti (${vehicle.archetype})`
+    });
+    state.dayState.todayStats.marketRevenue += spend;
+    state.dayState.todayStats.marketCost += Math.round(spend * 0.45);
+    playCue(effects, 'cash');
+  }
+}
+
 export function finalizeSale(
+
   state: GameState,
   vehicle: VehicleEntity,
   effects: SimEffects
@@ -1887,22 +1927,7 @@ export function finalizeSale(
     description: `${vehicle.archetype.toUpperCase()} - ${dispensed.toFixed(1)} L ${vehicle.fuelType} satışı${tip > 0 ? ` (+${tip} TL bahşiş)` : ''}`
   });
 
-  // Everything else on the forecourt gets its chance at this customer on the
-  // way out: the wash, the café, the tyre bay. This is what those buildings
-  // are for, and until now it was the one thing they never did.
-  for (const service of facilities.services) {
-    if (Math.random() >= service.chance) continue;
-
-    const spend = Math.round(service.avgSpend * (0.7 + Math.random() * 0.6));
-    TransactionService.executeCashTransaction(state, {
-      type: 'MARKET_SALE',
-      amount: spend,
-      description: `${service.name} hizmeti (${vehicle.archetype})`
-    });
-    state.dayState.todayStats.marketRevenue += spend;
-    state.dayState.todayStats.marketCost += Math.round(spend * 0.45);
-    playCue(effects, 'cash');
-  }
+  rollSideServices(state, vehicle, effects);
 
   state.player.statistics.totalFuelSoldLiters += dispensed;
   state.player.statistics.totalRevenue += totalSale;
@@ -2414,16 +2439,77 @@ export function stopChance(state: GameState, side: DrivewaySide = 'near'): numbe
   const appeal = blockAppeal(state, side);
   if (appeal === 0) return 0;
 
-  const price = calculatePriceAttractiveness(
-    state.pricing.gasoline.playerPrice,
-    state.pricing.gasoline.regionalAverage
-  ).attractiveness;
+  const price = blendedPriceAttractiveness(state);
   const reputation = calculateReputationTrafficMultiplier(state.player.reputation);
   const rush = isRushHour(state) ? RUSH_STOP_MULTIPLIER : 1;
 
   // The event modifier belongs to the road, not to the driver's decision —
   // a busier day brings more cars past, not more willing ones.
   return clamp(0.3 * appeal * price * reputation * rush, 0, MAX_STOP_RATE);
+}
+
+/** Fuels the station can actually sell: a tank exists for them. */
+function pricedFuels(state: GameState): FuelType[] {
+  return (Object.keys(state.tanks) as FuelType[]).filter((f) => state.tanks[f].capacity > 0);
+}
+
+/**
+ * Price appeal across everything on the board, not just petrol.
+ *
+ * Demand used to read the petrol price alone, so diesel and LPG prices moved
+ * margins but never traffic — a station could gouge two of its three fuels
+ * with no one the wiser. Each fuel weighs in equally for the stop decision;
+ * which *driver* cares about which price is handled where the archetype is
+ * picked.
+ */
+function blendedPriceAttractiveness(state: GameState): number {
+  const fuels = pricedFuels(state);
+  if (fuels.length === 0) {
+    return calculatePriceAttractiveness(
+      state.pricing.gasoline.playerPrice,
+      state.pricing.gasoline.regionalAverage
+    ).attractiveness;
+  }
+
+  return (
+    fuels.reduce(
+      (sum, f) =>
+        sum +
+        calculatePriceAttractiveness(
+          state.pricing[f].playerPrice,
+          state.pricing[f].regionalAverage
+        ).attractiveness,
+      0
+    ) / fuels.length
+  );
+}
+
+/** A fuel's price relative to the regional board, as a plain index. */
+function fuelPriceIndex(state: GameState, fuel: FuelType): number {
+  return state.pricing[fuel].playerPrice / Math.max(0.01, state.pricing[fuel].regionalAverage);
+}
+
+/**
+ * The nudge a day of pricing gives the station's name: undercut the region
+ * and word spreads, gouge it and word spreads faster. Averaged over the fuels
+ * actually on sale. This was computed in the price formula from the start and
+ * never applied anywhere.
+ */
+export function dailyPriceReputationDelta(state: GameState): number {
+  const fuels = pricedFuels(state);
+  if (fuels.length === 0) return 0;
+
+  return (
+    fuels.reduce(
+      (sum, f) =>
+        sum +
+        calculatePriceAttractiveness(
+          state.pricing[f].playerPrice,
+          state.pricing[f].regionalAverage
+        ).reputationDeltaPerDay,
+      0
+    ) / fuels.length
+  );
 }
 
 /**
@@ -2515,11 +2601,20 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   // watching every kuruş and a luxury driver who never looks at the board
   // react to the same price very differently, so the archetype is picked
   // weighted by how each one feels about what this station is charging.
-  const priceIndex =
-    state.pricing.gasoline.playerPrice / Math.max(0.01, state.pricing.gasoline.regionalAverage);
-  const archetype = pickWeighted(archetypes, (a) =>
-    archetypeAppetite(GAME_CONFIG.customerTypes[a].priceSensitivity, priceIndex)
-  );
+  // Judged against the fuel that driver actually buys: cheap diesel pulls
+  // lorries in without the petrol board having anything to do with it.
+  const meanIndex =
+    sellableFuels.length > 0
+      ? sellableFuels.reduce((sum, f) => sum + fuelPriceIndex(state, f), 0) / sellableFuels.length
+      : 1;
+  const archetype = pickWeighted(archetypes, (a) => {
+    const preferred = GAME_CONFIG.customerTypes[a].preferredFuel;
+    const index =
+      preferred !== 'any' && sellableFuels.includes(preferred as FuelType)
+        ? fuelPriceIndex(state, preferred as FuelType)
+        : meanIndex;
+    return archetypeAppetite(GAME_CONFIG.customerTypes[a].priceSensitivity, index);
+  });
   const conf = GAME_CONFIG.customerTypes[archetype];
   const fuelType: FuelType =
     conf.preferredFuel === 'any' || !sellableFuels.includes(conf.preferredFuel as FuelType)

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { Award, Building2, Cloud, CloudRain, Crosshair, Fuel, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
-import { GAME_CONFIG } from '../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
+import { calculateRepairCost } from '../domain/formulas/economy';
 import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 
@@ -36,6 +37,8 @@ export const HUD: React.FC = () => {
   const structureValue = useGameStore((s) => s.structureValue);
   const sellStructure = useGameStore((s) => s.sellStructure);
   const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
+  const upgradePump = useGameStore((s) => s.upgradePump);
+  const repairPump = useGameStore((s) => s.repairPump);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const editMode = useGameStore((s) => s.editMode);
   const toggleEditMode = useGameStore((s) => s.toggleEditMode);
@@ -62,10 +65,16 @@ export const HUD: React.FC = () => {
     return {
       id,
       level,
+      isPump: !!pump,
       name: GAME_CONFIG.buildings[type]?.name ?? type,
       value: structureValue(id),
-      // Pumps have their own upgrade flow in the pump panel.
-      upgrade: pump ? null : GAME_CONFIG.buildingUpgrades[type]?.[level + 1] ?? null
+      upgrade: GAME_CONFIG.buildingUpgrades[upgradePathFor(type)]?.[level + 1] ?? null,
+      // A worn pump is repaired from here; nothing else wears the same way.
+      repairCost:
+        pump && pump.health < 100
+          ? calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health)
+          : null,
+      health: pump ? Math.round(pump.health) : null
     };
   })();
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
@@ -323,9 +332,20 @@ export const HUD: React.FC = () => {
                 Satış değeri ₺{selected.value.toLocaleString('tr-TR')}
               </div>
             </div>
+            {selected.repairCost !== null && (
+              <button
+                onClick={() => repairPump(selected.id)}
+                className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-1.5"
+                title={`Sağlık %${selected.health} — bakım tam onarır`}
+              >
+                <span>Onar · ₺{selected.repairCost.toLocaleString('tr-TR')}</span>
+              </button>
+            )}
             {selected.upgrade && (
               <button
-                onClick={() => upgradeBuilding(selected.id)}
+                onClick={() =>
+                  selected.isPump ? upgradePump(selected.id) : upgradeBuilding(selected.id)
+                }
                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-1.5"
                 title={selected.upgrade.effectsDescription}
               >

@@ -163,7 +163,26 @@
       "Bash(grep -n \"generateId\\\\|crypto.randomUUID\\\\|uuid\\\\|_id_counter\\\\|nextId\\\\|\\\\`b_\\\\|\\\\`building\" /Users/emre/petrol-oyunu/src/store/gameStore.ts /Users/emre/petrol-oyunu/src/domain/services/placement.ts)",
       "Bash(echo \"exit: $?\")",
       "Bash(git -C /Users/emre/petrol-oyunu diff --stat)",
-      "Bash(git -C /Users/emre/petrol-oyunu diff src/store/gameStore.ts)"
+      "Bash(git -C /Users/emre/petrol-oyunu diff src/store/gameStore.ts)",
+      "WebSearch",
+      "Bash(curl -sL --max-time 30 -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/126.0 Safari/537.36\" https://beneloil.com/ -o index.html)",
+      "Bash(curl -sL --max-time 60 -A \"Mozilla/5.0\" https://beneloil.com/assets/index-1tTXsU4t.js -o bundle.js)",
+      "Bash(grep -oE 'serviceWorker[^;]{0,80}' index.html bundle.js)",
+      "WebFetch(domain:petrol.benerits.com)",
+      "WebFetch(domain:benerits.com)",
+      "WebFetch(domain:web.archive.org)",
+      "Bash(grep -oE '\\\\{v:\"[^\"]+\",date:\"[^\"]+\"' bundle.js)",
+      "Bash(curl -s --max-time 20 https://beneloil.com/api/config)",
+      "Bash(curl -s --max-time 20 https://beneloil.com/api/stats)",
+      "Bash(curl -s --max-time 20 \"https://beneloil.com/api/leaderboard\")",
+      "Bash(curl -s -o /dev/null -w \"sitemap:%{http_code} \" https://beneloil.com/sitemap.xml)",
+      "Bash(curl -s -o /dev/null -w \"help:%{http_code} \" https://beneloil.com/help)",
+      "Bash(curl -s -o /dev/null -w \"changelog:%{http_code}\\\\n\" https://beneloil.com/changelog)",
+      "Bash(grep -oE '<button[^>]*id=\"nav[^\"]*\"[^>]*>.{0,120}' index.html)",
+      "Bash(git -C /Users/emre/petrol-oyunu diff src/config/gameConfig.ts src/domain/types/gameState.ts src/domain/services/simulationEngine.ts src/store/gameStore.ts src/ui/HUD.tsx src/ui/modals/StaffModal.tsx src/ui/PerformanceOverlay.tsx)",
+      "Bash(git -C /Users/emre/petrol-oyunu diff src/ui/HUD.tsx)",
+      "Bash(awk '/relocateStructure: \\\\\\(id/,/^  \\\\},?$/')",
+      "Bash(git log *)"
     ],
     "additionalDirectories": [
       "/private/tmp"

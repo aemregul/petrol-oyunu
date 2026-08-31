@@ -10,7 +10,9 @@ export const DayReportModal: React.FC = () => {
   const { dayState, player } = gameState;
   const stats = dayState.todayStats;
 
-  const totalCiro = stats.fuelRevenue + stats.marketRevenue;
+  // Tips are income like any other; leaving them out of the report while the
+  // manager's hiring bar counts them gave two answers to "was today profitable".
+  const totalCiro = stats.fuelRevenue + stats.marketRevenue + stats.tips;
   const cogs = stats.fuelCost + stats.marketCost;
   const brutKar = totalCiro - cogs;
   const operatingExpenses = stats.wages + stats.upkeep + stats.repairs;

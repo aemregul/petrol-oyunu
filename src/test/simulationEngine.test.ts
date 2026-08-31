@@ -26,6 +26,8 @@ import {
   vehicleSide,
   stopChance,
   closeForecourt,
+  finalizeCharge,
+  dailyPriceReputationDelta,
   DRIVEWAY_Z,
   LAYOUT
 } from '../domain/services/simulationEngine';
@@ -1137,6 +1139,64 @@ describe('simulationEngine - highway lanes and driveways', () => {
     const vehicle = Object.values(state.vehicles)[0];
 
     expect(vehicle.worldPosition[2]).toBeCloseTo(getLayout(state).roadLaneZ, 3);
+  });
+});
+
+describe('price, demand and reputation', () => {
+  it('lets a gouged diesel board turn traffic away, not just petrol', () => {
+    // Demand used to read the petrol price alone: diesel and LPG could be
+    // priced at anything without a single driver noticing.
+    const base = createInitialGameState();
+    base.tanks.diesel.capacity = 1500;
+
+    const gouged = createInitialGameState();
+    gouged.tanks.diesel.capacity = 1500;
+    gouged.pricing.diesel.playerPrice = gouged.pricing.diesel.regionalAverage * 1.25;
+
+    expect(stopChance(gouged)).toBeLessThan(stopChance(base));
+  });
+
+  it('lets a day of undercutting the region lift reputation', () => {
+    const cheap = createInitialGameState();
+    cheap.pricing.gasoline.playerPrice = cheap.pricing.gasoline.regionalAverage * 0.9;
+    expect(dailyPriceReputationDelta(cheap)).toBeGreaterThan(0);
+
+    const dear = createInitialGameState();
+    dear.pricing.gasoline.playerPrice = dear.pricing.gasoline.regionalAverage * 1.2;
+    expect(dailyPriceReputationDelta(dear)).toBeLessThan(0);
+  });
+
+  it('gives the forecourt its chance at a charging customer', () => {
+    // "Uses the facilities while waiting" was flavour text: an EV customer
+    // paid for electricity and nothing else, ever.
+    const state = createInitialGameState();
+    state.player.level = 12;
+    state.buildings.cafe = {
+      id: 'cafe', type: 'cafe', level: 1, position: [12, 11], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    const effects = createEffects();
+    for (let i = 0; i < 50; i++) {
+      const id = `ev_${i}`;
+      state.vehicles[id] = {
+        id, archetype: 'ev', fuelType: 'gasoline', tankCapacity: 60, currentFuel: 20,
+        request: {
+          mode: 'FULL', targetValue: 40, calculatedLiters: 40, calculatedPrice: 0,
+          dispensedLiters: 0, isFinished: false
+        },
+        patience: 30, maxPatience: 60, satisfaction: 100, state: 'AT_PUMP',
+        targetPumpId: null, assignedActor: null, worldPosition: [10, 0, 8],
+        targetWaypoint: null, route: [], heading: 0, speed: 1, routeProgress: 0,
+        waitingTimeSeconds: 0, shoppingIntent: false, chargingBuildingId: null,
+        chargeSecondsLeft: 0
+      } as GameState['vehicles'][string];
+      finalizeCharge(state, state.vehicles[id], effects);
+    }
+
+    // Fifty customers past a café with a 26% catch rate: the till has rung.
+    expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
+    expect(state.dayState.todayStats.customersServed).toBe(50);
   });
 });
 
