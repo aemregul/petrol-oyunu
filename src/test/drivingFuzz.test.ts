@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
 import { createEffects, runSimulationTick } from '../domain/services/simulationEngine';
-import { evaluatePlacement, getFootprint } from '../domain/services/placement';
+import { evaluatePlacement, getFootprint, snapPlacement } from '../domain/services/placement';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState } from '../domain/types/gameState';
 
@@ -82,10 +82,12 @@ function round(rnd: () => number, seconds: number): string[] {
     state.pumps[`p${i}`] = {
       ...proto,
       id: `p${i}`,
-      position: [
+      // Through the same snap the build flow applies, so every layout dealt
+      // here is one the game can actually produce.
+      position: snapPlacement(state, 'pump_standard', [
         4 + Math.floor(rnd() * (state.station.plots.width - 8)),
         6 + Math.floor(rnd() * (state.station.plots.height - 9))
-      ],
+      ]),
       currentVehicleId: null,
       employeeId: null
     };
@@ -97,10 +99,10 @@ function round(rnd: () => number, seconds: number): string[] {
     if (state.buildings[`r_${type}`]) continue;
 
     for (let tries = 0; tries < 40; tries++) {
-      const at: [number, number] = [
+      const at = snapPlacement(state, type, [
         2 + Math.floor(rnd() * (state.station.plots.width - 4)),
         2 + Math.floor(rnd() * (state.station.plots.height - 4))
-      ];
+      ]);
       if (!evaluatePlacement(state, type, at, 0).valid) continue;
       state.buildings[`r_${type}`] = {
         id: `r_${type}`,

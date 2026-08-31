@@ -206,6 +206,20 @@ export const WIDE_DRIVEWAY_WIDTH = DRIVEWAY_WIDTH * 2;
 export const DRIVEWAY_Z =
   Math.round((LAYOUT.roadZ + LAYOUT.roadHalfWidth + LAYOUT.vergeDepth / 2) * 1000) / 1000;
 
+/**
+ * Where the near forecourt's concrete begins, in grid units: the verge line
+ * pushed AWAY from the road onto the next build-cell boundary, so the slab
+ * edge always coincides with a snap line. The strip between the plot's front
+ * boundary and this line belongs to the frontage — verge grass, the ramps and
+ * the roadside signs — and is neither driven on (frontageKeepOut) nor built
+ * on (evaluatePlacement). The far block needs no counterpart: its parcels
+ * already start on a cell boundary at FAR_SIDE_FRONT, a matching distance
+ * clear of their own kerb.
+ */
+export const FORECOURT_FRONT = Math.ceil(
+  LAYOUT.roadZ + LAYOUT.roadHalfWidth + LAYOUT.vergeDepth
+);
+
 const FAR_ROAD_Z = LAYOUT.roadZ - 2 * LAYOUT.roadHalfWidth - LAYOUT.medianWidth;
 
 /**

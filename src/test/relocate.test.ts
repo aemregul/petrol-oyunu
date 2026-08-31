@@ -84,7 +84,7 @@ beforeEach(() => {
 
   useGameStore.setState({
     gameState: ready(),
-    buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
+    buildMode: { active: false, buildingType: null, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
     relocating: null,
     editMode: true
   });

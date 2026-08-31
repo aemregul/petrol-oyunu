@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Instances, Instance } from '@react-three/drei';
 import { useGameStore } from '../store/gameStore';
-import { LAYOUT, getLayout } from '../domain/services/simulationEngine';
+import { LAYOUT, FORECOURT_FRONT, getLayout } from '../domain/services/simulationEngine';
 import {
   parseParcelKey,
   parcelBounds,
@@ -115,7 +115,9 @@ export const SceneryProps: React.FC = () => {
               parcelBounds(0, -1).maxZ * S
             )
           : roadZ - roadHalfWidth,
-      maxZ: roadZ + roadHalfWidth + VERGE_DEPTH
+      // Out to the concrete line, which sits a shade past the raw verge
+      // depth now that it rounds back onto a build-cell boundary.
+      maxZ: Math.max(roadZ + roadHalfWidth + VERGE_DEPTH, FORECOURT_FRONT * S)
     }),
     [roadLevel, farRoadZ, roadHalfWidth]
   );

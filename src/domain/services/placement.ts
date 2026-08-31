@@ -7,9 +7,10 @@
 
 import { GameState } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { isFootprintOnOwnedLand, ownedBounds, pavedFrontage } from './land';
+import { FAR_SIDE_FRONT, isFootprintOnOwnedLand, ownedBounds, pavedFrontage } from './land';
 import {
   LAYOUT,
+  FORECOURT_FRONT,
   DrivewayRole,
   DrivewaySide,
   WIDE_DRIVEWAY_WIDTH,
@@ -64,10 +65,25 @@ export function occupiedFootprints(
   for (const building of Object.values(state.buildings)) {
     if (building.id === ignoreId) continue;
     const conf = GAME_CONFIG.buildings[building.type];
+    const footprint = getFootprint(building.position, building.size, building.rotation);
+
+    // A ramp lives on the verge and only kisses the concrete. Its sliver past
+    // the frontage line must not count as occupied ground, or the far block's
+    // flush front row would be refused beside a ramp while the near one is
+    // not — the two lines the sliver is clamped to are the same ones the
+    // frontage rule below builds from.
+    if (drivewayRole(building.type)) {
+      if (building.position[1] > FAR_SIDE_FRONT) {
+        footprint.maxZ = Math.min(footprint.maxZ, FORECOURT_FRONT);
+      } else {
+        footprint.minZ = Math.max(footprint.minZ, FAR_SIDE_FRONT);
+      }
+    }
+
     taken.push({
       id: building.id,
       name: conf?.name || building.type,
-      footprint: getFootprint(building.position, building.size, building.rotation)
+      footprint
     });
   }
 
@@ -170,13 +186,37 @@ function coversAPump(state: GameState, footprint: Footprint): boolean {
  * Which verge it lands on follows the pointer across the road: aim at the far
  * block and the ramp snaps to that block's own frontage.
  */
+/**
+ * Puts one axis of a footprint's centre where its edges land on grid lines.
+ *
+ * Positions mark the centre, so an even footprint centres on a line and an odd
+ * one centres in the middle of a square. Rounding every centre to a whole
+ * number regardless — which is what the pointer used to do — left every odd
+ * building straddling two squares, half a cell off the concrete at each end.
+ */
+function snapToGrid(value: number, extent: number): number {
+  const offset = (extent % 2) / 2;
+  return Math.round(value - offset) + offset;
+}
+
 export function snapPlacement(
   state: GameState,
   buildingType: string,
-  position: [number, number]
+  position: [number, number],
+  rotation = 0
 ): [number, number] {
   const role = drivewayRole(buildingType);
-  if (!role) return position;
+  if (!role) {
+    const catalog = GAME_CONFIG.buildings[buildingType];
+    if (!catalog) return position;
+
+    // A quarter turn swaps which side of the footprint faces which axis.
+    const turned = rotation === 90 || rotation === 270;
+    return [
+      snapToGrid(position[0], turned ? catalog.size[1] : catalog.size[0]),
+      snapToGrid(position[1], turned ? catalog.size[0] : catalog.size[1])
+    ];
+  }
 
   const side = drivewaySideAt(position[1]);
   const z = drivewayZ(side);
@@ -286,6 +326,20 @@ export function evaluatePlacement(
 
   if (!isFootprintOnOwnedLand(state.station.plots.pavedParcels, footprint)) {
     return { valid: false, reason: 'Önce bu parsele beton dökmelisiniz.' };
+  }
+
+  // The strip between the road and the concrete line is frontage — verge
+  // grass, the ramps and the roadside signs — not forecourt. Both blocks are
+  // guarded: the near strip outright, and the far block's road-facing edge,
+  // which the parcel checks alone cannot police because parcelAt folds the
+  // whole road corridor into row 0. Signs and ramps returned earlier, so this
+  // refuses only ordinary structures.
+  const overFrontage =
+    drivewaySideAt(position[1]) === 'near'
+      ? footprint.minZ < FORECOURT_FRONT
+      : footprint.maxZ > FAR_SIDE_FRONT;
+  if (overFrontage) {
+    return { valid: false, reason: 'Yol banketi inşaata kapalı; betonun gerisine kurun.' };
   }
 
   // A canopy is a roof: the whole point of it is to stand over the pump

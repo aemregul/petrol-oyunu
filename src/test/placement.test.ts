@@ -286,9 +286,45 @@ describe('driveway ramps', () => {
     expect(snapPlacement(state, 'wide_entry', [999, 0])[0]).toBe(maxX - WIDE_DRIVEWAY_WIDTH / 2);
   });
 
-  it('leaves ordinary structures where the pointer put them', () => {
+  it('keeps ordinary structures off the frontage strip, on both blocks', () => {
     const state = ready();
-    expect(snapPlacement(state, 'trash_can', [7, 11])).toEqual([7, 11]);
+
+    // Near block: the concrete starts one cell behind the plot's front
+    // boundary; the strip in front of that line is verge.
+    expect(evaluatePlacement(state, 'trash_can', [10.5, 0.5], 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'trash_can', [10.5, 1.5], 0).valid).toBe(true);
+    // A deep footprint dipping into the strip is refused; flush with it is not.
+    expect(evaluatePlacement(state, 'pump_standard', [10, 1.5], 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'pump_standard', [10, 2.5], 0).valid).toBe(true);
+
+    // Far block: its concrete already ends on the parcel boundary, and the
+    // parcel checks alone cannot police an overhang — parcelAt folds the road
+    // corridor into row 0, which is owned and paved.
+    state.station.roadLevel = 2;
+    state.station.plots.ownedParcels.push('0,-1', '1,-1');
+    state.station.plots.pavedParcels.push('0,-1', '1,-1');
+    expect(evaluatePlacement(state, 'trash_can', [10.5, -13.5], 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'trash_can', [10.5, -14.5], 0).valid).toBe(true);
+
+    // The verge is still the signs' ground: the strip rule must not catch them.
+    expect(evaluatePlacement(state, 'price_sign', [10, 0], 0).valid).toBe(true);
+  });
+
+  it('lands an ordinary structure squarely on the grid, whatever its size', () => {
+    const state = ready();
+
+    // Positions are footprint centres, so where the centre belongs depends on
+    // the footprint's parity: an even one centres on a grid line, an odd one
+    // in the middle of a square. Either way the edges come out on the lines.
+    const bin = snapPlacement(state, 'trash_can', [7, 11]); // 1x1
+    expect(bin).toEqual([7.5, 11.5]);
+
+    // A pump is 2 wide and 3 deep, so the two axes snap differently.
+    expect(GAME_CONFIG.buildings.pump_standard.size).toEqual([2, 3]);
+    expect(snapPlacement(state, 'pump_standard', [7.4, 11.6])).toEqual([7, 11.5]);
+
+    // A quarter turn swaps the footprint, and the snapping swaps with it.
+    expect(snapPlacement(state, 'pump_standard', [7.4, 11.6], 90)).toEqual([7.5, 12]);
   });
 
   it('refuses a mouth that would run into the other driveway', () => {

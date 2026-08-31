@@ -1,8 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { DECAL, decal } from './decal';
+import { concreteTexture } from './concrete';
 import {
   LAYOUT,
+  FORECOURT_FRONT,
   getLayout,
   wideRamps,
   priceSignPosition,
@@ -69,6 +72,86 @@ function kerbSegments(from: number, to: number, mouths: Mouth[]): Array<[number,
   if (cursor < to) out.push([cursor, to]);
   return out.filter(([a, b]) => b - a > 0.4);
 }
+
+/**
+ * The squares a building snaps to, drawn over one parcel.
+ *
+ * This was a `gridHelper`, which can only draw a square: covering a parcel
+ * that is eight cells wide and seven deep meant scaling it down the z axis,
+ * and scaling a grid changes its spacing. The lines the player was lining
+ * buildings up against were 1.75 units apart while placement still snapped
+ * every 2, so nothing sat where it looked like it would. Drawing the lines
+ * outright keeps them at the one spacing that matters.
+ */
+const BuildGrid: React.FC<{
+  westX: number;
+  northZ: number;
+  width: number;
+  depth: number;
+}> = ({ westX, northZ, width, depth }) => {
+  const geometry = useMemo(() => {
+    const points: number[] = [];
+    // A hair of tolerance, or floating point drops the closing line.
+    for (let x = westX; x <= westX + width + 1e-6; x += S) {
+      points.push(x, 0, northZ, x, 0, northZ + depth);
+    }
+    for (let z = northZ; z <= northZ + depth + 1e-6; z += S) {
+      points.push(westX, 0, z, westX + width, 0, z);
+    }
+
+    const buffer = new THREE.BufferGeometry();
+    buffer.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    return buffer;
+  }, [westX, northZ, width, depth]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <lineSegments geometry={geometry} position={[0, 0.09, 0]}>
+      <lineBasicMaterial color="#38bdf8" transparent opacity={0.5} depthWrite={false} />
+    </lineSegments>
+  );
+};
+
+/**
+ * One paved parcel of forecourt.
+ *
+ * The plane's UVs run 0..1 whatever its size, so the texture has to be told
+ * both how many slabs fit across it and where in the world it starts —
+ * otherwise every parcel would restart the joint grid at its own corner and
+ * the seams between parcels would be visible from the air.
+ */
+const ConcreteApron: React.FC<{
+  westX: number;
+  northZ: number;
+  width: number;
+  depth: number;
+  /** z the slab-joint grid is phased from — the block's own front edge. */
+  anchorZ: number;
+  tint: string;
+  roughness: number;
+}> = ({ westX, northZ, width, depth, anchorZ, tint, roughness }) => {
+  const map = concreteTexture(width, depth, westX, northZ, anchorZ);
+
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[westX + width / 2, 0.02, northZ + depth / 2]}
+      receiveShadow
+    >
+      <planeGeometry args={[width, depth]} />
+      <meshStandardMaterial
+        map={map}
+        // Reusing the colour map as the roughness map costs nothing and lets
+        // the sawn joints sit damper than the slabs either side of them.
+        roughnessMap={map}
+        color={tint}
+        roughness={roughness}
+        metalness={0.02}
+      />
+    </mesh>
+  );
+};
 
 /**
  * Driveway joining a carriageway to a forecourt.
@@ -402,7 +485,10 @@ const ParcelFence: React.FC<{ col: number; row: number }> = ({ col, row }) => {
   const b = parcelBounds(col, row);
   const minX = b.minX * S;
   const maxX = b.maxX * S;
-  const minZ = b.minZ * S;
+  // Fenced dirt honours the same front line as the concrete next door: a
+  // front-row plot's fence otherwise stood two units ahead of its paved
+  // neighbours, out on the verge. Far rows already start on that line.
+  const minZ = row >= 0 ? Math.max(b.minZ, FORECOURT_FRONT) * S : b.minZ * S;
   const maxZ = b.maxZ * S;
 
   const posts = useMemo(() => {
@@ -516,10 +602,27 @@ export const GroundGrid: React.FC = () => {
   const plotWidth = plots.width * S;
   const plotDepth = plots.height * S;
 
-  // The forecourt starts a verge's width back from the carriageway.
-  const apronFront = roadZ + roadHalfWidth + VERGE_DEPTH;
+  /**
+   * The forecourt starts a verge's width back from the carriageway — but only
+   * ever on a grid line, and the rounding goes AWAY from the road.
+   *
+   * The verge worked out at 0.8 of a cell, which left the concrete stopping
+   * halfway across the front row of squares. Rounding it toward the road was
+   * tried and rejected: it swallowed the verge, shortened the ramps and left
+   * the frontage planting standing on concrete. Rounded backwards, the front
+   * row of squares becomes verge instead — evaluatePlacement refuses builds
+   * on it, and the engine's frontageKeepOut never drove cars there anyway.
+   */
+  const apronFront = FORECOURT_FRONT * S;
 
-  const apronColor = weather === 'RAIN' ? '#232c39' : '#39424f';
+  /**
+   * The concrete texture carries the colour now, so this is a tint over it
+   * rather than the surface itself: white leaves the pour as drawn, and rain
+   * darkens and cools it into wet concrete. A filthy forecourt greys off a
+   * little as well as going matt.
+   */
+  const apronTint =
+    weather === 'RAIN' ? '#8b93a0' : cleanliness < 50 ? '#cfccc4' : '#ffffff';
   const apronRoughness = weather === 'RAIN' ? 0.35 : 0.7 + (1 - cleanliness / 100) * 0.25;
 
   const unpaved = plots.ownedParcels.filter((key) => !plots.pavedParcels.includes(key));
@@ -528,8 +631,14 @@ export const GroundGrid: React.FC = () => {
   // begin past the verge line, so a plain mirror would leave the ramps ending
   // in the grass a little short of the concrete: take whichever edge is
   // further from the road so the two always meet.
+  // Same rounding as the near side, mirrored: away from the road, which here
+  // means down. With today's constants this lands exactly on the far parcels'
+  // front boundary, so the far concrete already covers whole cells and its
+  // verge matches the near one's depth. The parcel clamp stays regardless —
+  // concrete must never spill past the land the player owns, whatever the
+  // road constants become.
   const farApronFront = Math.min(
-    farRoadZ - roadHalfWidth - VERGE_DEPTH,
+    Math.floor((farRoadZ - roadHalfWidth - VERGE_DEPTH) / S) * S,
     parcelBounds(0, -1).maxZ * S
   );
   /**
@@ -589,6 +698,7 @@ export const GroundGrid: React.FC = () => {
     b.minZ >= 0
       ? [Math.max(b.minZ * S, apronFront), b.maxZ * S]
       : [b.minZ * S, Math.min(b.maxZ * S, farApronFront)];
+
 
   return (
     <group>
@@ -669,19 +779,16 @@ export const GroundGrid: React.FC = () => {
         const [front, back] = parcelSpan(b);
 
         return (
-          <mesh
+          <ConcreteApron
             key={key}
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[((b.minX + b.maxX) / 2) * S, 0.02, (front + back) / 2]}
-            receiveShadow
-          >
-            <planeGeometry args={[PARCEL.width * S, back - front]} />
-            <meshStandardMaterial
-              color={apronColor}
-              roughness={apronRoughness}
-              metalness={0.05}
-            />
-          </mesh>
+            westX={b.minX * S}
+            northZ={front}
+            width={PARCEL.width * S}
+            depth={back - front}
+            anchorZ={row >= 0 ? apronFront : farApronFront}
+            tint={apronTint}
+            roughness={apronRoughness}
+          />
         );
       })}
 
@@ -691,7 +798,9 @@ export const GroundGrid: React.FC = () => {
         return <ParcelFence key={key} col={col} row={row} />;
       })}
 
-      {/* Thin kerb along every paved edge that faces open ground */}
+      {/* Thin kerb along every paved edge that faces open ground. It wraps
+          the poured concrete, pad and all, so the slab never shows a raw
+          rear edge past its own kerb. */}
       {plots.pavedParcels.map((key) => {
         const { col, row } = parseParcelKey(key);
         const b = parcelBounds(col, row);
@@ -849,15 +958,12 @@ export const GroundGrid: React.FC = () => {
           const [front, back] = parcelSpan(b);
 
           return (
-            <gridHelper
+            <BuildGrid
               key={`grid_${key}`}
-              args={[PARCEL.width * S, PARCEL.width, '#38bdf8', '#0ea5e9']}
-              position={[
-                ((b.minX + b.maxX) / 2) * S,
-                0.09,
-                (front + back) / 2
-              ]}
-              scale={[1, 1, (back - front) / (PARCEL.width * S)]}
+              westX={b.minX * S}
+              northZ={front}
+              width={PARCEL.width * S}
+              depth={back - front}
             />
           );
         })}

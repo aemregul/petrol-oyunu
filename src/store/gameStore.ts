@@ -260,6 +260,14 @@ export interface BuildModeState {
   active: boolean;
   buildingType: string | null;
   position: [number, number];
+  /**
+   * The last raw pointer location, before snapping. Rotation re-snaps from
+   * this anchor rather than from the already-snapped position: a quarter turn
+   * flips a mixed-parity footprint's snap on both axes, and re-snapping a
+   * value that sits exactly on a .5 tie walks the preview half a cell further
+   * with every press. Snapping the same raw input is stable.
+   */
+  pointer: [number, number];
   rotation: 0 | 90 | 180 | 270;
   isValid: boolean;
 }
@@ -449,8 +457,9 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
     }
 
     if (!farm) {
-      outer: for (let z = 3; z <= loaded.station.plots.height - 2; z++) {
-        for (let x = 2; x <= loaded.station.plots.width - 2; x++) {
+      // Half-coordinate centres: a 3x3 lands on whole cells only there.
+      outer: for (let z = 3.5; z <= loaded.station.plots.height - 1.5; z++) {
+        for (let x = 2.5; x <= loaded.station.plots.width - 1.5; x++) {
           if (!evaluatePlacement(loaded, 'tank_farm', [x, z], 0).valid) continue;
           const id = 'bld_tank_farm_' + Math.random().toString(36).substring(2, 6);
           loaded.buildings[id] = {
@@ -516,6 +525,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     active: false,
     buildingType: null,
     position: [10, 10],
+    pointer: [10, 10],
     rotation: 0,
     isValid: true
   },
@@ -655,6 +665,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           active: true,
           buildingType,
           position,
+          pointer: start,
           rotation: 0,
           isValid: evaluatePlacement(state.gameState, buildingType, position, 0).valid
         },
@@ -723,6 +734,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         active: false,
         buildingType: null,
         position: [0, 0],
+        pointer: [0, 0],
         rotation: 0,
         isValid: true
       }
@@ -732,12 +744,12 @@ export const useGameStore = create<GameStore>((set, get) => {
   setBuildPreviewPos: (pos) => {
     set((state) => {
       const { buildingType, rotation } = state.buildMode;
-      if (!buildingType) return { buildMode: { ...state.buildMode, position: pos, isValid: false } };
+      if (!buildingType) return { buildMode: { ...state.buildMode, position: pos, pointer: pos, isValid: false } };
 
       // A driveway ramp ignores the pointer's z entirely and rides the verge.
-      const snapped = snapPlacement(state.gameState, buildingType, pos);
+      const snapped = snapPlacement(state.gameState, buildingType, pos, rotation);
       const isValid = evaluatePlacement(state.gameState, buildingType, snapped, rotation).valid;
-      return { buildMode: { ...state.buildMode, position: snapped, isValid } };
+      return { buildMode: { ...state.buildMode, position: snapped, pointer: pos, isValid } };
     });
   },
 
@@ -750,11 +762,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
 
       const rot = ((state.buildMode.rotation + 90) % 360) as 0 | 90 | 180 | 270;
-      const { buildingType, position } = state.buildMode;
-      const isValid = buildingType
-        ? evaluatePlacement(state.gameState, buildingType, position, rot).valid
-        : false;
-      return { buildMode: { ...state.buildMode, rotation: rot, isValid } };
+      const { buildingType, pointer } = state.buildMode;
+      if (!buildingType) return { buildMode: { ...state.buildMode, rotation: rot, isValid: false } };
+
+      // Turning swaps the footprint's two sides, which flips which way each
+      // axis has to snap — so the position is re-derived from the raw pointer,
+      // never from its own last snap, or every press would walk it half a cell.
+      const snapped = snapPlacement(state.gameState, buildingType, pointer, rot);
+      const isValid = evaluatePlacement(state.gameState, buildingType, snapped, rot).valid;
+      return { buildMode: { ...state.buildMode, position: snapped, rotation: rot, isValid } };
     });
   },
 
@@ -1195,7 +1211,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       buildMode: {
         active: true,
         buildingType: type,
-        position: snapPlacement(state, type, moved.position),
+        position: snapPlacement(state, type, moved.position, moved.rotation),
+        pointer: moved.position,
         rotation: moved.rotation,
         isValid: false
       },
@@ -1279,7 +1296,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     sounds.playClick();
     set({
       landMode: { active: true, hovered: null, action: 'NONE', price: 0, canBuy: false },
-      buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
+      buildMode: { active: false, buildingType: null, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
       activeModal: 'NONE'
     });
   },
@@ -2346,7 +2363,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       cameraZoom: 4,
       cameraAngle: 225,
       cameraView: 0,
-      buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
+      buildMode: { active: false, buildingType: null, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
       landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false }
     });
   },

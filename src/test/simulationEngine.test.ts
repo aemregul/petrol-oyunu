@@ -613,7 +613,10 @@ describe('simulationEngine - daily missions', () => {
 });
 
 describe('simulationEngine - forecourt boundary', () => {
-  it('keeps every parked or queueing vehicle on the concrete', () => {
+  // 12000 ticks of a busy forecourt: ~4.3s on an idle machine, which leaves
+  // the default 5s limit nothing to absorb load with — it was failing on
+  // machine contention alone, never on the simulation.
+  it('keeps every parked or queueing vehicle on the concrete', { timeout: 20000 }, () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.player.cash = 200000;

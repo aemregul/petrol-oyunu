@@ -105,7 +105,9 @@ export function createInitialGameState(): GameState {
       pump_1: {
         id: 'pump_1',
         level: 1,
-        position: [8, 7], // Grid koordinatları
+        // Grid koordinatları — 2x3'lük ayak izinin kenarları hücre çizgisine
+        // otursun diye derinlik ekseni yarım koordinatta.
+        position: [8, 7.5],
         rotation: 0,
         supportedFuels: ['gasoline'],
         state: 'IDLE',
@@ -122,6 +124,8 @@ export function createInitialGameState(): GameState {
         id: 'office_1',
         type: 'office',
         level: 1,
+        // Saklanan boyut 4x4 (katalogdaki 5x5 değil) ve ayak izi saklanandan
+        // hesaplanır: çift kenar tam sayı merkez ister.
         position: [4, 11],
         rotation: 0,
         size: [4, 4],
@@ -133,7 +137,7 @@ export function createInitialGameState(): GameState {
         id: 'tank_1',
         type: 'tank_farm',
         level: 1,
-        position: [14, 12],
+        position: [14.5, 12.5], // 3x3: tek sayılı kenar, yarım koordinat merkez
         rotation: 0,
         size: [3, 3],
         health: 100,

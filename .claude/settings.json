@@ -206,7 +206,14 @@
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001)",
       "Bash(node -e \"const l=require\\('/Users/emre/petrol-oyunu/node_modules/lucide-react/dist/cjs/lucide-react.js'\\); const want=['Box','Boxes','Grid3x3','Grid2x2','LayoutGrid','Camera','Video','Eye','Mountain','Axis3d','Scan','SquareStack','Crosshair','RotateCcw','RotateCw','Frame','Orbit','View']; want.forEach\\(n=>console.log\\(n.padEnd\\(14\\), n in l ? 'OK':'--'\\)\\)\")",
       "Bash(grep -n \"className=\\\\\"\\\\|className={\\\\`\" src/ui/PumpPanel.tsx)",
-      "Bash(grep -rn 'className=\"[^\"]*\\\\${' src/ui/)"
+      "Bash(grep -rn 'className=\"[^\"]*\\\\${' src/ui/)",
+      "Bash(node .probe2.mjs 3001)",
+      "Bash(grep -v \"^$\")",
+      "Bash(node .probe2.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001)",
+      "Bash(git -C /Users/emre/petrol-oyunu worktree add /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/head-wt HEAD)",
+      "Bash(git -C /Users/emre/petrol-oyunu worktree remove --force /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/head-wt)",
+      "Bash(git -C /Users/emre/petrol-oyunu worktree prune)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/)"
     ],
     "additionalDirectories": [
       "/private/tmp"
