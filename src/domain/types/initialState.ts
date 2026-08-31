@@ -126,6 +126,17 @@ export function createInitialGameState(): GameState {
         constructionState: 'ACTIVE',
         builtAtTimestamp: now
       },
+      tank_1: {
+        id: 'tank_1',
+        type: 'tank_gasoline',
+        level: 1,
+        position: [14, 12],
+        rotation: 0,
+        size: [3, 3],
+        health: 100,
+        constructionState: 'ACTIVE',
+        builtAtTimestamp: now
+      },
       price_sign_1: {
         id: 'price_sign_1',
         type: 'price_sign',

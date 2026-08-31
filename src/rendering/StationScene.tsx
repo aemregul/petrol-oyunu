@@ -41,7 +41,8 @@ export const StationScene: React.FC = () => {
    */
   const pointerState = useRef({ pointerDown: false, dragged: false });
 
-  const activeOrders = fuelOrders.filter((o) => o.state === 'UNLOADING');
+  // A lorry on the plot is worth drawing the whole way in and out.
+  const activeOrders = fuelOrders.filter((o) => o.truck);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     dragOrigin.current = { x: e.clientX, y: e.clientY };

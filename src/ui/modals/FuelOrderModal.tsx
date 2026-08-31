@@ -32,7 +32,9 @@ export const FuelOrderModal: React.FC = () => {
   const deliveryFee = fuelConf.deliveryFee;
   const totalCost = clampedOrderLiters * unitCost + deliveryFee;
 
-  const inFlightOrders = gameState.fuelOrders.filter((o) => o.fuelType === selectedFuel);
+  const inFlightOrders = gameState.fuelOrders.filter(
+    (o) => o.fuelType === selectedFuel && o.state !== 'COMPLETED'
+  );
 
   const handleOrder = () => {
     const success = orderFuel(selectedFuel, clampedOrderLiters);

@@ -2064,6 +2064,32 @@ export function applyLevelProgression(state: GameState, effects: SimEffects): vo
 /* Tick sub-systems                                                    */
 /* ------------------------------------------------------------------ */
 
+/** The tank building a delivery of this fuel docks at, if one stands. */
+export function tankBuildingFor(state: GameState, fuelType: FuelType): BuildingEntity | null {
+  return (
+    Object.values(state.buildings).find((b) => b.type === `tank_${fuelType}`) ?? null
+  );
+}
+
+/**
+ * Where a tanker parks to unload: alongside its own fuel's tank, hose-length
+ * from the filler caps, on the road side of it.
+ */
+function tankerBay(block: BlockLayout, tank: BuildingEntity): [number, number, number] {
+  const half = (tank.size?.[1] ?? 3) / 2;
+  const inward = block.side === 'far' ? -1 : 1;
+  return clampToApron(block, [tank.position[0], 0, tank.position[1] - inward * (half + 1.3)]);
+}
+
+/**
+ * Drives the delivery lorry the way customers are driven: in off the highway,
+ * through the entry mouth, round whatever the player has built, to the bay
+ * beside its own tank — and back out again when the hose comes off.
+ *
+ * It does not queue behind customer cars: a 16-metre tanker threading the
+ * same follow-the-leader rules would deadlock the forecourt it is there to
+ * supply, so it drives its route and the cars are left to keep clear.
+ */
 function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void {
   for (let i = state.fuelOrders.length - 1; i >= 0; i--) {
     const order = state.fuelOrders[i];
@@ -2077,18 +2103,71 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
           effects,
           'INFO',
           'Tanker Kapıda',
-          `${order.liters} L ${order.fuelType} tankeri istasyona ulaştı, boşaltım sırası bekliyor.`
+          `${order.liters} L ${order.fuelType} tankeri istasyona ulaştı.`
         );
       }
       continue;
     }
 
     if (order.state === 'QUEUED_AT_GATE') {
-      // Only one tanker may occupy the unloading bay at a time.
-      const bayBusy = state.fuelOrders.some((o) => o.state === 'UNLOADING');
-      if (!bayBusy) {
-        order.state = setOrderState(order.id, order.state, 'UNLOADING');
-        order.remainingSeconds = order.liters / GAME_CONFIG.economy.tankerUnloadSpeedLps;
+      const tank = tankBuildingFor(state, order.fuelType);
+
+      // No tank standing for this fuel (an old save, or it was sold while
+      // the lorry was on the road): fall back to the timer-only delivery
+      // rather than a lorry with nowhere to go.
+      if (!tank) {
+        const bayBusy = state.fuelOrders.some((o) => o.state === 'UNLOADING');
+        if (!bayBusy) {
+          order.state = setOrderState(order.id, order.state, 'UNLOADING');
+          order.remainingSeconds = order.liters / GAME_CONFIG.economy.tankerUnloadSpeedLps;
+        }
+        continue;
+      }
+
+      const side = drivewaySideAt(tank.position[1]);
+      const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
+
+      if (!order.truck) {
+        // Turn off the highway: in through the entry mouth, then to the bay.
+        const bay = tankerBay(block, tank);
+        const start: [number, number, number] = [block.roadStartX, 0, block.roadLaneZ];
+        const laneX = drivewayLaneX(block.entry, 0);
+        const carrier = { worldPosition: start } as VehicleEntity;
+        const route =
+          driveable(
+            state,
+            carrier,
+            block,
+            [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
+            undefined,
+            tank.id
+          ) ?? [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], bay];
+
+        order.truck = {
+          worldPosition: start,
+          heading: block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2,
+          route: route.slice(1),
+          targetWaypoint: route[0] ?? null,
+          routeProgress: 0,
+          // A loaded tanker does not corner like a hatchback.
+          speed: 0.55,
+          phase: 'ARRIVING',
+          tankBuildingId: tank.id
+        };
+        continue;
+      }
+
+      if (order.truck.phase === 'ARRIVING') {
+        const arrived = driveToward(order.truck as unknown as VehicleEntity, dt);
+        // One hose per tank: a second lorry for the same fuel waits its turn.
+        const bayBusy = state.fuelOrders.some(
+          (o) => o !== order && o.fuelType === order.fuelType && o.state === 'UNLOADING'
+        );
+        if (arrived && !bayBusy) {
+          order.truck.phase = 'UNLOADING';
+          order.state = setOrderState(order.id, order.state, 'UNLOADING');
+          order.remainingSeconds = order.liters / GAME_CONFIG.economy.tankerUnloadSpeedLps;
+        }
       }
       continue;
     }
@@ -2113,6 +2192,44 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
               ? ` ${res.refundedLiters.toFixed(0)} L tank dolduğu için iade edildi.`
               : '')
         );
+
+        // The hose is off; the lorry pulls out through the exit mouth. Only
+        // the timer-fallback deliveries vanish on the spot.
+        if (order.truck) {
+          const tank = order.truck.tankBuildingId
+            ? state.buildings[order.truck.tankBuildingId]
+            : null;
+          const side = tank ? drivewaySideAt(tank.position[1]) : 'near';
+          const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
+          const laneX = drivewayLaneX(block.exit, 0);
+          const from = order.truck.worldPosition;
+          const route =
+            driveable(
+              state,
+              { worldPosition: from } as VehicleEntity,
+              block,
+              [
+                [from[0], 0, block.laneZ],
+                [laneX, 0, block.laneZ],
+                [laneX, 0, block.roadLaneZ],
+                [block.roadEndX, 0, block.roadLaneZ]
+              ],
+              undefined,
+              order.truck.tankBuildingId ?? undefined
+            ) ?? [[laneX, 0, block.roadLaneZ], [block.roadEndX, 0, block.roadLaneZ]];
+
+          order.truck.phase = 'LEAVING';
+          order.truck.route = route.slice(1);
+          order.truck.targetWaypoint = route[0] ?? null;
+        } else {
+          state.fuelOrders.splice(i, 1);
+        }
+      }
+      continue;
+    }
+
+    if (order.state === 'COMPLETED' && order.truck?.phase === 'LEAVING') {
+      if (driveToward(order.truck as unknown as VehicleEntity, dt)) {
         state.fuelOrders.splice(i, 1);
       }
     }

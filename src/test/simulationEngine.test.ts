@@ -1142,6 +1142,44 @@ describe('simulationEngine - highway lanes and driveways', () => {
   });
 });
 
+describe('the delivery lorry', () => {
+  it('drives in, docks at its own fuel’s tank, unloads and leaves', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.player.cash = 500_000;
+    // A diesel tank standing well away from the petrol one, so docking at
+    // the wrong tank would be unmistakable.
+    state.tanks.diesel.capacity = 1500;
+    state.buildings.tank_d = {
+      id: 'tank_d', type: 'tank_diesel', level: 1, position: [4, 6], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+
+    const effects = createEffects();
+    expect(placeFuelOrder(state, 'diesel', 800, effects)).toBe(true);
+    const order = state.fuelOrders[0];
+    order.remainingSeconds = 0.1;
+
+    // The supplier timer runs out; the lorry turns off the highway.
+    advanceUntil(state, (s) => !!s.fuelOrders[0]?.truck, 30);
+    expect(order.truck).toBeTruthy();
+    expect(order.truck!.tankBuildingId).toBe('tank_d');
+
+    // It reaches the bay beside the diesel tank and starts pumping.
+    const unloading = advanceUntil(state, (s) => s.fuelOrders[0]?.state === 'UNLOADING', 600);
+    expect(unloading).toBe(true);
+    const [tx, , tz] = order.truck!.worldPosition;
+    expect(Math.hypot(tx - 4, tz - 6)).toBeLessThan(4.5);
+
+    // The fuel lands in the diesel tank, and the lorry pulls out and is gone.
+    const stockBefore = state.tanks.diesel.stock;
+    advanceUntil(state, (s) => s.fuelOrders.length === 0, 900);
+    expect(state.fuelOrders).toHaveLength(0);
+    expect(state.tanks.diesel.stock).toBeGreaterThan(stockBefore);
+  });
+});
+
 describe('price, demand and reputation', () => {
   it('lets a gouged diesel board turn traffic away, not just petrol', () => {
     // Demand used to read the petrol price alone: diesel and LPG could be

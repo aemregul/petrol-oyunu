@@ -203,6 +203,22 @@ export interface FuelOrderEntity {
   remainingSeconds: number;
   state: OrderState;
   transactionId: string;
+  /**
+   * The lorry itself, once it turns off the highway. Absent while the order
+   * is still with the supplier — and on old saves, where deliveries were a
+   * timer and a parked prop.
+   */
+  truck?: {
+    worldPosition: [number, number, number];
+    heading: number;
+    route: Array<[number, number, number]>;
+    targetWaypoint: [number, number, number] | null;
+    routeProgress: number;
+    speed: number;
+    phase: 'ARRIVING' | 'UNLOADING' | 'LEAVING';
+    /** The tank it is here to fill — always its own fuel's tank. */
+    tankBuildingId: string | null;
+  };
 }
 
 export interface LoanEntity {

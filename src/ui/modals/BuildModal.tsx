@@ -188,6 +188,10 @@ export const BuildModal: React.FC = () => {
           {items.map((item) => {
             const isUnlocked = gameState.player.level >= item.unlockLevel;
             const canAfford = gameState.player.cash >= item.price;
+            // One tank package per fuel; the standing one is upgraded instead.
+            const maxedOut =
+              item.type.startsWith('tank_') &&
+              Object.values(gameState.buildings).some((b) => b.type === item.type);
 
             return (
               <div
@@ -214,7 +218,12 @@ export const BuildModal: React.FC = () => {
                   </div>
                 </div>
 
-                {isUnlocked ? (
+                {maxedOut ? (
+                  <div className="w-full py-2.5 rounded-xl bg-slate-800/80 text-slate-400 text-xs font-bold flex items-center justify-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Maksimum alım sayısına ulaşıldı — tankı yükseltin</span>
+                  </div>
+                ) : isUnlocked ? (
                   <button
                     onClick={() => handleSelectBuild(item.type)}
                     disabled={!canAfford}

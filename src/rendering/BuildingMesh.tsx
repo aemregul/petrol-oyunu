@@ -168,8 +168,10 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
         <meshBasicMaterial color={accent} transparent opacity={0.75} {...DECAL} />
       </mesh>
 
-      {/* Two filler caps */}
-      {[-w * 0.18, w * 0.18].map((x) => (
+      {/* Filler caps — one more per level, the way bigger farms plumb in */}
+      {([[-w * 0.18, w * 0.18], [-w * 0.26, 0, w * 0.26], [-w * 0.3, -w * 0.1, w * 0.1, w * 0.3]][
+        Math.min(3, Math.max(1, building.level)) - 1
+      ]).map((x) => (
         <group key={x} position={[x, 0.12, 0]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.42, 0.46, 0.22, 16]} />
@@ -187,13 +189,58 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
         </group>
       ))}
 
-      {/* Vent stack at the back corner */}
+      {/* From Sv2: a raised fill manifold along the back edge. The footprint
+          never grows with level — what grows is the hardware standing on it,
+          so the upgrade reads from the road without claiming more concrete. */}
+      {building.level >= 2 && (
+        <group position={[0, 0, -d * 0.3]}>
+          <mesh position={[0, 0.55, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.16, 0.16, w * 0.6, 12]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.6} roughness={0.4} />
+          </mesh>
+          {[-w * 0.22, 0, w * 0.22].map((x) => (
+            <mesh key={x} position={[x, 0.3, 0]} castShadow>
+              <cylinderGeometry args={[0.09, 0.09, 0.6, 8]} />
+              <meshStandardMaterial color="#64748b" metalness={0.6} roughness={0.4} />
+            </mesh>
+          ))}
+          <mesh position={[-w * 0.32, 0.55, 0]} castShadow>
+            <cylinderGeometry args={[0.2, 0.2, 0.28, 10]} />
+            <meshStandardMaterial color={accent} roughness={0.5} />
+          </mesh>
+        </group>
+      )}
+
+      {/* At Sv3: a level-gauge cabinet with a lit dial */}
+      {building.level >= 3 && (
+        <group position={[-w * 0.34, 0, d * 0.28]}>
+          <mesh position={[0, 0.75, 0]} castShadow>
+            <boxGeometry args={[0.6, 1.5, 0.4]} />
+            <meshStandardMaterial color="#334155" roughness={0.55} metalness={0.3} />
+          </mesh>
+          <mesh position={[0, 1.05, 0.21]}>
+            <planeGeometry args={[0.42, 0.42]} />
+            <meshStandardMaterial
+              color={accent}
+              emissive={accent}
+              emissiveIntensity={0.8}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      )}
+
+      {/* Vent stack at the back corner — taller with each level's throughput */}
       <group position={[w * 0.34, 0, -d * 0.32]}>
-        <mesh position={[0, 1.5, 0]} castShadow>
-          <cylinderGeometry args={[0.1, 0.13, 3, 10]} />
+        <mesh position={[0, (3 + (building.level - 1) * 0.7) / 2, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.13, 3 + (building.level - 1) * 0.7, 10]} />
           <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
         </mesh>
-        <mesh position={[0, 3.05, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <mesh
+          position={[0, 3.05 + (building.level - 1) * 0.7, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+          castShadow
+        >
           <cylinderGeometry args={[0.11, 0.11, 0.5, 10]} />
           <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
         </mesh>

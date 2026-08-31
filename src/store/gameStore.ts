@@ -329,6 +329,36 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   // wherever an older save happened to leave it.
   syncPriceSign(loaded);
 
+  // Tanks used to be capacity with no building behind it — the starting
+  // petrol especially. Deliveries now dock at a physical tank and upgrades
+  // hang off it, so every fuel the station stocks gets one standing, placed
+  // on the first legal spot. A fuel whose tank cannot be placed just keeps
+  // the timer-only deliveries.
+  for (const fuel of ['gasoline', 'diesel', 'lpg'] as const) {
+    if (loaded.tanks[fuel].capacity <= 0) continue;
+    const type = `tank_${fuel}`;
+    if (Object.values(loaded.buildings).some((b) => b.type === type)) continue;
+
+    outer: for (let z = 3; z <= loaded.station.plots.height - 2; z++) {
+      for (let x = 2; x <= loaded.station.plots.width - 2; x++) {
+        if (!evaluatePlacement(loaded, type, [x, z], 0).valid) continue;
+        const id = `bld_${type}_${Math.random().toString(36).substring(2, 6)}`;
+        loaded.buildings[id] = {
+          id,
+          type,
+          level: 1,
+          position: [x, z],
+          rotation: 0,
+          size: GAME_CONFIG.buildings[type].size,
+          health: 100,
+          constructionState: 'ACTIVE',
+          builtAtTimestamp: Date.now()
+        };
+        break outer;
+      }
+    }
+  }
+
   // Day one should open with its daily goals already posted.
   if (!loaded.missions.some((m) => m.type !== 'TUTORIAL')) {
     generateDailyMissions(loaded);

@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { createInitialGameState } from '../domain/types/initialState';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState } from '../domain/types/gameState';
+import { evaluatePlacement } from '../domain/services/placement';
 
 /**
  * The store-level mechanics that were promised on the level screen and in the
@@ -27,12 +28,10 @@ function freshState(): GameState {
   return state;
 }
 
-function putTank(state: GameState, level = 1): string {
-  state.buildings.tankA = {
-    id: 'tankA', type: 'tank_gasoline', level, position: [4, 4], rotation: 0,
-    size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
-  } as GameState['buildings'][string];
-  return 'tankA';
+/** The starting station's own petrol tank, standing since day one. */
+function theTank(state: GameState, level = 1): string {
+  state.buildings.tank_1.level = level;
+  return 'tank_1';
 }
 
 beforeEach(() => {
@@ -48,64 +47,73 @@ beforeEach(() => {
 describe('tank packages', () => {
   it('upgrades a tank package into real litres, on the promised ladder', () => {
     const state = useGameStore.getState().gameState;
-    putTank(state);
+    theTank(state);
     state.player.level = 3;
     const before = state.tanks.gasoline.capacity;
     useGameStore.setState({ gameState: { ...state } });
 
     // 3.000 L is a level-4 promise; below it the money must not move.
-    expect(useGameStore.getState().upgradeBuilding('tankA')).toBe(false);
+    expect(useGameStore.getState().upgradeBuilding('tank_1')).toBe(false);
 
     const ready = useGameStore.getState().gameState;
     ready.player.level = 4;
     useGameStore.setState({ gameState: { ...ready } });
-    expect(useGameStore.getState().upgradeBuilding('tankA')).toBe(true);
+    expect(useGameStore.getState().upgradeBuilding('tank_1')).toBe(true);
 
     const after = useGameStore.getState().gameState;
-    expect(after.buildings.tankA.level).toBe(2);
+    expect(after.buildings.tank_1.level).toBe(2);
     // A level-2 package holds 3.000 L where the level-1 held 1.500.
     expect(after.tanks.gasoline.capacity).toBe(before + 1500);
   });
 
   it('counts the upgrade money when a tank is valued for sale', () => {
-    const state = useGameStore.getState().gameState;
-    putTank(state);
-    useGameStore.setState({ gameState: { ...state } });
-    const plain = useGameStore.getState().structureValue('tankA');
+    const plain = useGameStore.getState().structureValue('tank_1');
 
     const upgraded = useGameStore.getState().gameState;
-    upgraded.buildings.tankA.level = 2;
+    upgraded.buildings.tank_1.level = 2;
     useGameStore.setState({ gameState: { ...upgraded } });
 
     // The 20.000 TL sunk into the level-2 package has to show in the price,
     // the way it always did for pumps and shops.
-    expect(useGameStore.getState().structureValue('tankA')).toBeGreaterThan(plain);
+    expect(useGameStore.getState().structureValue('tank_1')).toBeGreaterThan(plain);
+  });
+
+  it('refuses a second tank of the same fuel, and says why', () => {
+    const state = useGameStore.getState().gameState;
+    const verdict = evaluatePlacement(state, 'tank_gasoline', [4, 4], 0);
+    expect(verdict.valid).toBe(false);
+    expect(verdict.reason).toContain('Maksimum alım');
+
+    // A fuel with no tank standing is still open for its first one.
+    expect(
+      Object.values(state.buildings).some((b) => b.type === 'tank_diesel')
+    ).toBe(false);
+    expect(evaluatePlacement(state, 'tank_diesel', [4, 4], 0).valid).toBe(true);
   });
 
   it('takes a sold package’s litres away and spills what no longer fits', () => {
     const state = useGameStore.getState().gameState;
-    putTank(state, 2);
-    state.tanks.gasoline.capacity += 3000;
-    state.tanks.gasoline.stock = state.tanks.gasoline.capacity;
-    const capacityBefore = state.tanks.gasoline.capacity;
+    theTank(state, 2);
+    state.tanks.gasoline.capacity = 3000;
+    state.tanks.gasoline.stock = 3000;
     useGameStore.setState({ gameState: { ...state } });
 
-    expect(useGameStore.getState().sellStructure('tankA')).toBe(true);
+    expect(useGameStore.getState().sellStructure('tank_1')).toBe(true);
 
     const after = useGameStore.getState().gameState;
-    expect(after.tanks.gasoline.capacity).toBe(capacityBefore - 3000);
-    expect(after.tanks.gasoline.stock).toBe(after.tanks.gasoline.capacity);
+    expect(after.tanks.gasoline.capacity).toBe(0);
+    expect(after.tanks.gasoline.stock).toBe(0);
   });
 
   it('moves a tank without growing it and without resetting its level', () => {
     const state = useGameStore.getState().gameState;
-    putTank(state, 2);
-    state.tanks.gasoline.capacity += 3000;
+    theTank(state, 2);
+    state.tanks.gasoline.capacity = 3000;
     const capacityBefore = state.tanks.gasoline.capacity;
     useGameStore.setState({ gameState: { ...state } });
 
-    expect(useGameStore.getState().relocateStructure('tankA')).toBe(true);
-    useGameStore.getState().setBuildPreviewPos([13, 12]);
+    expect(useGameStore.getState().relocateStructure('tank_1')).toBe(true);
+    useGameStore.getState().setBuildPreviewPos([4, 4]);
     expect(useGameStore.getState().confirmBuildPlacement()).toBe(true);
 
     const after = useGameStore.getState().gameState;

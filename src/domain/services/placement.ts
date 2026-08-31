@@ -253,6 +253,15 @@ export function evaluatePlacement(
     return { valid: false, reason: `Seviye ${catalog.unlockLevel} gerekiyor.` };
   }
 
+  // One tank per fuel: capacity grows by upgrading the tank that stands, not
+  // by carpeting the plot with packages.
+  if (
+    buildingType.startsWith('tank_') &&
+    Object.values(state.buildings).some((b) => b.type === buildingType)
+  ) {
+    return { valid: false, reason: 'Maksimum alım sayısına ulaşıldı — tankı yükseltin.' };
+  }
+
   const role = drivewayRole(buildingType);
   if (role) return evaluateDriveway(state, role, position);
 
