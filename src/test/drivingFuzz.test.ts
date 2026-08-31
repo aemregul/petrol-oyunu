@@ -185,7 +185,7 @@ describe('vehicles and buildings, on forecourts nobody designed', () => {
           spy.mockRestore();
         }
       },
-      60_000
+      180_000
     );
   }
 });

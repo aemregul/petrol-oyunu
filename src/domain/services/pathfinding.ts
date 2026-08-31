@@ -433,9 +433,20 @@ export function routeAroundOrNull(
   bounds: Rect,
   keepOut: Rect[],
   ignorePumpId?: string,
-  ignoreBuildingId?: string
+  ignoreBuildingId?: string,
+  extraRects?: Rect[]
 ): Array<[number, number, number]> | null {
-  return plot(state, vehicle, side, waypoints, bounds, keepOut, ignorePumpId, ignoreBuildingId);
+  return plot(
+    state,
+    vehicle,
+    side,
+    waypoints,
+    bounds,
+    keepOut,
+    ignorePumpId,
+    ignoreBuildingId,
+    extraRects
+  );
 }
 
 export function routeAround(
@@ -482,7 +493,11 @@ function plot(
   bounds: Rect,
   keepOut: Rect[],
   ignorePumpId?: string,
-  ignoreBuildingId?: string
+  ignoreBuildingId?: string,
+  // Obstacles beyond the buildings — parked cars, other lorries — already
+  // grown to the margin the caller wants kept. Never excused for start or
+  // goal: a route is asked for exactly because these are in the way.
+  extraRects?: Rect[]
 ): Array<[number, number, number]> | null {
   const start: [number, number] = [vehicle.worldPosition[0], vehicle.worldPosition[2]];
 
@@ -522,18 +537,24 @@ function plot(
     )
   ];
 
-  const rects = keep(
-    wallRects(state, side, PASSING_CLEARANCE, ignoreBuildingId),
-    pumpRects(state, side, ignorePumpId, PASSING_CLEARANCE)
-  );
+  const rects = [
+    ...keep(
+      wallRects(state, side, PASSING_CLEARANCE, ignoreBuildingId),
+      pumpRects(state, side, ignorePumpId, PASSING_CLEARANCE)
+    ),
+    ...(extraRects ?? [])
+  ];
 
   // Turns land on search nodes, and a turn is where the far end of the car
   // swings out. The search is held to the wider figure; the straight runs
   // between its nodes only need the narrower one.
-  const turning = keep(
-    wallRects(state, side, CLEARANCE, ignoreBuildingId),
-    pumpRects(state, side, ignorePumpId)
-  );
+  const turning = [
+    ...keep(
+      wallRects(state, side, CLEARANCE, ignoreBuildingId),
+      pumpRects(state, side, ignorePumpId)
+    ),
+    ...(extraRects ?? [])
+  ];
 
   if (rects.length === 0 || waypoints.length === 0) return waypoints;
 

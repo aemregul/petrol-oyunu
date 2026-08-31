@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useGameStore } from '../store/gameStore';
 import { createInitialGameState } from '../domain/types/initialState';
 import { calculateReputationTrafficMultiplier } from '../domain/formulas/economy';
 import {
@@ -1171,6 +1172,121 @@ describe('the delivery lorry', () => {
     advanceUntil(state, (s) => s.fuelOrders.length === 0, 900);
     expect(state.fuelOrders).toHaveLength(0);
     expect(state.tanks.diesel.stock).toBeGreaterThan(stockBefore);
+  });
+});
+
+describe('the lorry shares the forecourt', () => {
+  it('never lets a lorry and a car occupy the same ground', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.player.cash = 500_000;
+
+    const effects = createEffects();
+    expect(placeFuelOrder(state, 'gasoline', 800, effects)).toBe(true);
+    state.fuelOrders[0].remainingSeconds = 0.1;
+
+    let worstOverlap = Infinity;
+    for (let i = 0; i < 6000; i++) {
+      runSimulationTick(state, 0.2, effects);
+      for (const order of state.fuelOrders) {
+        const truck = order.truck;
+        if (!truck) continue;
+        // The lorry is three car-lengths of steel: nose, middle and tail all
+        // have to stay clear of every car.
+        const dx = Math.sin(truck.heading);
+        const dz = Math.cos(truck.heading);
+        for (const along of [-1.1, 0, 1.1]) {
+          const bx = truck.worldPosition[0] + dx * along;
+          const bz = truck.worldPosition[2] + dz * along;
+          for (const vehicle of Object.values(state.vehicles)) {
+            worstOverlap = Math.min(
+              worstOverlap,
+              Math.hypot(vehicle.worldPosition[0] - bx, vehicle.worldPosition[2] - bz)
+            );
+          }
+        }
+      }
+      if (state.fuelOrders.length === 0) break;
+    }
+
+    // Bodies this close would be drawn inside one another.
+    expect(worstOverlap).toBeGreaterThan(0.9);
+  });
+
+  it('keeps two lorries from berthing on top of each other', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.player.cash = 500_000;
+    state.pumps.pump_1.supportedFuels.push('diesel');
+
+    const effects = createEffects();
+    placeFuelOrder(state, 'gasoline', 800, effects);
+    placeFuelOrder(state, 'diesel', 800, effects);
+    for (const order of state.fuelOrders) order.remainingSeconds = 0.1;
+
+    let closest = Infinity;
+    for (let i = 0; i < 6000; i++) {
+      runSimulationTick(state, 0.2, effects);
+      const trucks = state.fuelOrders.filter((o) => o.truck).map((o) => o.truck!);
+      for (let a = 0; a < trucks.length; a++) {
+        for (let b = a + 1; b < trucks.length; b++) {
+          closest = Math.min(
+            closest,
+            Math.hypot(
+              trucks[a].worldPosition[0] - trucks[b].worldPosition[0],
+              trucks[a].worldPosition[2] - trucks[b].worldPosition[2]
+            )
+          );
+        }
+      }
+      if (state.fuelOrders.length === 0) break;
+    }
+
+    // Either they never shared the plot at all, or they stayed a lorry apart.
+    expect(closest).toBeGreaterThan(2.5);
+    expect(state.tanks.gasoline.stock).toBeGreaterThan(0);
+    expect(state.tanks.diesel.stock).toBeGreaterThan(0);
+  });
+});
+
+describe('the day rolls over without stopping', () => {
+  it('carries the forecourt straight into the next morning', () => {
+    // The store is UI code: it saves and plays sounds through the browser.
+    (globalThis as any).window = {};
+    (globalThis as any).localStorage = {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined
+    };
+
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.player.cash = 200_000;
+
+    // Run to closing time with the station busy.
+    const effects = createEffects();
+    let ended = false;
+    for (let i = 0; i < 30000; i++) {
+      runSimulationTick(state, 0.5, effects);
+      if (effects.dayEnded) { ended = true; break; }
+    }
+    expect(ended).toBe(true);
+    const onPlot = Object.keys(state.vehicles).length;
+
+    useGameStore.setState({ gameState: state });
+    useGameStore.getState().endDayAndShowReport();
+
+    const after = useGameStore.getState().gameState;
+    // A new day, already running — and the cars that were here are still here.
+    expect(after.dayState.currentDay).toBe(2);
+    expect(after.dayState.isDayActive).toBe(true);
+    expect(after.dayState.timeSpeed).toBe(1);
+    expect(Object.keys(after.vehicles).length).toBe(onPlot);
+    // Yesterday's till is closed off, not carried forward.
+    expect(after.dayState.todayStats.fuelRevenue).toBe(0);
   });
 });
 

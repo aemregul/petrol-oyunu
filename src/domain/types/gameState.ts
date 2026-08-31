@@ -220,6 +220,10 @@ export interface FuelOrderEntity {
     phase: 'ARRIVING' | 'UNLOADING' | 'LEAVING';
     /** The tank it is here to fill — always its own fuel's tank. */
     tankBuildingId: string | null;
+    /** How long the lorry has been stood behind something in its way. */
+    blockedSeconds?: number;
+    /** How long it has been on the plot at all — its patience with the place. */
+    onPlotSeconds?: number;
   };
 }
 

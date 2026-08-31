@@ -6,7 +6,6 @@ import { BuildModal } from './modals/BuildModal';
 import { PricingModal } from './modals/PricingModal';
 import { StaffModal } from './modals/StaffModal';
 import { BankModal } from './modals/BankModal';
-import { DayReportModal } from './modals/DayReportModal';
 import { OfficeModal } from './modals/OfficeModal';
 import { SettingsModal } from './modals/SettingsModal';
 import { MissionsModal } from './modals/MissionsModal';
@@ -27,8 +26,6 @@ export const ModalContainer: React.FC = () => {
       return <StaffModal />;
     case 'BANK':
       return <BankModal />;
-    case 'DAY_REPORT':
-      return <DayReportModal />;
     case 'OFFICE':
       return <OfficeModal />;
     case 'SETTINGS':

@@ -188,7 +188,11 @@
       "Bash(sort -rk3)",
       "Bash(awk '{printf \"%s %s%% %s\\\\n\", $2, $3, $11}')",
       "Bash(git stash *)",
-      "Bash(awk '{printf \"%s%% %s\\\\n\", $3, $11}')"
+      "Bash(awk '{printf \"%s%% %s\\\\n\", $3, $11}')",
+      "Bash(grep -E \"✓|×|Tests |ms$\")",
+      "Bash(pkill -f \"vite --port\")",
+      "Bash([ -s \"$F\" ])",
+      "Bash(exit 0)"
     ],
     "additionalDirectories": [
       "/private/tmp"

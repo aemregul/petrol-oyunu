@@ -130,6 +130,62 @@ function panBounds(ownedParcels: string[]): {
   };
 }
 
+/**
+ * A fresh morning: the clock back to opening, yesterday's events swept out,
+ * new wholesale prices, new weather, new daily goals, the tills zeroed. Used
+ * both when a running day rolls over and when a save that stopped at closing
+ * time is brought back.
+ */
+function beginNewDay(state: GameState, effects: ReturnType<typeof createEffects>): void {
+  state.dayState.currentDay++;
+  state.dayState.gameTime = GAME_CONFIG.economy.dayStartHour;
+  state.dayState.timeSpeed = 1;
+  // One discounted window a day, at an hour drawn fresh each morning.
+  state.dayState.fuelDealDoneToday = false;
+  state.dayState.fuelDealSecondsLeft = 0;
+  state.dayState.fuelDealAtHour = undefined;
+  state.dayState.isDayActive = true;
+  state.dayState.isDayEnding = false;
+  state.dayState.weather = (['SUNNY', 'SUNNY', 'OVERCAST', 'RAIN'] as const)[
+    Math.floor(Math.random() * 4)
+  ];
+
+  // Yesterday's events are over; roll a fresh market shock for the new day.
+  state.activeEvents = [];
+  state.todayEventIds = [];
+  rollDailyEvent(state, effects);
+
+  // Roll tomorrow's wholesale prices and let the regional average drift with them.
+  const eventModifier = getWholesaleEventModifier(state);
+  for (const fuelType of Object.keys(state.pricing) as FuelType[]) {
+    const conf = GAME_CONFIG.fuels[fuelType];
+    const volatility = (Math.random() * 2 - 1) * conf.dailyVolatility;
+    const wholesale = calculateDailyWholesalePrice(conf.baseWholesale, 0, volatility, eventModifier);
+    state.pricing[fuelType].todayWholesaleCost = wholesale;
+    state.pricing[fuelType].regionalAverage = Number((wholesale + conf.targetMargin).toFixed(2));
+  }
+
+  generateDailyMissions(state);
+
+  state.dayState.todayStats = {
+    fuelRevenue: 0,
+    fuelCost: 0,
+    marketRevenue: 0,
+    marketCost: 0,
+    tips: 0,
+    wages: 0,
+    upkeep: 0,
+    loanPayments: 0,
+    repairs: 0,
+    customersServed: 0,
+    customersLost: 0,
+    serviceScoreSum: 0
+  };
+
+  // Restock the mini-market shelves for the new day.
+  if (state.market.active) state.market.stock = 100;
+}
+
 export type ActiveModalType =
   | 'NONE'
   | 'CUSTOMER_FUEL'
@@ -138,7 +194,6 @@ export type ActiveModalType =
   | 'PRICING'
   | 'STAFF'
   | 'BANK'
-  | 'DAY_REPORT'
   | 'SETTINGS'
   | 'OFFICE'
   | 'MISSIONS';
@@ -273,7 +328,6 @@ interface GameStore {
   // Simulation Step & Day Cycle
   simulationTick: (deltaSeconds: number) => void;
   endDayAndShowReport: () => void;
-  startNextDay: () => void;
   claimMissionReward: (missionId: string) => boolean;
   resetGameSave: () => void;
   updatePerfMetrics: (metrics: Partial<PerformanceMetrics>) => void;
@@ -391,9 +445,13 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
     loaded.dayState.timeSpeed = 1;
   }
 
-  // The day had already closed: reopen its report so the player can move on.
+  // The day had already closed when this was saved. There is no report
+  // screen to reopen any more — the station simply wakes into the next
+  // morning and carries on.
   if (!loaded.dayState.isDayActive) {
-    return { state: loaded, modal: 'DAY_REPORT' };
+    const morning = createEffects();
+    beginNewDay(loaded, morning);
+    flushEffects(loaded, morning);
   }
 
   return { state: loaded, modal: 'NONE' };
@@ -2061,26 +2119,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     const effects = createEffects();
 
-    state.dayState.timeSpeed = 0;
-    state.dayState.isDayActive = false;
-    state.dayState.isDayEnding = true;
-
-    // Any customer still on the forecourt at closing time is a lost sale.
-    for (const vehicle of Object.values(state.vehicles)) {
-      // Anyone still waiting when the shutters come down was taken on and then
-      // failed; anyone already leaving was not.
-      const wasBeingServed =
-        vehicle.state !== 'EXIT' && vehicle.state !== 'DESPAWN' && vehicle.state !== 'PASSING';
-      if (wasBeingServed) {
-        state.dayState.todayStats.customersLost++;
-        state.player.statistics.totalCustomersLost++;
-      }
-      if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {
-        releasePump(state.pumps[vehicle.targetPumpId]);
-      }
-    }
-    state.vehicles = {};
-    for (const tank of Object.values(state.tanks)) tank.reservedStock = 0;
+    // The day's books are settled and the next morning starts in the same
+    // breath. Nothing stops: the cars on the forecourt keep being served,
+    // the clock just reads 06:00 again. Closing time used to freeze the game
+    // behind a report screen and sweep the plot clean — a hard cut in the
+    // middle of whatever the player was doing.
 
     // The manager lives outside the employees collection, which is how their
     // wage went uncollected for as long as the job existed.
@@ -2185,84 +2228,19 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.player.statistics.daysCompleted++;
 
     trackMissionMetric(state, 'DAYS_COMPLETED', 1, effects);
+
+    // The one line the report screen was worth: how the day went.
+    effects.notifications.push({
+      type: netProfit >= 0 ? 'REWARD' : 'WARNING',
+      title: `Gün ${state.dayState.currentDay} Kapandı`,
+      message: `Net kâr: ${netProfit >= 0 ? '' : '-'}₺${Math.abs(Math.round(netProfit)).toLocaleString('tr-TR')} · İtibar ${state.player.reputation.toFixed(2)} · ${t.customersServed} müşteri.`
+    });
+
+    beginNewDay(state, effects);
     flushEffects(state, effects);
 
-    sounds.playLevelUp();
     SaveManager.saveGame(state);
-
-    set({
-      gameState: state,
-      selectedVehicleId: null,
-      activeModal: 'DAY_REPORT'
-    });
-  },
-
-  startNextDay: () => {
-    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
-    state.dayState.currentDay++;
-    state.dayState.gameTime = GAME_CONFIG.economy.dayStartHour;
-    state.dayState.timeSpeed = 1;
-    // One discounted window a day, at an hour drawn fresh each morning.
-    state.dayState.fuelDealDoneToday = false;
-    state.dayState.fuelDealSecondsLeft = 0;
-    state.dayState.fuelDealAtHour = undefined;
-    state.dayState.isDayActive = true;
-    state.dayState.isDayEnding = false;
-    state.dayState.weather = (['SUNNY', 'SUNNY', 'OVERCAST', 'RAIN'] as const)[
-      Math.floor(Math.random() * 4)
-    ];
-
-    // Yesterday's events are over; roll a fresh market shock for the new day.
-    const effects = createEffects();
-    state.activeEvents = [];
-    state.todayEventIds = [];
-    rollDailyEvent(state, effects);
-
-    // Roll tomorrow's wholesale prices and let the regional average drift with them.
-    const eventModifier = getWholesaleEventModifier(state);
-    for (const fuelType of Object.keys(state.pricing) as FuelType[]) {
-      const conf = GAME_CONFIG.fuels[fuelType];
-      const volatility = (Math.random() * 2 - 1) * conf.dailyVolatility;
-      const wholesale = calculateDailyWholesalePrice(
-        conf.baseWholesale,
-        0,
-        volatility,
-        eventModifier
-      );
-      state.pricing[fuelType].todayWholesaleCost = wholesale;
-      state.pricing[fuelType].regionalAverage = Number(
-        (wholesale + conf.targetMargin).toFixed(2)
-      );
-    }
-
-    generateDailyMissions(state);
-    flushEffects(state, effects);
-
-    state.dayState.todayStats = {
-      fuelRevenue: 0,
-      fuelCost: 0,
-      marketRevenue: 0,
-      marketCost: 0,
-      tips: 0,
-      wages: 0,
-      upkeep: 0,
-      loanPayments: 0,
-      repairs: 0,
-      customersServed: 0,
-      customersLost: 0,
-      serviceScoreSum: 0
-    };
-
-    // Restock the mini-market shelves for the new day.
-    if (state.market.active) state.market.stock = 100;
-
-    sounds.playClick();
-    SaveManager.saveGame(state);
-
-    set({
-      gameState: state,
-      activeModal: 'NONE'
-    });
+    set({ gameState: state });
   },
 
   claimMissionReward: (missionId) => {

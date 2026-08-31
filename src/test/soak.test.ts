@@ -110,7 +110,11 @@ describe('a station left running', () => {
       state.dayState.gameTime = 6;
       state.dayState.isDayEnding = false;
       state.dayState.isDayActive = true;
-      state.vehicles = {};
+      // The forecourt is NOT swept between days any more: closing time rolls
+      // straight into the next morning with the cars, the queue and any
+      // tanker mid-delivery carrying on. Wiping the vehicles here would test
+      // a game that no longer exists — and would strand every pump those
+      // vehicles had reserved.
     }
 
     expect(problems).toEqual([]);
