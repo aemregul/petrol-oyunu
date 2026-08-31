@@ -17,6 +17,21 @@ import { useGameStore } from '../store/gameStore';
 /** Drag has to exceed this many pixels before it counts as a pan, not a click. */
 const DRAG_THRESHOLD_PX = 4;
 
+/**
+ * Zoom steps per pixel of wheel travel, and the most any single event may move.
+ *
+ * A flat step per event is unusable on a trackpad: one two-finger swipe fires
+ * dozens of small events, and at a fixed step that crossed the whole zoom range
+ * before the fingers lifted. Scaling by how far the wheel actually turned makes
+ * a trackpad glide and still leaves a mouse notch worth a real step, while the
+ * cap stops a violent flick from throwing the camera across the range.
+ */
+const ZOOM_PER_PIXEL = 0.003;
+const MAX_ZOOM_PER_EVENT = 0.3;
+/** Wheels that report in lines or pages rather than pixels, converted. */
+const PIXELS_PER_LINE = 16;
+const PIXELS_PER_PAGE = 400;
+
 export const StationScene: React.FC = () => {
   const pumps = useGameStore((s) => s.gameState.pumps);
   const vehicles = useGameStore((s) => s.gameState.vehicles);
@@ -81,7 +96,21 @@ export const StationScene: React.FC = () => {
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      setCameraZoom((z) => z + (e.deltaY < 0 ? 0.5 : -0.5));
+      const pixels =
+        e.deltaMode === 1
+          ? e.deltaY * PIXELS_PER_LINE
+          : e.deltaMode === 2
+            ? e.deltaY * PIXELS_PER_PAGE
+            : e.deltaY;
+
+      // Wheel down (positive) pulls back, so the sign flips.
+      const step = Math.max(
+        -MAX_ZOOM_PER_EVENT,
+        Math.min(MAX_ZOOM_PER_EVENT, -pixels * ZOOM_PER_PIXEL)
+      );
+      if (step === 0) return;
+
+      setCameraZoom((z) => z + step);
     },
     [setCameraZoom]
   );

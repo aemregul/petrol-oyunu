@@ -56,7 +56,7 @@ import {
   isOwned
 } from '../domain/services/land';
 import { sounds } from '../audio/soundEffects';
-import { zoomToFit } from '../rendering/cameraFrame';
+import { zoomToFit, CAMERA_VIEWS } from '../rendering/cameraFrame';
 
 const SOUND_PLAYERS: Record<SoundCue, () => void> = {
   click: () => sounds.playClick(),
@@ -298,6 +298,8 @@ interface GameStore {
   cameraZoom: number; // 1 to 7
   /** Point on the ground the camera orbits, in world units. */
   cameraTarget: [number, number];
+  /** Index into CAMERA_VIEWS: which of the three pitches the rig is at. */
+  cameraView: number;
   perfMetrics: PerformanceMetrics;
 
   // UI / Modal Actions
@@ -306,6 +308,8 @@ interface GameStore {
   selectPump: (id: string | null) => void;
   selectBuilding: (id: string | null) => void;
   rotateCamera: (dir: 'LEFT' | 'RIGHT') => void;
+  /** Steps to the next of the three viewing pitches. */
+  cycleCameraView: () => void;
   setCameraZoom: (zoom: number | ((prev: number) => number)) => void;
   /** Pans the camera by a screen-space delta, rotated into world space. */
   panCamera: (screenDeltaX: number, screenDeltaY: number) => void;
@@ -519,6 +523,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
   editMode: false,
   cameraAngle: 225, // Yol sol üstten sağ alta iner, istasyon sağında kalır
+  cameraView: 0,
   // Framed on the land in the save rather than on the starting forecourt: a
   // player coming back to a grown plot should not open on a corner of it.
   // A new game owns the 2x2 starting block, which frames to the same view
@@ -547,6 +552,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     set((state) => ({
       cameraAngle: dir === 'LEFT' ? (state.cameraAngle - 90 + 360) % 360 : (state.cameraAngle + 90) % 360
     }));
+  },
+
+  cycleCameraView: () => {
+    sounds.playClick();
+    set((state) => ({ cameraView: (state.cameraView + 1) % CAMERA_VIEWS.length }));
   },
 
   setCameraZoom: (zoom) => {
@@ -589,7 +599,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     // Centre on everything the player owns and pull back far enough to hold
     // it all. Returning to a fixed spot over the starting forecourt is no use
     // once the plot has grown, least of all across the highway.
-    set({ ...frameOwnedLand(get().gameState), cameraAngle: 225 });
+    set({ ...frameOwnedLand(get().gameState), cameraAngle: 225, cameraView: 0 });
   },
 
   addNotification: (notif) => {
@@ -2335,6 +2345,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       cameraTarget: [16, 12],
       cameraZoom: 4,
       cameraAngle: 225,
+      cameraView: 0,
       buildMode: { active: false, buildingType: null, position: [0, 0], rotation: 0, isValid: true },
       landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false }
     });

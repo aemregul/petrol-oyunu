@@ -12,18 +12,60 @@ export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 7;
 
 /**
- * The last few steps pull back much harder than the first ones. A plot grown
- * across the highway is far larger than the one the game starts on, and a flat
- * scale that framed the starting forecourt could never fit both blocks on
- * screen. From the default step inwards nothing changes.
+ * The three ways of looking at the station, in the order the view button walks
+ * through them. Pitch is measured up from the ground: 0 would be standing on
+ * the forecourt, 90 would be straight overhead.
+ *
+ * Nothing reaches 90 on purpose — a camera exactly above its target has no
+ * unambiguous "up", and `lookAt` rolls the world when it gets there.
  */
-export function cameraOffsets(zoom: number): { distance: number; height: number } {
+/**
+ * `radiusScale` is what keeps roughly the same amount of forecourt in frame at
+ * every pitch. Looking straight down, the ground is square to the lens and a
+ * fixed distance shows far less of it than the same distance does obliquely —
+ * so the overhead view stands further off, and the low one comes in closer.
+ */
+export const CAMERA_VIEWS = [
+  { id: 'ISOMETRIC', label: 'İzometrik', pitch: 36, radiusScale: 1 },
+  { id: 'TOP_DOWN', label: 'Kuşbakışı', pitch: 85, radiusScale: 1.38 },
+  { id: 'LOW', label: 'Alçak Açı', pitch: 16, radiusScale: 0.64 }
+] as const;
+
+export type CameraViewId = (typeof CAMERA_VIEWS)[number]['id'];
+
+/** The pitch the rig sat at before the view button existed. */
+const DEFAULT_PITCH = CAMERA_VIEWS[0].pitch;
+
+/**
+ * How far the camera sits from what it is looking at. The last few steps pull
+ * back much harder than the first ones: a plot grown across the highway is far
+ * larger than the one the game starts on, and a flat scale that framed the
+ * starting forecourt could never fit both blocks on screen. From the default
+ * step inwards nothing changes.
+ */
+function cameraRadius(zoom: number): number {
   const zoomOut = MAX_ZOOM - zoom;
   const wide = Math.max(0, zoomOut - 3) ** 2;
 
+  return Math.hypot(26 + zoomOut * 7 + wide * 8, 20 + zoomOut * 5 + wide * 5.5);
+}
+
+/**
+ * Where the camera sits for a given zoom step, pitch and distance scale.
+ * Defaults reproduce the isometric rig exactly, so callers that do not care
+ * about the view — the framing maths, chiefly — need not pass either.
+ */
+export function cameraOffsets(
+  zoom: number,
+  pitchDeg: number = DEFAULT_PITCH,
+  radiusScale = 1
+): { distance: number; height: number } {
+  const radius = cameraRadius(zoom) * radiusScale;
+  const pitch = (pitchDeg * Math.PI) / 180;
+
   return {
-    distance: 26 + zoomOut * 7 + wide * 8,
-    height: 20 + zoomOut * 5 + wide * 5.5
+    distance: radius * Math.cos(pitch),
+    height: radius * Math.sin(pitch)
   };
 }
 
@@ -34,8 +76,7 @@ export function cameraOffsets(zoom: number): { distance: number; height: number 
  * comfortably at the default step, which is what fixes the constant.
  */
 export function groundCoverage(zoom: number): number {
-  const { distance, height } = cameraOffsets(zoom);
-  return Math.hypot(distance, height) * 0.56;
+  return cameraRadius(zoom) * 0.56;
 }
 
 /**

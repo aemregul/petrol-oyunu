@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { Award, Bell, Building2, Cloud, CloudRain, Crosshair, Fuel, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
+import { Award, Bell, Box, Building2, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users } from 'lucide-react';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -8,6 +8,14 @@ import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 import { TankerStatusBar } from './TankerStatusBar';
 import { PumpPanel } from './PumpPanel';
+import { CAMERA_VIEWS, type CameraViewId } from '../rendering/cameraFrame';
+
+/** The face the camera button wears in each of the three views. */
+const VIEW_ICONS: Record<CameraViewId, React.ElementType> = {
+  ISOMETRIC: Box,
+  TOP_DOWN: Grid2x2,
+  LOW: Eye
+};
 
 const WEATHER_DISPLAY = {
   SUNNY: { icon: Sun, color: 'text-amber-400', label: 'Güneşli' },
@@ -21,7 +29,8 @@ export const HUD: React.FC = () => {
   const [confirmMerge, setConfirmMerge] = useState(false);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const rotateCamera = useGameStore((s) => s.rotateCamera);
-  const setCameraZoom = useGameStore((s) => s.setCameraZoom);
+  const cameraView = useGameStore((s) => s.cameraView);
+  const cycleCameraView = useGameStore((s) => s.cycleCameraView);
   const cleanStation = useGameStore((s) => s.cleanStation);
   const buildMode = useGameStore((s) => s.buildMode);
   const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
@@ -70,6 +79,12 @@ export const HUD: React.FC = () => {
   })();
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
   const unreadNotifications = gameState.notifications.filter((n) => !n.read).length;
+
+  // The button wears the view it is currently in, and names the one it would
+  // move to, so a single glance answers both "where am I" and "what next".
+  const currentView = CAMERA_VIEWS[cameraView];
+  const nextView = CAMERA_VIEWS[(cameraView + 1) % CAMERA_VIEWS.length];
+  const ViewIcon = VIEW_ICONS[currentView.id];
   const weatherStyle = WEATHER_DISPLAY[dayState.weather] || WEATHER_DISPLAY.SUNNY;
   const WeatherIcon = weatherStyle.icon;
 
@@ -178,8 +193,18 @@ export const HUD: React.FC = () => {
       <div className="flex justify-between items-end w-full mb-2">
         {/* Left Widget: Camera Controls & Cleaning */}
         <div className="flex flex-col gap-2 pointer-events-auto">
-          {/* Camera Rotation and Zoom Buttons */}
-          <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl flex flex-col gap-1 w-10">
+          {/* The whole camera rig used to live here as five stacked buttons.
+              Zoom is the wheel's job and always was, so what is left is the
+              view switch and the two things the wheel cannot do. */}
+          <button
+            onClick={cycleCameraView}
+            className="w-12 h-12 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 backdrop-blur-md rounded-2xl shadow-2xl flex items-center justify-center text-slate-200 hover:text-white transition-all hover:scale-105"
+            title={`Bakış açısı: ${currentView.label} — sıradaki: ${nextView.label}`}
+          >
+            <ViewIcon className="w-5 h-5" />
+          </button>
+
+          <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl flex flex-col gap-1 w-12">
             <button
               onClick={() => rotateCamera('LEFT')}
               className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
@@ -193,21 +218,6 @@ export const HUD: React.FC = () => {
               title="Kamerayı Sağa Döndür (E)"
             >
               <RotateCw className="w-4 h-4" />
-            </button>
-            <div className="h-px bg-slate-700 mx-1 my-0.5" />
-            <button
-              onClick={() => setCameraZoom((z) => z + 1)}
-              className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
-              title="Yakınlaş (+)"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setCameraZoom((z) => z - 1)}
-              className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
-              title="Uzaklaş (-)"
-            >
-              <ZoomOut className="w-4 h-4" />
             </button>
             <div className="h-px bg-slate-700 mx-1 my-0.5" />
             <button
