@@ -13,6 +13,7 @@ import {
   PumpEntity,
   EmployeeEntity,
   GameNotification,
+  NotificationDraft,
   FuelType,
   VehicleArchetype,
   VehicleState,
@@ -66,7 +67,7 @@ export type SoundCue =
   | 'buildPlace';
 
 export interface SimEffects {
-  notifications: Array<Omit<GameNotification, 'id' | 'timestamp'>>;
+  notifications: NotificationDraft[];
   sounds: SoundCue[];
   dayEnded: boolean;
 }

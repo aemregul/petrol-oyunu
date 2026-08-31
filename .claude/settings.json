@@ -192,7 +192,18 @@
       "Bash(grep -E \"✓|×|Tests |ms$\")",
       "Bash(pkill -f \"vite --port\")",
       "Bash([ -s \"$F\" ])",
-      "Bash(exit 0)"
+      "Bash(exit 0)",
+      "Bash(awk -F: '{print $1}')",
+      "Bash(node shot.mjs toast.png 3001)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/toast.png 3001)",
+      "Bash(node /Users/emre/petrol-oyunu/.shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/toast.png 3001)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/m1500.png 3001 1500 900)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/m1280.png 3001 1280 800)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/f1280.png 3001 1280 800)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/f1500.png 3001 1500 900)",
+      "Bash(awk '{ print length\\($0\\), $0 }')",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001 1500 900)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001)"
     ],
     "additionalDirectories": [
       "/private/tmp"

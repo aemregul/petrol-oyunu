@@ -224,7 +224,8 @@ export function createInitialGameState(): GameState {
         type: 'INFO',
         title: 'İstasyona Hoş Geldiniz!',
         message: 'İlk aracınız ana yoldan yaklaşmak üzere. Pompaya tıklayarak hizmet verebilirsiniz.',
-        timestamp: now
+        timestamp: now,
+        count: 1
       }
     ],
     transactionLog: [

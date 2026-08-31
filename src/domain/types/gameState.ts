@@ -390,7 +390,19 @@ export interface GameNotification {
   timestamp: number;
   icon?: string;
   read?: boolean;
+  /**
+   * How many times this same notification fired in a row. Three customers
+   * giving up in the same second is one thing that happened three times, not
+   * three things — it shows as a single "×3" toast.
+   */
+  count: number;
 }
+
+/**
+ * What a caller hands the store. Identity, time and the repeat count belong to
+ * the log, not to the code that raises the notification.
+ */
+export type NotificationDraft = Omit<GameNotification, 'id' | 'timestamp' | 'count' | 'read'>;
 
 export interface GameState {
   schemaVersion: 5;

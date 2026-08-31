@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { GameState, FuelType, VehicleArchetype, BuildingEntity, GameNotification } from '../domain/types/gameState';
+import { GameState, FuelType, VehicleArchetype, BuildingEntity, GameNotification, NotificationDraft } from '../domain/types/gameState';
 import { SaveManager } from '../domain/services/SaveManager';
 import { TransactionService } from '../domain/services/TransactionService';
 import { GAME_CONFIG, upgradePathFor, TANK_PACKAGE_LITERS } from '../config/gameConfig';
@@ -69,6 +69,51 @@ const SOUND_PLAYERS: Record<SoundCue, () => void> = {
 };
 
 /**
+ * How long an identical notification folds into the one before it as "×N".
+ * Just past the life of a toast, so a burst arrives as one pill while the same
+ * thing happening again a minute later is its own line in the log.
+ */
+const NOTIFICATION_COALESCE_MS = 4000;
+/** How far back the bell remembers. */
+const NOTIFICATION_LOG_SIZE = 60;
+
+/**
+ * Puts one notification at the head of the log, folding it into an identical
+ * recent entry instead of repeating it. A folded entry keeps its id so the
+ * toast on screen recognises itself and ticks its counter up rather than
+ * stacking a second copy of the same words.
+ */
+function pushNotification(log: GameNotification[], draft: NotificationDraft): GameNotification[] {
+  const now = Date.now();
+  const sameIndex = log.findIndex(
+    (n) =>
+      n.type === draft.type &&
+      n.title === draft.title &&
+      n.message === draft.message &&
+      now - n.timestamp < NOTIFICATION_COALESCE_MS
+  );
+
+  if (sameIndex === -1) {
+    const entry: GameNotification = {
+      ...draft,
+      id: 'notif_' + Math.random().toString(36).substring(2, 9),
+      timestamp: now,
+      count: 1,
+      read: false
+    };
+    return [entry, ...log].slice(0, NOTIFICATION_LOG_SIZE);
+  }
+
+  const folded: GameNotification = {
+    ...log[sameIndex],
+    timestamp: now,
+    count: log[sameIndex].count + 1,
+    read: false
+  };
+  return [folded, ...log.filter((_, i) => i !== sameIndex)].slice(0, NOTIFICATION_LOG_SIZE);
+}
+
+/**
  * Appends the notifications an engine call produced onto a state draft and
  * fires its sound cues. Effects are flushed against the same draft the engine
  * mutated, so a tick still commits with exactly one `set`.
@@ -76,15 +121,9 @@ const SOUND_PLAYERS: Record<SoundCue, () => void> = {
 function flushEffects(state: GameState, effects: SimEffects): void {
   for (const cue of effects.sounds) SOUND_PLAYERS[cue]();
 
-  if (effects.notifications.length === 0) return;
-
-  const created: GameNotification[] = effects.notifications.map((n) => ({
-    ...n,
-    id: 'notif_' + Math.random().toString(36).substring(2, 9),
-    timestamp: Date.now()
-  }));
-
-  state.notifications = [...created.reverse(), ...state.notifications].slice(0, 20);
+  for (const draft of effects.notifications) {
+    state.notifications = pushNotification(state.notifications, draft);
+  }
 }
 
 /** The level at which rearranging what is already built unlocks. */
@@ -196,7 +235,8 @@ export type ActiveModalType =
   | 'BANK'
   | 'SETTINGS'
   | 'OFFICE'
-  | 'MISSIONS';
+  | 'MISSIONS'
+  | 'NOTIFICATIONS';
 
 export interface PerformanceMetrics {
   fps: number;
@@ -270,8 +310,10 @@ interface GameStore {
   /** Pans the camera by a screen-space delta, rotated into world space. */
   panCamera: (screenDeltaX: number, screenDeltaY: number) => void;
   resetCamera: () => void;
-  addNotification: (notif: Omit<GameNotification, 'id' | 'timestamp'>) => void;
-  dismissNotification: (id: string) => void;
+  addNotification: (notif: NotificationDraft) => void;
+  /** Clears the bell's badge; the log itself stays. */
+  markNotificationsRead: () => void;
+  clearNotifications: () => void;
 
   // Build Mode
   enterBuildMode: (buildingType: string) => void;
@@ -551,29 +593,34 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   addNotification: (notif) => {
-    const id = 'notif_' + Math.random().toString(36).substring(2, 8);
-    const newNotif: GameNotification = {
-      ...notif,
-      id,
-      timestamp: Date.now()
-    };
     if (notif.type === 'CRITICAL' || notif.type === 'WARNING') sounds.playAlert();
     else if (notif.type === 'REWARD') sounds.playLevelUp();
 
     set((state) => ({
       gameState: {
         ...state.gameState,
-        notifications: [newNotif, ...state.gameState.notifications.slice(0, 19)]
+        notifications: pushNotification(state.gameState.notifications, notif)
       }
     }));
   },
 
-  dismissNotification: (id) => {
+  markNotificationsRead: () => {
+    set((state) => {
+      if (state.gameState.notifications.every((n) => n.read)) return state;
+      return {
+        gameState: {
+          ...state.gameState,
+          notifications: state.gameState.notifications.map((n) =>
+            n.read ? n : { ...n, read: true }
+          )
+        }
+      };
+    });
+  },
+
+  clearNotifications: () => {
     set((state) => ({
-      gameState: {
-        ...state.gameState,
-        notifications: state.gameState.notifications.filter((n) => n.id !== id)
-      }
+      gameState: { ...state.gameState, notifications: [] }
     }));
   },
 

@@ -1,86 +1,144 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import type { GameNotification } from '../domain/types/gameState';
-import { ShieldAlert, AlertTriangle, Info, Award, X } from 'lucide-react';
-
-/** How many notifications sit in the corner at once. */
-const MAX_VISIBLE = 3;
-/** Must match the `fade-out` animation duration in tailwind.config.js. */
-const EXIT_MS = 600;
-
-const STYLES: Record<GameNotification['type'], { pill: string; icon: React.ElementType; tint: string }> = {
-  CRITICAL: { pill: 'bg-red-950/85 border-red-500/60', icon: ShieldAlert, tint: 'text-red-300' },
-  WARNING: { pill: 'bg-amber-950/85 border-amber-500/60', icon: AlertTriangle, tint: 'text-amber-300' },
-  REWARD: { pill: 'bg-emerald-950/85 border-emerald-500/60', icon: Award, tint: 'text-emerald-300' },
-  INFO: { pill: 'bg-slate-900/85 border-slate-700/70', icon: Info, tint: 'text-sky-300' }
-};
+import { styleFor } from './notificationStyle';
 
 /**
- * The quiet corner opposite the tanker ledger. Only the newest few are on
- * screen; when a fourth arrives the oldest is kept mounted for one animation
- * so it drifts out instead of blinking away.
+ * How many notifications sit in the corner at once. Two, not three: a pill
+ * grows to fit its whole message, and three full messages reach up into the
+ * camera widget and the clean-station button.
+ */
+const MAX_VISIBLE = 2;
+/** How long a toast stays at full strength before it starts leaving. */
+const TOAST_MS = 3000;
+/**
+ * How long the leaving takes. Must match the `toast-out` animation duration in
+ * tailwind.config.js — together with TOAST_MS this is the ~4s a notification
+ * is readable for.
+ */
+const EXIT_MS = 900;
+
+type LiveToast = { notif: GameNotification; leaving: boolean };
+
+/**
+ * The quiet corner opposite the tanker ledger. Toasts come and go on their own
+ * — there is nothing to close, and nothing waits on the player noticing it.
+ * Anything that scrolled past is still in the bell (NotificationsModal); this
+ * is only the glance.
  */
 export const NotificationToast: React.FC = () => {
   const notifications = useGameStore((s) => s.gameState.notifications);
-  const dismissNotification = useGameStore((s) => s.dismissNotification);
+  const [live, setLive] = useState<LiveToast[]>([]);
 
-  const visible = notifications.slice(0, MAX_VISIBLE);
-  const [exiting, setExiting] = useState<GameNotification[]>([]);
-  const prevVisible = useRef<GameNotification[]>([]);
+  /** id → the count last put on screen, so a re-fired notification re-shows. */
+  const shown = useRef<Map<string, number> | null>(null);
+  const timers = useRef(new Map<string, number>());
+
+  /** Starts (or restarts) one toast's exit clock. */
+  const scheduleExit = useRef((id: string, delay: number) => {
+    const pending = timers.current.get(id);
+    if (pending !== undefined) window.clearTimeout(pending);
+
+    timers.current.set(
+      id,
+      window.setTimeout(() => {
+        setLive((current) =>
+          current.map((t) => (t.notif.id === id ? { ...t, leaving: true } : t))
+        );
+        timers.current.set(
+          id,
+          window.setTimeout(() => {
+            setLive((current) => current.filter((t) => t.notif.id !== id));
+            timers.current.delete(id);
+          }, EXIT_MS)
+        );
+      }, delay)
+    );
+  }).current;
+
+  // Nothing may outlive the component: a timer firing after unmount would set
+  // state on a corpse.
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach((t) => window.clearTimeout(t));
+      pending.clear();
+    };
+  }, []);
 
   useEffect(() => {
-    const previous = prevVisible.current;
-    prevVisible.current = visible;
+    const before = shown.current;
+    shown.current = new Map(notifications.map((n) => [n.id, n.count]));
 
-    const stillShown = new Set(visible.map((n) => n.id));
-    const evicted = previous.filter((n) => !stillShown.has(n.id));
-    if (evicted.length === 0) return;
+    // The log a save restores is history, not news — it must never toast.
+    if (before === null) return;
 
-    setExiting((current) => [...current, ...evicted]);
-    const goneIds = new Set(evicted.map((n) => n.id));
-    const timer = window.setTimeout(
-      () => setExiting((current) => current.filter((n) => !goneIds.has(n.id))),
-      EXIT_MS
-    );
-    return () => window.clearTimeout(timer);
-    // `visible` is derived from `notifications`; recomputing it per render is fine.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notifications]);
+    // Either brand new, or the same notification fired again and its counter
+    // moved; both deserve the corner.
+    const fresh = notifications.filter((n) => {
+      const seenCount = before.get(n.id);
+      return seenCount === undefined || seenCount < n.count;
+    });
+    if (fresh.length === 0) return;
 
-  if (visible.length === 0 && exiting.length === 0) return null;
+    setLive((current) => {
+      const carried = current.filter((t) => !fresh.some((n) => n.id === t.notif.id));
+      const arriving = [...fresh]
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .map((notif) => ({ notif, leaving: false }));
+      return [...arriving, ...carried];
+    });
+    for (const n of fresh) scheduleExit(n.id, TOAST_MS);
+  }, [notifications, scheduleExit]);
 
-  const row = (notif: GameNotification, leaving: boolean) => {
-    const style = STYLES[notif.type] ?? STYLES.INFO;
-    const Icon = style.icon;
-    return (
-      <div
-        key={notif.id}
-        className={`w-64 border backdrop-blur-sm rounded-xl px-2.5 py-1.5 shadow-lg grid grid-cols-[auto_1fr_auto] items-center gap-2 text-[11px] font-mono ${style.pill} ${
-          leaving ? 'animate-fade-out' : 'animate-fade-in pointer-events-auto'
-        }`}
-      >
-        <Icon className={`w-3.5 h-3.5 ${style.tint}`} />
-        <div className="min-w-0">
-          <div className="font-bold text-white truncate">{notif.title}</div>
-          <div className="text-slate-400 truncate">{notif.message}</div>
-        </div>
-        <button
-          onClick={() => dismissNotification(notif.id)}
-          className="text-slate-500 hover:text-white"
-          aria-label="Kapat"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-    );
-  };
+  // A burst can put more on screen than the corner has room for. The oldest
+  // gives way at once rather than waiting out its own clock.
+  useEffect(() => {
+    const standing = live.filter((t) => !t.leaving);
+    if (standing.length <= MAX_VISIBLE) return;
+    for (const t of standing.slice(MAX_VISIBLE)) scheduleExit(t.notif.id, 0);
+  }, [live, scheduleExit]);
+
+  if (live.length === 0) return null;
 
   return (
-    // Column-reverse keeps the newest nearest the corner; the evicted one is
-    // last in the DOM, so it fades out at the top of the stack.
-    <div className="fixed bottom-16 left-4 z-40 flex flex-col-reverse gap-1.5 items-start pointer-events-none select-none">
-      {visible.map((notif) => row(notif, false))}
-      {exiting.map((notif) => row(notif, true))}
+    // Column-reverse keeps the newest nearest the corner; `live` is newest
+    // first, so the one on its way out drifts off the top of the stack.
+    <div className="fixed bottom-16 left-4 z-40 flex flex-col-reverse gap-2 items-start pointer-events-none select-none">
+      {live.map(({ notif, leaving }) => {
+        const style = styleFor(notif.type);
+        const Icon = style.icon;
+        return (
+          <div
+            // Keying on the count too remounts a re-fired toast, so its arrival
+            // animation replays and the bumped "×N" catches the eye.
+            key={`${notif.id}:${notif.count}`}
+            // No fixed height and nothing clipped: the pill grows to whatever
+            // the message needs. A warning the player can only half-read is
+            // worse than no warning at all.
+            className={`w-[22rem] border backdrop-blur-md rounded-2xl px-3 py-2 shadow-xl grid grid-cols-[auto_1fr] items-start gap-2.5 font-sans ${style.pill} ${
+              leaving ? 'animate-toast-out' : 'animate-toast-in'
+            }`}
+          >
+            <Icon className={`w-4 h-4 mt-px shrink-0 ${style.tint}`} />
+            <div className="min-w-0">
+              <div className={`text-[13px] font-bold leading-snug break-words ${style.tint}`}>
+                {notif.title}
+                {notif.count > 1 && (
+                  <span className="ml-1.5 text-[11px] font-extrabold tabular-nums opacity-80">
+                    ×{notif.count}
+                  </span>
+                )}
+              </div>
+              <div
+                className={`text-[12px] font-medium leading-[1.45] break-words mt-0.5 ${style.body}`}
+              >
+                {notif.message}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };

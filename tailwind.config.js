@@ -6,6 +6,14 @@ export default {
   ],
   theme: {
     extend: {
+      // The fonts index.html loads. `sans` carries the interface, `mono` every
+      // number the player reads off a meter, and `display` matches the signage
+      // already drawn on the canvas (PylonSign, FasciaSign, PriceTotem).
+      fontFamily: {
+        sans: ['Rubik', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        display: ['"Chakra Petch"', 'Rubik', 'system-ui', 'sans-serif']
+      },
       colors: {
         gasoline: {
           light: '#4ade80',
@@ -35,7 +43,9 @@ export default {
         'pulse-subtle': 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'float-up': 'floatUp 1.2s ease-out forwards',
         'fade-in': 'fadeIn 0.25s ease-out forwards',
-        'fade-out': 'fadeOut 0.6s ease-in forwards'
+        'fade-out': 'fadeOut 0.6s ease-in forwards',
+        'toast-in': 'toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'toast-out': 'toastOut 0.9s cubic-bezier(0.4, 0, 0.6, 1) forwards'
       },
       keyframes: {
         floatUp: {
@@ -49,6 +59,21 @@ export default {
         fadeOut: {
           '0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
           '100%': { opacity: '0', transform: 'translateY(-6px) scale(0.95)' }
+        },
+        // Toasts arrive from the edge they live on rather than growing out of
+        // nothing, so a new one reads as "something came in" at the corner of
+        // the eye without pulling it off the forecourt.
+        toastIn: {
+          '0%': { opacity: '0', transform: 'translateX(-14px) scale(0.97)' },
+          '100%': { opacity: '1', transform: 'translateX(0) scale(1)' }
+        },
+        // Leaving takes far longer than arriving: a toast nobody asked to
+        // close should dissolve slowly enough that a late glance still catches
+        // it, rather than blinking out mid-sentence.
+        toastOut: {
+          '0%': { opacity: '1', transform: 'translateX(0) scale(1)' },
+          '35%': { opacity: '0.7', transform: 'translateX(-4px) scale(0.995)' },
+          '100%': { opacity: '0', transform: 'translateX(-22px) scale(0.96)' }
         }
       }
     },

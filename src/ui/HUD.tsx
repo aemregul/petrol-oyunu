@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { Award, Building2, Cloud, CloudRain, Crosshair, Fuel, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
+import { Award, Bell, Building2, Cloud, CloudRain, Crosshair, Fuel, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, ZoomIn, ZoomOut } from 'lucide-react';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -69,6 +69,7 @@ export const HUD: React.FC = () => {
     };
   })();
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
+  const unreadNotifications = gameState.notifications.filter((n) => !n.read).length;
   const weatherStyle = WEATHER_DISPLAY[dayState.weather] || WEATHER_DISPLAY.SUNNY;
   const WeatherIcon = weatherStyle.icon;
 
@@ -478,6 +479,23 @@ export const HUD: React.FC = () => {
           >
             <Landmark className="w-4 h-4 text-emerald-400" />
             <span>Banka & Kredi</span>
+          </button>
+
+          {/* Toasts leave on their own, so the bell is where anything missed
+              is still findable. The badge counts what has not been looked at. */}
+          <button
+            onClick={() => setActiveModal('NOTIFICATIONS')}
+            className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
+              activeModal === 'NOTIFICATIONS' ? 'bg-sky-600 text-white' : ''
+            }`}
+            title="Bildirimler"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadNotifications > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-extrabold flex items-center justify-center tabular-nums">
+                {unreadNotifications > 9 ? '9+' : unreadNotifications}
+              </span>
+            )}
           </button>
 
           <button

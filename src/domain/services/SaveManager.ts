@@ -3,7 +3,7 @@
  * GDD Section 25: Save strategy, schema migration, 3-slot backup, atomic saving
  */
 
-import { GameState } from '../types/gameState';
+import { GameState, GameNotification } from '../types/gameState';
 import { createInitialGameState } from '../types/initialState';
 
 const PRIMARY_SAVE_KEY = 'project_highway_v1_save';
@@ -122,7 +122,14 @@ export class SaveManager {
       managerSettings: { ...defaultState.managerSettings, ...(rawState.managerSettings || {}) },
       managerLogs: rawState.managerLogs || [],
       settings: { ...defaultState.settings, ...(rawState.settings || {}) },
-      notifications: rawState.notifications || [],
+      // A log written before repeat-folding existed has no count, and every
+      // line in it is history the player has already lived through — none of
+      // it should light the bell up on load.
+      notifications: (rawState.notifications || []).map((n: GameNotification) => ({
+        ...n,
+        count: n.count ?? 1,
+        read: true
+      })),
       transactionLog: rawState.transactionLog || []
     };
 
