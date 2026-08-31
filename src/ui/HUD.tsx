@@ -6,6 +6,7 @@ import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
 import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
+import { TankerStatusBar } from './TankerStatusBar';
 
 const WEATHER_DISPLAY = {
   SUNNY: { icon: Sun, color: 'text-amber-400', label: 'Güneşli' },
@@ -384,6 +385,8 @@ export const HUD: React.FC = () => {
 
         <ActiveEventsBar />
       </div>
+
+      <TankerStatusBar />
 
       {/* ================= BOTTOM ACTION BAR ================= */}
       <div className="flex justify-center items-center w-full">

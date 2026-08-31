@@ -22,6 +22,7 @@ import {
   MissionMetric,
   MissionEntity,
   BuildingEntity,
+  FuelOrderEntity,
   ActiveGameEvent
 } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
@@ -929,6 +930,40 @@ function distanceAhead(
  * Easing off rather than stopping dead means a quick car settles in behind a
  * slow one instead of snapping to a halt.
  */
+/**
+ * Every tanker on the plot or the road, shaped like traffic for the following
+ * rules. A lorry is three car-lengths of steel, so it enters the list as
+ * three bodies — nose, middle, tail — and a car braking for any of them is a
+ * car that no longer drives through the trailer.
+ */
+function truckBodies(state: GameState): VehicleEntity[] {
+  const bodies: VehicleEntity[] = [];
+
+  for (const order of state.fuelOrders) {
+    const truck = order.truck;
+    if (!truck) continue;
+
+    const dx = Math.sin(truck.heading);
+    const dz = Math.cos(truck.heading);
+    for (const along of [-1.1, 0, 1.1]) {
+      bodies.push({
+        id: `truck_${order.id}_${along}`,
+        worldPosition: [
+          truck.worldPosition[0] + dx * along,
+          0,
+          truck.worldPosition[2] + dz * along
+        ],
+        // Only the nose is "going somewhere"; the other two are cargo.
+        targetWaypoint: along > 0 ? truck.targetWaypoint : null,
+        route: [],
+        heading: truck.heading
+      } as unknown as VehicleEntity);
+    }
+  }
+
+  return bodies;
+}
+
 function followThrottle(
   state: GameState,
   vehicle: VehicleEntity,
@@ -938,6 +973,12 @@ function followThrottle(
   if (!dir) return { throttle: 1, gap: Infinity };
 
   const target = vehicle.targetWaypoint!;
+  // The spread costs real time at 20Hz across every car; with no lorry about
+  // — which is most of every day — the plain list is the same list.
+  const traffic =
+    state.fuelOrders.length === 0
+      ? Object.values(state.vehicles)
+      : [...Object.values(state.vehicles), ...truckBodies(state)];
 
   // Following distance is really a following *time*: a car travelling at
   // highway pace needs proportionally more room to shed that speed, and a gap
@@ -958,7 +999,7 @@ function followThrottle(
 
   if (joining(block.roadLaneZ)) {
     const flow = Math.sign(block.roadEndX - block.roadStartX);
-    const noGap = Object.values(state.vehicles).some((other) => {
+    const noGap = traffic.some((other) => {
       if (other.id === vehicle.id) return false;
       if (Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1) return false;
       const behind = (target[0] - other.worldPosition[0]) * flow;
@@ -970,7 +1011,7 @@ function followThrottle(
   // The return lane is the other place cars merge rather than follow: they
   // pull out of the bays sideways into traffic already running along it.
   if (joining(block.exitLaneZ)) {
-    const occupied = Object.values(state.vehicles).some(
+    const occupied = traffic.some(
       (other) =>
         other.id !== vehicle.id &&
         Math.abs(other.worldPosition[2] - block.exitLaneZ) < 1 &&
@@ -985,7 +1026,7 @@ function followThrottle(
 
   let nearest = Infinity;
 
-  for (const other of Object.values(state.vehicles)) {
+  for (const other of traffic) {
     if (other.id === vehicle.id) continue;
 
     // Routes meet at shared points — the mouth of a ramp, the head of the
@@ -2082,6 +2123,35 @@ function tankerBay(block: BlockLayout, tank: BuildingEntity): [number, number, n
 }
 
 /**
+ * Whether a customer car stands in the lorry's path. The lorry brakes for it
+ * — but only mostly: it keeps a crawl, because a lorry and a car both waiting
+ * politely for each other is a forecourt that never gets its fuel.
+ */
+function truckHeldUp(state: GameState, truck: NonNullable<FuelOrderEntity['truck']>): boolean {
+  const dx = Math.sin(truck.heading);
+  const dz = Math.cos(truck.heading);
+
+  for (const vehicle of Object.values(state.vehicles)) {
+    const ox = vehicle.worldPosition[0] - truck.worldPosition[0];
+    const oz = vehicle.worldPosition[2] - truck.worldPosition[2];
+    const ahead = ox * dx + oz * dz;
+    const lateral = Math.abs(ox * dz - oz * dx);
+    if (ahead > 0.4 && ahead < 3.2 && lateral < 1.3) return true;
+  }
+  return false;
+}
+
+/** One tick of lorry driving, honouring the braking rule above. */
+function advanceTruck(
+  state: GameState,
+  truck: NonNullable<FuelOrderEntity['truck']>,
+  dt: number
+): boolean {
+  const effectiveDt = truckHeldUp(state, truck) ? dt * 0.12 : dt;
+  return driveToward(truck as unknown as VehicleEntity, effectiveDt);
+}
+
+/**
  * Drives the delivery lorry the way customers are driven: in off the highway,
  * through the entry mouth, round whatever the player has built, to the bay
  * beside its own tank — and back out again when the hose comes off.
@@ -2097,14 +2167,10 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
     if (order.state === 'TRAVELLING') {
       order.remainingSeconds -= dt;
       if (order.remainingSeconds <= 0) {
+        // The corner widget carries the routine progress; the toast feed is
+        // for things that need the player, and a lorry turning up is not one.
         order.state = setOrderState(order.id, order.state, 'QUEUED_AT_GATE');
         order.remainingSeconds = 0;
-        notify(
-          effects,
-          'INFO',
-          'Tanker Kapıda',
-          `${order.liters} L ${order.fuelType} tankeri istasyona ulaştı.`
-        );
       }
       continue;
     }
@@ -2158,7 +2224,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
       }
 
       if (order.truck.phase === 'ARRIVING') {
-        const arrived = driveToward(order.truck as unknown as VehicleEntity, dt);
+        const arrived = advanceTruck(state, order.truck, dt);
         // One hose per tank: a second lorry for the same fuel waits its turn.
         const bayBusy = state.fuelOrders.some(
           (o) => o !== order && o.fuelType === order.fuelType && o.state === 'UNLOADING'
@@ -2183,15 +2249,17 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
         );
         order.state = setOrderState(order.id, order.state, 'COMPLETED');
         playCue(effects, 'cash');
-        notify(
-          effects,
-          'INFO',
-          'Tanker Boşaltımı Tamamlandı',
-          `${res.addedLiters.toFixed(0)} L ${order.fuelType} tanka aktarıldı.` +
-            (res.refundedLiters > 0
-              ? ` ${res.refundedLiters.toFixed(0)} L tank dolduğu için iade edildi.`
-              : '')
-        );
+
+        // Only the surprise is worth a toast: litres that came all this way
+        // and would not fit. A clean delivery just ticks over in the corner.
+        if (res.refundedLiters > 0) {
+          notify(
+            effects,
+            'WARNING',
+            'Depo Doldu',
+            `${res.refundedLiters.toFixed(0)} L ${order.fuelType} tanka sığmadı, bedeli iade edildi.`
+          );
+        }
 
         // The hose is off; the lorry pulls out through the exit mouth. Only
         // the timer-fallback deliveries vanish on the spot.
@@ -2229,7 +2297,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
     }
 
     if (order.state === 'COMPLETED' && order.truck?.phase === 'LEAVING') {
-      if (driveToward(order.truck as unknown as VehicleEntity, dt)) {
+      if (advanceTruck(state, order.truck, dt)) {
         state.fuelOrders.splice(i, 1);
       }
     }
@@ -3780,12 +3848,8 @@ export function placeFuelOrder(
 
   trackMissionMetric(state, 'ORDERS_PLACED', 1, effects);
   playCue(effects, 'buildPlace');
-  notify(
-    effects,
-    'INFO',
-    'Tanker Yola Çıktı',
-    `${liters} L ${conf.shortName} tankeri ${duration} sn içinde istasyona ulaşacak.`
-  );
+  // No toast: the order shows up at once in the corner widget, which is
+  // where its whole journey is followed from.
   return true;
 }
 
