@@ -19,6 +19,8 @@ function ready(): GameState {
   state.player.cash = 5_000_000;
   state.player.level = 20;
   state.station.roadLevel = 2;
+  // The expansion only places beside a maxed farm.
+  state.buildings.tank_1.level = 3;
 
   for (let col = 0; col <= 3; col++) {
     for (let row = 0; row <= 3; row++) {

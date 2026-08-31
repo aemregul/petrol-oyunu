@@ -26,7 +26,7 @@ export function createInitialGameState(): GameState {
         cleanActionsCount: 0,
         repairActionsCount: 0,
       },
-      unlocks: ['fuel_gasoline', 'pump_standard', 'price_sign', 'office_s1']
+      unlocks: ['fuel_gasoline', 'fuel_diesel', 'fuel_lpg', 'pump_standard', 'price_sign', 'office_s1']
     },
     station: {
       id: 'station_1',
@@ -54,11 +54,14 @@ export function createInitialGameState(): GameState {
         averageCost: GAME_CONFIG.fuels.gasoline.baseWholesale, // 36.40 TL/L
         health: 100
       },
+      // All three fuels live in the farm from day one. Customers for a fuel
+      // only start arriving once a pump can actually dispense it, so nothing
+      // here is a trap — just stock waiting for its pump upgrade.
       diesel: {
         id: 'tank_diesel_1',
         fuelType: 'diesel',
-        level: 0, // Kilitli
-        capacity: 0,
+        level: 1,
+        capacity: 1500,
         stock: 0,
         reservedStock: 0,
         averageCost: GAME_CONFIG.fuels.diesel.baseWholesale,
@@ -67,8 +70,8 @@ export function createInitialGameState(): GameState {
       lpg: {
         id: 'tank_lpg_1',
         fuelType: 'lpg',
-        level: 0, // Kilitli
-        capacity: 0,
+        level: 1,
+        capacity: 1500,
         stock: 0,
         reservedStock: 0,
         averageCost: GAME_CONFIG.fuels.lpg.baseWholesale,
@@ -128,7 +131,7 @@ export function createInitialGameState(): GameState {
       },
       tank_1: {
         id: 'tank_1',
-        type: 'tank_gasoline',
+        type: 'tank_farm',
         level: 1,
         position: [14, 12],
         rotation: 0,

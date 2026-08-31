@@ -1148,13 +1148,6 @@ describe('the delivery lorry', () => {
     state.dayState.timeSpeed = 1;
     state.player.level = 12;
     state.player.cash = 500_000;
-    // A diesel tank standing well away from the petrol one, so docking at
-    // the wrong tank would be unmistakable.
-    state.tanks.diesel.capacity = 1500;
-    state.buildings.tank_d = {
-      id: 'tank_d', type: 'tank_diesel', level: 1, position: [4, 6], rotation: 0,
-      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
-    };
 
     const effects = createEffects();
     expect(placeFuelOrder(state, 'diesel', 800, effects)).toBe(true);
@@ -1164,13 +1157,14 @@ describe('the delivery lorry', () => {
     // The supplier timer runs out; the lorry turns off the highway.
     advanceUntil(state, (s) => !!s.fuelOrders[0]?.truck, 30);
     expect(order.truck).toBeTruthy();
-    expect(order.truck!.tankBuildingId).toBe('tank_d');
+    expect(order.truck!.tankBuildingId).toBe('tank_1');
 
     // It reaches the bay beside the diesel tank and starts pumping.
     const unloading = advanceUntil(state, (s) => s.fuelOrders[0]?.state === 'UNLOADING', 600);
     expect(unloading).toBe(true);
+    // The farm stands at [14,12]; the diesel berth is on its road side.
     const [tx, , tz] = order.truck!.worldPosition;
-    expect(Math.hypot(tx - 4, tz - 6)).toBeLessThan(4.5);
+    expect(Math.hypot(tx - 14, tz - 12)).toBeLessThan(4.5);
 
     // The fuel lands in the diesel tank, and the lorry pulls out and is gone.
     const stockBefore = state.tanks.diesel.stock;
@@ -1185,10 +1179,10 @@ describe('price, demand and reputation', () => {
     // Demand used to read the petrol price alone: diesel and LPG could be
     // priced at anything without a single driver noticing.
     const base = createInitialGameState();
-    base.tanks.diesel.capacity = 1500;
+    base.pumps.pump_1.supportedFuels.push('diesel');
 
     const gouged = createInitialGameState();
-    gouged.tanks.diesel.capacity = 1500;
+    gouged.pumps.pump_1.supportedFuels.push('diesel');
     gouged.pricing.diesel.playerPrice = gouged.pricing.diesel.regionalAverage * 1.25;
 
     expect(stopChance(gouged)).toBeLessThan(stopChance(base));

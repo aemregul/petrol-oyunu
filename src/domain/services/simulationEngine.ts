@@ -2105,21 +2105,31 @@ export function applyLevelProgression(state: GameState, effects: SimEffects): vo
 /* Tick sub-systems                                                    */
 /* ------------------------------------------------------------------ */
 
-/** The tank building a delivery of this fuel docks at, if one stands. */
+/** The tank farm a delivery docks at — one farm serves all three fuels. */
 export function tankBuildingFor(state: GameState, fuelType: FuelType): BuildingEntity | null {
-  return (
-    Object.values(state.buildings).find((b) => b.type === `tank_${fuelType}`) ?? null
-  );
+  void fuelType;
+  return Object.values(state.buildings).find((b) => b.type === 'tank_farm') ?? null;
 }
 
+/** Each fuel's own berth along the farm's front, so two lorries stand abreast. */
+const TANKER_BAY_OFFSET: Record<string, number> = { gasoline: -1.4, diesel: 0, lpg: 1.4 };
+
 /**
- * Where a tanker parks to unload: alongside its own fuel's tank, hose-length
- * from the filler caps, on the road side of it.
+ * Where a tanker parks to unload: alongside the farm, hose-length from the
+ * filler caps, on the road side of it — at its own fuel's berth.
  */
-function tankerBay(block: BlockLayout, tank: BuildingEntity): [number, number, number] {
+function tankerBay(
+  block: BlockLayout,
+  tank: BuildingEntity,
+  fuelType: FuelType
+): [number, number, number] {
   const half = (tank.size?.[1] ?? 3) / 2;
   const inward = block.side === 'far' ? -1 : 1;
-  return clampToApron(block, [tank.position[0], 0, tank.position[1] - inward * (half + 1.3)]);
+  return clampToApron(block, [
+    tank.position[0] + (TANKER_BAY_OFFSET[fuelType] ?? 0),
+    0,
+    tank.position[1] - inward * (half + 1.3)
+  ]);
 }
 
 /**
@@ -2195,7 +2205,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
 
       if (!order.truck) {
         // Turn off the highway: in through the entry mouth, then to the bay.
-        const bay = tankerBay(block, tank);
+        const bay = tankerBay(block, tank, order.fuelType);
         const start: [number, number, number] = [block.roadStartX, 0, block.roadLaneZ];
         const laneX = drivewayLaneX(block.entry, 0);
         const carrier = { worldPosition: start } as VehicleEntity;
@@ -2633,9 +2643,22 @@ export function stopChance(state: GameState, side: DrivewaySide = 'near'): numbe
   return clamp(0.3 * appeal * price * reputation * rush, 0, MAX_STOP_RATE);
 }
 
-/** Fuels the station can actually sell: a tank exists for them. */
+/**
+ * Fuels the station can actually sell: stocked in the farm AND dispensable by
+ * some pump. The farm carries all three from day one, so without the pump
+ * half of the test, prices for fuels nobody can buy would sway traffic and
+ * reputation years before they mean anything.
+ */
+export function fuelsOnSale(state: GameState): FuelType[] {
+  return (Object.keys(state.tanks) as FuelType[]).filter(
+    (f) =>
+      state.tanks[f].capacity > 0 &&
+      Object.values(state.pumps).some((p) => p.supportedFuels.includes(f))
+  );
+}
+
 function pricedFuels(state: GameState): FuelType[] {
-  return (Object.keys(state.tanks) as FuelType[]).filter((f) => state.tanks[f].capacity > 0);
+  return fuelsOnSale(state);
 }
 
 /**
@@ -2731,9 +2754,12 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   // wait, and leave unhappy — and the station's name suffers for it. Running
   // dry is meant to hurt; it is the pressure that keeps the player watching
   // their stock instead of letting the manager run the place unattended.
-  const sellableFuels = (Object.keys(state.tanks) as FuelType[]).filter(
-    (f) => state.tanks[f].capacity > 0
-  );
+  // A fuel is on the menu when a pump can actually put it in a car. The tank
+  // farm stocks all three from day one; without this gate, diesel drivers
+  // would arrive years before the diesel-capable pump and bleed reputation
+  // for it — the exact trap the farm was built to remove.
+  const sellableFuels = fuelsOnSale(state);
+  const anyPumps = Object.keys(state.pumps).length > 0;
 
   const side = pickSpawnSide(state);
   const block = blockLayout(state, side);
@@ -2745,6 +2771,9 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const servable = (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
     const conf = GAME_CONFIG.customerTypes[a];
     if (conf.requiresCharger) return canCharge;
+    // No pumps anywhere: whoever stops here stops for the shop, and what the
+    // pumps cannot dispense is no bar to a coffee.
+    if (!anyPumps) return true;
     return conf.preferredFuel === 'any' || sellableFuels.includes(conf.preferredFuel as FuelType);
   });
 

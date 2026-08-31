@@ -184,7 +184,7 @@ export interface GameConfig {
  * unreachable for as long as they existed.
  */
 export function upgradePathFor(type: string): string {
-  return type.startsWith('tank_') ? 'tank' : type;
+  return type === 'tank_farm' ? 'tank' : type;
 }
 
 /** What one tank package holds at each level, in litres. */
@@ -251,41 +251,36 @@ export const GAME_CONFIG: GameConfig = {
       description: '1 araç kapasiteli, 8 L/sn dolum hızında akaryakıt pompası.',
       icon: 'Fuel'
     },
-    tank_gasoline: {
-      type: 'tank_gasoline',
-      name: 'Benzin Tank Paketi',
+    /**
+     * The station's one tank farm: petrol, diesel and LPG in a single fixture,
+     * standing from day one. Splitting the fuels into separate purchases put a
+     * new player in a trap — diesel drivers arriving before the diesel tank
+     * could be afforded, bleeding reputation for the crime of starting out.
+     */
+    tank_farm: {
+      type: 'tank_farm',
+      name: 'Yakıt Tank Sahası',
       category: 'tank',
-      price: 11000,
-      dailyUpkeep: 80,
+      price: 30000,
+      dailyUpkeep: 180,
       size: [3, 3],
       unlockLevel: 1,
-      description: 'Benzin depolama kapasitesine 1.500 L ekler.',
-      isUnderground: true,
+      description:
+        'Benzin, dizel ve LPG depolarını tek sahada toplar. Yükseltmek üçünün de kapasitesini büyütür.',
+      fixed: true,
       icon: 'Database'
     },
-    tank_diesel: {
-      type: 'tank_diesel',
-      name: 'Dizel Tank Paketi',
+    tank_expansion: {
+      type: 'tank_expansion',
+      name: 'Geniş Yakıt Tankı',
       category: 'tank',
-      price: 12000,
-      dailyUpkeep: 80,
-      size: [3, 3],
-      unlockLevel: 2,
-      description: '1.500 L dizel yakıt depolama kapasitesi ekler.',
-      isUnderground: true,
+      price: 95000,
+      dailyUpkeep: 320,
+      size: [4, 3],
+      unlockLevel: 8,
+      description:
+        'Tüm yakıt depolama kapasitesini iki katına çıkarır. Ana tank sahası Sv3 olmalıdır.',
       icon: 'Database'
-    },
-    tank_lpg: {
-      type: 'tank_lpg',
-      name: 'LPG Tank Paketi',
-      category: 'tank',
-      price: 16000,
-      dailyUpkeep: 90,
-      size: [3, 3],
-      unlockLevel: 4,
-      description: '1.500 L LPG otogaz depolama kapasitesi ekler.',
-      isUnderground: true,
-      icon: 'Flame'
     },
     price_sign: {
       /**
@@ -636,14 +631,14 @@ export const GAME_CONFIG: GameConfig = {
         level: 2,
         cost: 20000,
         capacityLiters: 3000,
-        effectsDescription: 'Depolama kapasitesini 3.000 L seviyesine çıkarır.'
+        effectsDescription: 'Her yakıtın depolama kapasitesini 3.000 L seviyesine çıkarır.'
       },
       3: {
         type: 'tank',
         level: 3,
         cost: 45000,
         capacityLiters: 6000,
-        effectsDescription: 'Büyük Tank: Depolama kapasitesini 6.000 L seviyesine çıkarır.'
+        effectsDescription: 'Büyük Tank: Her yakıtın depolama kapasitesini 6.000 L seviyesine çıkarır.'
       }
     },
     office: {
@@ -895,13 +890,13 @@ export const GAME_CONFIG: GameConfig = {
   ],
   levels: [
     { level: 1, requiredTotalXp: 0, rewardCash: 0, unlockedFeatures: 'Benzin, Manuel Dolum, Tanker Siparişi' },
-    { level: 2, requiredTotalXp: 300, rewardCash: 1500, unlockedFeatures: 'Dizel Tank Paketi, Çöp Kutusu' },
+    { level: 2, requiredTotalXp: 300, rewardCash: 1500, unlockedFeatures: 'Çöp Kutusu, Aydınlatmalı Gece Trafiği' },
     { level: 3, requiredTotalXp: 800, rewardCash: 0, unlockedFeatures: 'Pompacı İşe Alma, Pompa S2 Yükseltmesi, Aydınlatma Direği' },
-    { level: 4, requiredTotalXp: 1600, rewardCash: 2500, unlockedFeatures: 'LPG Tank Paketi, Orta Boy Tank (3.000 L)' },
+    { level: 4, requiredTotalXp: 1600, rewardCash: 2500, unlockedFeatures: 'Orta Boy Tank Yükseltmesi (3.000 L)' },
     { level: 5, requiredTotalXp: 2800, rewardCash: 0, unlockedFeatures: 'Banka Kredileri, Yapı Bakımı & Tamir, Ofis S2' },
     { level: 6, requiredTotalXp: 4500, rewardCash: 3000, unlockedFeatures: 'Mini Market, Tuvalet, Oto Yıkama' },
     { level: 7, requiredTotalXp: 6500, rewardCash: 0, unlockedFeatures: 'Ada Sundurması (Canopy), Dijital LED Tabela' },
-    { level: 8, requiredTotalXp: 9000, rewardCash: 0, unlockedFeatures: 'Büyük Tank (6.000 L), Pompa S3 Yükseltmesi' },
+    { level: 8, requiredTotalXp: 9000, rewardCash: 0, unlockedFeatures: 'Büyük Tank (6.000 L), Pompa S3, Geniş Yakıt Tankı' },
     { level: 9, requiredTotalXp: 12000, rewardCash: 5000, unlockedFeatures: 'Yeni Arsa Parselleri, 3. Pompacı Yuvası' },
     { level: 10, requiredTotalXp: 15500, rewardCash: 0, unlockedFeatures: 'İstasyon Müdürü Otomasyonu, V1 Final Hedefi' }
   ],

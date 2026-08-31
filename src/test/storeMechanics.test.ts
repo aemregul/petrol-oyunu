@@ -62,8 +62,10 @@ describe('tank packages', () => {
 
     const after = useGameStore.getState().gameState;
     expect(after.buildings.tank_1.level).toBe(2);
-    // A level-2 package holds 3.000 L where the level-1 held 1.500.
+    // A level-2 farm holds 3.000 L of each fuel where level-1 held 1.500.
     expect(after.tanks.gasoline.capacity).toBe(before + 1500);
+    expect(after.tanks.diesel.capacity).toBe(3000);
+    expect(after.tanks.lpg.capacity).toBe(3000);
   });
 
   it('counts the upgrade money when a tank is valued for sale', () => {
@@ -78,31 +80,54 @@ describe('tank packages', () => {
     expect(useGameStore.getState().structureValue('tank_1')).toBeGreaterThan(plain);
   });
 
-  it('refuses a second tank of the same fuel, and says why', () => {
+  it('allows one farm, and one expansion only beside a maxed farm', () => {
     const state = useGameStore.getState().gameState;
-    const verdict = evaluatePlacement(state, 'tank_gasoline', [4, 4], 0);
-    expect(verdict.valid).toBe(false);
-    expect(verdict.reason).toContain('Maksimum alım');
 
-    // A fuel with no tank standing is still open for its first one.
-    expect(
-      Object.values(state.buildings).some((b) => b.type === 'tank_diesel')
-    ).toBe(false);
-    expect(evaluatePlacement(state, 'tank_diesel', [4, 4], 0).valid).toBe(true);
+    // A second farm is never on the menu.
+    const second = evaluatePlacement(state, 'tank_farm', [4, 4], 0);
+    expect(second.valid).toBe(false);
+    expect(second.reason).toContain('Maksimum alım');
+
+    // The expansion waits until the farm has topped out.
+    const early = evaluatePlacement(state, 'tank_expansion', [4, 4], 0);
+    expect(early.valid).toBe(false);
+    expect(early.reason).toContain('Sv3');
+
+    state.buildings.tank_1.level = 3;
+    useGameStore.setState({ gameState: { ...state } });
+    expect(evaluatePlacement(useGameStore.getState().gameState, 'tank_expansion', [4, 4], 0).valid).toBe(true);
   });
 
-  it('takes a sold package’s litres away and spills what no longer fits', () => {
+  it('doubles every fuel on buying the expansion, and halves them on selling it', () => {
     const state = useGameStore.getState().gameState;
-    theTank(state, 2);
-    state.tanks.gasoline.capacity = 3000;
-    state.tanks.gasoline.stock = 3000;
+    state.buildings.tank_1.level = 3;
+    state.tanks.gasoline.capacity = 6000;
+    state.tanks.diesel.capacity = 6000;
+    state.tanks.lpg.capacity = 6000;
     useGameStore.setState({ gameState: { ...state } });
 
-    expect(useGameStore.getState().sellStructure('tank_1')).toBe(true);
+    useGameStore.getState().enterBuildMode('tank_expansion');
+    useGameStore.getState().setBuildPreviewPos([4, 4]);
+    expect(useGameStore.getState().confirmBuildPlacement()).toBe(true);
 
-    const after = useGameStore.getState().gameState;
-    expect(after.tanks.gasoline.capacity).toBe(0);
-    expect(after.tanks.gasoline.stock).toBe(0);
+    let tanks = useGameStore.getState().gameState.tanks;
+    expect(tanks.gasoline.capacity).toBe(12000);
+    expect(tanks.diesel.capacity).toBe(12000);
+    expect(tanks.lpg.capacity).toBe(12000);
+
+    const expansion = Object.values(useGameStore.getState().gameState.buildings).find(
+      (b) => b.type === 'tank_expansion'
+    )!;
+    expect(useGameStore.getState().sellStructure(expansion.id)).toBe(true);
+
+    tanks = useGameStore.getState().gameState.tanks;
+    expect(tanks.gasoline.capacity).toBe(6000);
+  });
+
+  it('never lets the farm itself be sold', () => {
+    // The farm is the station's storage; selling it would strand every fuel.
+    expect(useGameStore.getState().sellStructure('tank_1')).toBe(false);
+    expect(useGameStore.getState().gameState.buildings.tank_1).toBeTruthy();
   });
 
   it('moves a tank without growing it and without resetting its level', () => {
@@ -117,7 +142,7 @@ describe('tank packages', () => {
     expect(useGameStore.getState().confirmBuildPlacement()).toBe(true);
 
     const after = useGameStore.getState().gameState;
-    const moved = Object.values(after.buildings).find((b) => b.type === 'tank_gasoline')!;
+    const moved = Object.values(after.buildings).find((b) => b.type === 'tank_farm')!;
     // Relocation used to add another 1.500 L package and knock it back to Sv1.
     expect(after.tanks.gasoline.capacity).toBe(capacityBefore);
     expect(moved.level).toBe(2);

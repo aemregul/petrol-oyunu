@@ -140,111 +140,149 @@ const Canopy: React.FC<{ building: BuildingEntity }> = ({ building }) => {
 };
 
 /**
- * Surface fittings for a buried fuel tank: the concrete lid, its filler caps
- * and the vent stack. The tank itself is underground, so this is all the
- * player ever sees of it.
+ * The station's storage, drawn as what it is.
+ *
+ * The tank farm is three above-ground silos on one pad — petrol, diesel and
+ * LPG side by side, each in its fuel's colour, all three growing together
+ * when the farm is upgraded. The expansion is the big horizontal cistern
+ * that doubles the lot. Both are readable from across the plot, which the
+ * old buried-lid version never was.
  */
 const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
-  const TANK_ACCENTS: Record<string, string> = {
-    tank_gasoline: '#22c55e',
-    tank_diesel: '#f97316',
-    tank_lpg: '#3b82f6'
-  };
-  const accent = TANK_ACCENTS[building.type] || '#94a3b8';
   const w = building.size[0] * 2;
   const d = building.size[1] * 2;
+  const level = Math.min(3, Math.max(1, building.level));
+
+  if (building.type === 'tank_expansion') {
+    return (
+      <group>
+        <mesh position={[0, 0.06, 0]} receiveShadow>
+          <boxGeometry args={[w * 0.9, 0.12, d * 0.85]} />
+          <meshStandardMaterial color="#7c8798" roughness={0.9} />
+        </mesh>
+
+        {/* Saddles carrying the cistern */}
+        {[-w * 0.28, w * 0.28].map((x) => (
+          <mesh key={x} position={[x, 0.5, 0]} castShadow>
+            <boxGeometry args={[0.5, 0.9, d * 0.5]} />
+            <meshStandardMaterial color="#475569" roughness={0.7} metalness={0.3} />
+          </mesh>
+        ))}
+
+        {/* The cistern itself, steel with three fuel-coloured hoops */}
+        <mesh position={[0, 1.9, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+          <cylinderGeometry args={[1.35, 1.35, w * 0.82, 20]} />
+          <meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.3} />
+        </mesh>
+        {[
+          [-w * 0.24, '#22c55e'],
+          [0, '#f97316'],
+          [w * 0.24, '#3b82f6']
+        ].map(([x, color]) => (
+          <mesh
+            key={String(x)}
+            position={[x as number, 1.9, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+          >
+            <cylinderGeometry args={[1.39, 1.39, 0.3, 20]} />
+            <meshStandardMaterial color={color as string} roughness={0.45} metalness={0.25} />
+          </mesh>
+        ))}
+
+        {/* Top walkway and hatch */}
+        <mesh position={[0, 3.35, 0]} castShadow>
+          <boxGeometry args={[w * 0.6, 0.08, 0.7]} />
+          <meshStandardMaterial color="#64748b" metalness={0.5} roughness={0.5} />
+        </mesh>
+        <mesh position={[w * 0.1, 3.5, 0]} castShadow>
+          <cylinderGeometry args={[0.24, 0.28, 0.24, 12]} />
+          <meshStandardMaterial color="#94a3b8" metalness={0.6} roughness={0.4} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // The farm: one silo per fuel, abreast, facing the road — the same order
+  // the tanker berths use, so each lorry stops in front of its own silo.
+  const SILOS: Array<{ x: number; color: string }> = [
+    { x: -w * 0.28, color: '#22c55e' },
+    { x: 0, color: '#f97316' },
+    { x: w * 0.28, color: '#3b82f6' }
+  ];
+  const radius = [0.75, 0.85, 0.95][level - 1];
+  const height = [2.2, 2.9, 3.6][level - 1];
 
   return (
     <group>
-      {/* Concrete access slab, sunk almost flush with the apron */}
       <mesh position={[0, 0.06, 0]} receiveShadow>
-        <boxGeometry args={[w * 0.85, 0.12, d * 0.85]} />
+        <boxGeometry args={[w * 0.9, 0.12, d * 0.85]} />
         <meshStandardMaterial color="#7c8798" roughness={0.9} />
       </mesh>
 
-      {/* Painted border in the fuel's colour so the grade is obvious */}
-      <mesh position={[0, 0.13, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[w * 0.36, w * 0.42, 4]} />
-        <meshBasicMaterial color={accent} transparent opacity={0.75} {...DECAL} />
-      </mesh>
-
-      {/* Filler caps — one more per level, the way bigger farms plumb in */}
-      {([[-w * 0.18, w * 0.18], [-w * 0.26, 0, w * 0.26], [-w * 0.3, -w * 0.1, w * 0.1, w * 0.3]][
-        Math.min(3, Math.max(1, building.level)) - 1
-      ]).map((x) => (
-        <group key={x} position={[x, 0.12, 0]}>
-          <mesh castShadow>
-            <cylinderGeometry args={[0.42, 0.46, 0.22, 16]} />
-            <meshStandardMaterial color="#4b5563" metalness={0.7} roughness={0.4} />
+      {SILOS.map(({ x, color }) => (
+        <group key={x} position={[x, 0, -d * 0.1]}>
+          <mesh position={[0, 0.12 + height / 2, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[radius, radius, height, 18]} />
+            <meshStandardMaterial color={color} roughness={0.45} metalness={0.25} />
           </mesh>
-          <mesh position={[0, 0.13, 0]}>
-            <cylinderGeometry args={[0.3, 0.3, 0.06, 16]} />
-            <meshStandardMaterial
-              color={accent}
-              emissive={accent}
-              emissiveIntensity={0.25}
-              toneMapped={false}
-            />
+          {[0.4, height - 0.3].map((y) => (
+            <mesh key={y} position={[0, 0.12 + y, 0]}>
+              <cylinderGeometry args={[radius + 0.03, radius + 0.03, 0.14, 18]} />
+              <meshStandardMaterial color="#cbd5e1" metalness={0.7} roughness={0.3} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.12 + height, 0]} castShadow>
+            <sphereGeometry args={[radius, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
+            <meshStandardMaterial color={color} roughness={0.4} metalness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.12 + height + radius * 0.55 + 0.35, 0]} castShadow>
+            <cylinderGeometry args={[0.04, 0.05, 0.8, 8]} />
+            <meshStandardMaterial color="#64748b" metalness={0.6} roughness={0.4} />
+          </mesh>
+
+          {/* Filler cap at the silo's own berth, where its lorry hoses in */}
+          <group position={[0, 0.12, d * 0.38]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.26, 0.3, 0.2, 14]} />
+              <meshStandardMaterial color="#4b5563" metalness={0.7} roughness={0.4} />
+            </mesh>
+            <mesh position={[0, 0.11, 0]}>
+              <cylinderGeometry args={[0.18, 0.18, 0.05, 14]} />
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={0.25}
+                toneMapped={false}
+              />
+            </mesh>
+          </group>
+
+          {/* Feed pipe from silo down toward its cap */}
+          <mesh position={[0, 0.5, d * 0.16]} rotation={[Math.PI / 4, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.07, 0.07, 1.1, 8]} />
+            <meshStandardMaterial color="#475569" metalness={0.6} roughness={0.4} />
           </mesh>
         </group>
       ))}
 
-      {/* From Sv2: a raised fill manifold along the back edge. The footprint
-          never grows with level — what grows is the hardware standing on it,
-          so the upgrade reads from the road without claiming more concrete. */}
-      {building.level >= 2 && (
-        <group position={[0, 0, -d * 0.3]}>
-          <mesh position={[0, 0.55, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-            <cylinderGeometry args={[0.16, 0.16, w * 0.6, 12]} />
-            <meshStandardMaterial color="#94a3b8" metalness={0.6} roughness={0.4} />
-          </mesh>
-          {[-w * 0.22, 0, w * 0.22].map((x) => (
-            <mesh key={x} position={[x, 0.3, 0]} castShadow>
-              <cylinderGeometry args={[0.09, 0.09, 0.6, 8]} />
-              <meshStandardMaterial color="#64748b" metalness={0.6} roughness={0.4} />
-            </mesh>
-          ))}
-          <mesh position={[-w * 0.32, 0.55, 0]} castShadow>
-            <cylinderGeometry args={[0.2, 0.2, 0.28, 10]} />
-            <meshStandardMaterial color={accent} roughness={0.5} />
-          </mesh>
-        </group>
-      )}
-
-      {/* At Sv3: a level-gauge cabinet with a lit dial */}
-      {building.level >= 3 && (
-        <group position={[-w * 0.34, 0, d * 0.28]}>
-          <mesh position={[0, 0.75, 0]} castShadow>
-            <boxGeometry args={[0.6, 1.5, 0.4]} />
+      {/* At Sv3: the level-gauge cabinet keeping watch over all three */}
+      {level >= 3 && (
+        <group position={[w * 0.42, 0, -d * 0.3]}>
+          <mesh position={[0, 0.7, 0]} castShadow>
+            <boxGeometry args={[0.5, 1.4, 0.35]} />
             <meshStandardMaterial color="#334155" roughness={0.55} metalness={0.3} />
           </mesh>
-          <mesh position={[0, 1.05, 0.21]}>
-            <planeGeometry args={[0.42, 0.42]} />
+          <mesh position={[0, 0.98, 0.19]}>
+            <planeGeometry args={[0.36, 0.36]} />
             <meshStandardMaterial
-              color={accent}
-              emissive={accent}
+              color="#22d3ee"
+              emissive="#22d3ee"
               emissiveIntensity={0.8}
               toneMapped={false}
             />
           </mesh>
         </group>
       )}
-
-      {/* Vent stack at the back corner — taller with each level's throughput */}
-      <group position={[w * 0.34, 0, -d * 0.32]}>
-        <mesh position={[0, (3 + (building.level - 1) * 0.7) / 2, 0]} castShadow>
-          <cylinderGeometry args={[0.1, 0.13, 3 + (building.level - 1) * 0.7, 10]} />
-          <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
-        </mesh>
-        <mesh
-          position={[0, 3.05 + (building.level - 1) * 0.7, 0]}
-          rotation={[0, 0, Math.PI / 2]}
-          castShadow
-        >
-          <cylinderGeometry args={[0.11, 0.11, 0.5, 10]} />
-          <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.5} />
-        </mesh>
-      </group>
     </group>
   );
 };

@@ -253,13 +253,19 @@ export function evaluatePlacement(
     return { valid: false, reason: `Seviye ${catalog.unlockLevel} gerekiyor.` };
   }
 
-  // One tank per fuel: capacity grows by upgrading the tank that stands, not
-  // by carpeting the plot with packages.
+  // Storage is one farm and, at the top of its ladder, one expansion beside
+  // it. Capacity grows by upgrading what stands, not by carpeting the plot.
   if (
-    buildingType.startsWith('tank_') &&
+    (buildingType === 'tank_farm' || buildingType === 'tank_expansion') &&
     Object.values(state.buildings).some((b) => b.type === buildingType)
   ) {
-    return { valid: false, reason: 'Maksimum alım sayısına ulaşıldı — tankı yükseltin.' };
+    return { valid: false, reason: 'Maksimum alım sayısına ulaşıldı.' };
+  }
+  if (buildingType === 'tank_expansion') {
+    const farm = Object.values(state.buildings).find((b) => b.type === 'tank_farm');
+    if (!farm || farm.level < 3) {
+      return { valid: false, reason: 'Önce ana Yakıt Tank Sahası Sv3 olmalı.' };
+    }
   }
 
   const role = drivewayRole(buildingType);

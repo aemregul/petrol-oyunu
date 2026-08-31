@@ -182,7 +182,13 @@
       "Bash(git -C /Users/emre/petrol-oyunu diff src/config/gameConfig.ts src/domain/types/gameState.ts src/domain/services/simulationEngine.ts src/store/gameStore.ts src/ui/HUD.tsx src/ui/modals/StaffModal.tsx src/ui/PerformanceOverlay.tsx)",
       "Bash(git -C /Users/emre/petrol-oyunu diff src/ui/HUD.tsx)",
       "Bash(awk '/relocateStructure: \\\\\\(id/,/^  \\\\},?$/')",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(awk '{print $2, $3\"%\", $11, $12}')",
+      "Bash(kill 76191)",
+      "Bash(sort -rk3)",
+      "Bash(awk '{printf \"%s %s%% %s\\\\n\", $2, $3, $11}')",
+      "Bash(git stash *)",
+      "Bash(awk '{printf \"%s%% %s\\\\n\", $3, $11}')"
     ],
     "additionalDirectories": [
       "/private/tmp"

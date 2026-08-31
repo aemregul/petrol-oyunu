@@ -129,13 +129,6 @@ function panBounds(ownedParcels: string[]): {
   };
 }
 
-/** Which fuel a tank package feeds. */
-const TANK_BUILDING_FUELS: Record<string, FuelType> = {
-  tank_gasoline: 'gasoline',
-  tank_diesel: 'diesel',
-  tank_lpg: 'lpg'
-};
-
 export type ActiveModalType =
   | 'NONE'
   | 'CUSTOMER_FUEL'
@@ -329,32 +322,57 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   // wherever an older save happened to leave it.
   syncPriceSign(loaded);
 
-  // Tanks used to be capacity with no building behind it — the starting
-  // petrol especially. Deliveries now dock at a physical tank and upgrades
-  // hang off it, so every fuel the station stocks gets one standing, placed
-  // on the first legal spot. A fuel whose tank cannot be placed just keeps
-  // the timer-only deliveries.
-  for (const fuel of ['gasoline', 'diesel', 'lpg'] as const) {
-    if (loaded.tanks[fuel].capacity <= 0) continue;
-    const type = `tank_${fuel}`;
-    if (Object.values(loaded.buildings).some((b) => b.type === type)) continue;
+  // Storage went through two shapes before the farm: bare capacity with no
+  // building, then one package building per fuel. Both fold into the single
+  // Yakıt Tank Sahası — the legacy packages are folded in at the highest
+  // level any of them reached, and every fuel wakes at the farm's floor so
+  // no save is left in the old dizel-locked trap.
+  {
+    const legacy = Object.values(loaded.buildings).filter((b) =>
+      ['tank_gasoline', 'tank_diesel', 'tank_lpg'].includes(b.type)
+    );
+    let farm = Object.values(loaded.buildings).find((b) => b.type === 'tank_farm');
 
-    outer: for (let z = 3; z <= loaded.station.plots.height - 2; z++) {
-      for (let x = 2; x <= loaded.station.plots.width - 2; x++) {
-        if (!evaluatePlacement(loaded, type, [x, z], 0).valid) continue;
-        const id = `bld_${type}_${Math.random().toString(36).substring(2, 6)}`;
-        loaded.buildings[id] = {
-          id,
-          type,
-          level: 1,
-          position: [x, z],
-          rotation: 0,
-          size: GAME_CONFIG.buildings[type].size,
-          health: 100,
-          constructionState: 'ACTIVE',
-          builtAtTimestamp: Date.now()
-        };
-        break outer;
+    if (!farm && legacy.length > 0) {
+      const keeper = legacy[0];
+      keeper.type = 'tank_farm';
+      keeper.level = Math.max(...legacy.map((b) => b.level));
+      keeper.size = GAME_CONFIG.buildings.tank_farm.size;
+      farm = keeper;
+      for (const extra of legacy.slice(1)) delete loaded.buildings[extra.id];
+    } else if (farm) {
+      for (const extra of legacy) delete loaded.buildings[extra.id];
+    }
+
+    if (!farm) {
+      outer: for (let z = 3; z <= loaded.station.plots.height - 2; z++) {
+        for (let x = 2; x <= loaded.station.plots.width - 2; x++) {
+          if (!evaluatePlacement(loaded, 'tank_farm', [x, z], 0).valid) continue;
+          const id = 'bld_tank_farm_' + Math.random().toString(36).substring(2, 6);
+          loaded.buildings[id] = {
+            id,
+            type: 'tank_farm',
+            level: 1,
+            position: [x, z],
+            rotation: 0,
+            size: GAME_CONFIG.buildings.tank_farm.size,
+            health: 100,
+            constructionState: 'ACTIVE',
+            builtAtTimestamp: Date.now()
+          };
+          farm = loaded.buildings[id];
+          break outer;
+        }
+      }
+    }
+
+    const floor = TANK_PACKAGE_LITERS[farm?.level ?? 1] ?? 1500;
+    for (const fuel of ['gasoline', 'diesel', 'lpg'] as const) {
+      const tank = loaded.tanks[fuel];
+      tank.capacity = Math.max(tank.capacity, floor);
+      tank.level = Math.max(tank.level, farm?.level ?? 1);
+      if (!loaded.player.unlocks.includes(`fuel_${fuel}`)) {
+        loaded.player.unlocks.push(`fuel_${fuel}`);
       }
     }
   }
@@ -671,24 +689,12 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     if (catalog.category === 'tank') {
-      const TANK_FUELS: Record<string, FuelType> = {
-        tank_gasoline: 'gasoline',
-        tank_diesel: 'diesel',
-        tank_lpg: 'lpg'
-      };
-      const fuelType = TANK_FUELS[buildMode.buildingType];
-
-      // A tank being set back down after a move kept its litres the whole
-      // time — only a newly bought package adds storage. Without this, every
-      // relocation quietly grew the tank by another package.
-      if (fuelType && !carried) {
-        // Each package adds storage, so a second tank doubles the capacity
-        // instead of silently replacing the first.
-        const tank = state.tanks[fuelType];
-        tank.capacity += TANK_PACKAGE_LITERS[1];
-        tank.level = Math.max(1, tank.level);
-        if (!state.player.unlocks.includes(`fuel_${fuelType}`)) {
-          state.player.unlocks.push(`fuel_${fuelType}`);
+      // A structure being set back down after a move already had its effect;
+      // only a fresh purchase changes the litres. The one buyable tank
+      // structure is the expansion, and it doubles everything.
+      if (buildMode.buildingType === 'tank_expansion' && !carried) {
+        for (const fuel of Object.keys(state.tanks) as FuelType[]) {
+          state.tanks[fuel].capacity *= 2;
         }
       }
 
@@ -886,14 +892,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       delete state.buildings[id];
       if (building!.type === 'mini_market') state.market.active = false;
 
-      // A sold tank package takes its capacity with it; anything that no
-      // longer fits in what is left is pumped out and lost with the sale.
-      const tankFuel = TANK_BUILDING_FUELS[building!.type];
-      if (tankFuel) {
-        const tank = state.tanks[tankFuel];
-        tank.capacity = Math.max(0, tank.capacity - (TANK_PACKAGE_LITERS[building!.level] ?? 1500));
-        tank.stock = Math.min(tank.stock, tank.capacity);
-        tank.reservedStock = Math.min(tank.reservedStock, tank.stock);
+      // The expansion halves on the way out what it doubled on the way in;
+      // fuel that no longer fits is pumped out and lost with the sale.
+      if (building!.type === 'tank_expansion') {
+        for (const fuel of Object.keys(state.tanks) as FuelType[]) {
+          const tank = state.tanks[fuel];
+          tank.capacity = Math.round(tank.capacity / 2);
+          tank.stock = Math.min(tank.stock, tank.capacity);
+          tank.reservedStock = Math.min(tank.reservedStock, tank.stock);
+        }
       }
     }
 
@@ -940,7 +947,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     // The ladder the level screen promises for tanks: 3.000 L at 4, 6.000 L
     // at 8 — the same gate pumps carry, or the storage tuning means nothing.
-    if (TANK_BUILDING_FUELS[building.type]) {
+    if (building.type === 'tank_farm') {
       const requiredLevel = next === 3 ? 8 : 4;
       if (gameState.player.level < requiredLevel) {
         get().addNotification({
@@ -980,14 +987,15 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.buildings[id].level = next;
     state.buildings[id].health = 100;
 
-    // A tank package upgrade is real litres, not a number on a plaque: the
-    // fuel it stores gains the difference between the old and new package.
-    const tankFuel = TANK_BUILDING_FUELS[building.type];
-    if (tankFuel) {
+    // A farm upgrade is real litres for all three fuels at once, not a number
+    // on a plaque: each gains the difference between the old and new package.
+    if (building.type === 'tank_farm') {
       const grown =
         (TANK_PACKAGE_LITERS[next] ?? 0) - (TANK_PACKAGE_LITERS[building.level] ?? 0);
-      state.tanks[tankFuel].capacity += grown;
-      state.tanks[tankFuel].level = Math.max(state.tanks[tankFuel].level, next);
+      for (const fuel of Object.keys(state.tanks) as FuelType[]) {
+        state.tanks[fuel].capacity += grown;
+        state.tanks[fuel].level = Math.max(state.tanks[fuel].level, next);
+      }
     }
 
     sounds.playBuildPlace();
