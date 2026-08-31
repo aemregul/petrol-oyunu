@@ -34,7 +34,8 @@ export default {
       animation: {
         'pulse-subtle': 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'float-up': 'floatUp 1.2s ease-out forwards',
-        'fade-in': 'fadeIn 0.25s ease-out forwards'
+        'fade-in': 'fadeIn 0.25s ease-out forwards',
+        'fade-out': 'fadeOut 0.6s ease-in forwards'
       },
       keyframes: {
         floatUp: {
@@ -44,6 +45,10 @@ export default {
         fadeIn: {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' }
+        },
+        fadeOut: {
+          '0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+          '100%': { opacity: '0', transform: 'translateY(-6px) scale(0.95)' }
         }
       }
     },
