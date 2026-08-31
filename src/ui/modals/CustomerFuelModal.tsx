@@ -1,8 +1,52 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { X, Fuel, Zap, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { GAME_CONFIG } from '../../config/gameConfig';
+import { FuelType } from '../../domain/types/gameState';
+import { X, Sparkles } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
+const PRESETS = [250, 400, 600, 800, 1000, 1250, 1600, 2000];
+
+const FUEL_ORDER: FuelType[] = ['gasoline', 'diesel', 'lpg'];
+
+/** The nozzle buttons wear their fuel's colour, muted until picked. */
+const FUEL_TONES: Record<FuelType, { on: string; off: string }> = {
+  gasoline: {
+    on: 'bg-emerald-500 text-white ring-2 ring-emerald-300 shadow-lg shadow-emerald-500/30',
+    off: 'bg-emerald-900/50 text-emerald-300 hover:bg-emerald-800/60 border border-emerald-700/50'
+  },
+  diesel: {
+    on: 'bg-orange-500 text-white ring-2 ring-orange-300 shadow-lg shadow-orange-500/30',
+    off: 'bg-orange-900/50 text-orange-300 hover:bg-orange-800/60 border border-orange-700/50'
+  },
+  lpg: {
+    on: 'bg-blue-500 text-white ring-2 ring-blue-300 shadow-lg shadow-blue-500/30',
+    off: 'bg-blue-900/50 text-blue-300 hover:bg-blue-800/60 border border-blue-700/50'
+  }
+};
+
+const FUEL_CHIP: Record<FuelType, string> = {
+  gasoline: 'bg-emerald-500',
+  diesel: 'bg-orange-500',
+  lpg: 'bg-blue-500'
+};
+
+/** A licence plate the car can wear, derived from its id so it never changes. */
+function plateFor(id: string): string {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 999983;
+  const city = (h % 80) + 1;
+  const letters =
+    String.fromCharCode(65 + (h % 23)) + String.fromCharCode(65 + (Math.floor(h / 23) % 23));
+  const num = 100 + (h % 900);
+  return `${String(city).padStart(2, '0')} ${letters} ${num}`;
+}
+
+/**
+ * The fuelling window: pick the customer's nozzle, give an amount or FULLE,
+ * watch the meter run, hand over. The nozzle has to match what they asked
+ * for — a station that pours petrol into a diesel engine does not get paid.
+ */
 export const CustomerFuelModal: React.FC = () => {
   const selectedVehicleId = useGameStore((s) => s.selectedVehicleId);
   const gameState = useGameStore((s) => s.gameState);
@@ -10,208 +54,238 @@ export const CustomerFuelModal: React.FC = () => {
   const startVehicleFueling = useGameStore((s) => s.startVehicleFueling);
   const dispenseFuelStep = useGameStore((s) => s.dispenseFuelStep);
   const completeVehicleFueling = useGameStore((s) => s.completeVehicleFueling);
+  const cleanVehicleWindows = useGameStore((s) => s.cleanVehicleWindows);
+  const dismissCustomer = useGameStore((s) => s.dismissCustomer);
 
   const vehicle = selectedVehicleId ? gameState.vehicles[selectedVehicleId] : null;
-  const pricing = vehicle ? gameState.pricing[vehicle.fuelType] : null;
-  const tank = vehicle ? gameState.tanks[vehicle.fuelType] : null;
 
-  const [isHolding, setIsHolding] = useState(false);
-  const holdIntervalRef = useRef<any>(null);
+  const [chosenFuel, setChosenFuel] = useState<FuelType | null>(null);
+  const [amountText, setAmountText] = useState('');
+  const runIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const isFueling = vehicle?.state === 'FUELING';
+  const isFinished = !!vehicle && (vehicle.request.isFinished || vehicle.state === 'PAYMENT');
+
+  // Once the trigger is squeezed the meter runs by itself, the way a real
+  // dispenser latches — the old hold-to-pour felt like arm day at the gym.
   useEffect(() => {
-    if (isHolding && vehicle && vehicle.state === 'FUELING' && !vehicle.request.isFinished) {
-      holdIntervalRef.current = setInterval(() => {
+    if (isFueling && vehicle && !vehicle.request.isFinished) {
+      runIntervalRef.current = setInterval(() => {
         const finished = dispenseFuelStep(vehicle.id, 0.05);
-        if (finished) {
-          setIsHolding(false);
-          clearInterval(holdIntervalRef.current);
-        }
+        if (finished && runIntervalRef.current) clearInterval(runIntervalRef.current);
       }, 50);
-    } else {
-      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
     }
-
     return () => {
-      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
+      if (runIntervalRef.current) clearInterval(runIntervalRef.current);
     };
-  }, [isHolding, vehicle?.state, vehicle?.request.isFinished, vehicle?.id]);
+  }, [isFueling, vehicle?.request.isFinished, vehicle?.id, dispenseFuelStep]);
 
-  if (!vehicle || !pricing || !tank) return null;
+  if (!vehicle) return null;
 
-  const isFueling = vehicle.state === 'FUELING';
-  const isFinished = vehicle.request.isFinished || vehicle.state === 'PAYMENT';
-  const dispensedLiters = vehicle.request.dispensedLiters || 0;
-  const targetLiters = vehicle.request.calculatedLiters || vehicle.request.targetValue || 30;
+  const pricing = gameState.pricing[vehicle.fuelType];
   const unitPrice = pricing.playerPrice;
-  const currentTotalCost = dispensedLiters * unitPrice;
-  const fillProgressPercent = Math.min(100, Math.max(0, (dispensedLiters / targetLiters) * 100));
+  const demandLiters = vehicle.request.calculatedLiters || vehicle.request.targetValue || 30;
+  const requestPrice = Math.round(demandLiters * unitPrice);
+  const dispensed = vehicle.request.dispensedLiters || 0;
+  const runningTotal = dispensed * unitPrice;
+  const conf = GAME_CONFIG.customerTypes[vehicle.archetype];
+  const fuelConf = GAME_CONFIG.fuels[vehicle.fuelType];
 
-  const handleSelectQuickAmount = (mode: 'LITERS' | 'MONEY' | 'FULL', val: number) => {
+  const pump = vehicle.targetPumpId ? gameState.pumps[vehicle.targetPumpId] : null;
+  const nozzles = pump?.supportedFuels ?? FUEL_ORDER;
+  const rightFuelChosen = chosenFuel === vehicle.fuelType;
+  const amount = parseInt(amountText, 10);
+
+  const start = (mode: 'MONEY' | 'FULL', value: number) => {
+    if (!rightFuelChosen) return;
     sounds.playClick();
-    startVehicleFueling(vehicle.id, mode, val);
+    startVehicleFueling(vehicle.id, mode, value);
   };
 
-  const handleClose = () => {
-    sounds.playClick();
-    setActiveModal('NONE');
-  };
-
-  const handleComplete = () => {
-    completeVehicleFueling(vehicle.id);
-  };
+  const hint = !chosenFuel
+    ? 'Tabanca seç; tutar gir ya da FULLE'
+    : !rightFuelChosen
+      ? `Müşteri ${fuelConf.shortName} istiyor — doğru tabancayı seç`
+      : isFueling
+        ? 'Yakıt akıyor...'
+        : isFinished
+          ? 'Dolum tamam — teslim et'
+          : 'Tutar gir ya da bir tuşa bas';
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-100 flex flex-col">
-        {/* Modal Header */}
-        <div className="bg-slate-800/80 px-6 py-4 border-b border-slate-700/80 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-              <Fuel className="w-5 h-5" />
+    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in select-none">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-sm shadow-2xl text-slate-100 flex flex-col overflow-hidden">
+        {/* Header: who is at the pump */}
+        <div className="px-5 pt-4 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="bg-slate-950 border border-slate-700 text-white text-[11px] font-black font-mono px-2 py-0.5 rounded-md tracking-wider">
+                {plateFor(vehicle.id)}
+              </span>
+              <span className="text-xs font-bold text-slate-400">{conf?.name ?? vehicle.archetype}</span>
             </div>
-            <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">Manuel Akaryakıt Dolumu</div>
-              <div className="text-base font-extrabold text-white">
-                {vehicle.archetype.toUpperCase()} • {vehicle.fuelType.toUpperCase()}
-              </div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mt-2.5">
+              Müşteri İsteği
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`${FUEL_CHIP[vehicle.fuelType]} text-white text-[11px] font-black px-2.5 py-1 rounded-lg`}
+              >
+                {fuelConf.shortName}
+              </span>
+              <span className="text-lg font-black text-white font-mono">
+                ₺{requestPrice.toLocaleString('tr-TR')}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">{demandLiters.toFixed(1)} L</span>
             </div>
           </div>
           <button
-            onClick={handleClose}
-            className="w-8 h-8 rounded-xl bg-slate-700/60 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all"
+            onClick={() => {
+              sounds.playClick();
+              setActiveModal('NONE');
+            }}
+            className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Content */}
-        <div className="p-6 flex flex-col gap-5">
-          {/* Customer Request & Tank Stock Summary */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5">
-              <div className="text-[11px] font-bold text-slate-400 uppercase">Müşteri Talebi</div>
-              <div className="text-xl font-extrabold text-sky-400 font-mono mt-0.5">
-                {vehicle.request.targetValue} {vehicle.request.mode === 'MONEY' ? 'TL' : 'Litre'}
-              </div>
-              <div className="text-[10px] text-slate-500 mt-1">Litre Fiyatı: {unitPrice.toFixed(2)} TL</div>
-            </div>
+        <div className="p-5 pt-4 flex flex-col gap-3">
+          {/* Nozzles */}
+          <div className="grid grid-cols-3 gap-2">
+            {FUEL_ORDER.map((f) => {
+              const fitted = nozzles.includes(f);
+              const tone = FUEL_TONES[f];
+              return (
+                <button
+                  key={f}
+                  disabled={!fitted || isFueling || isFinished}
+                  onClick={() => {
+                    sounds.playClick();
+                    setChosenFuel(f);
+                  }}
+                  className={`py-2.5 rounded-xl font-black text-xs transition-all ${
+                    !fitted
+                      ? 'bg-slate-800/60 text-slate-600 cursor-not-allowed'
+                      : chosenFuel === f
+                        ? tone.on
+                        : tone.off
+                  }`}
+                >
+                  {GAME_CONFIG.fuels[f].shortName}
+                  {!fitted && <div className="text-[9px] font-bold">tabanca yok</div>}
+                </button>
+              );
+            })}
+          </div>
 
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5">
-              <div className="text-[11px] font-bold text-slate-400 uppercase">Tank Mevcut Stoku</div>
-              <div className="text-xl font-extrabold text-emerald-400 font-mono mt-0.5">
-                {tank.stock.toFixed(0)} <span className="text-xs text-slate-400">/ {tank.capacity} L</span>
+          {/* Amount presets */}
+          {!isFueling && !isFinished && (
+            <>
+              <div className="grid grid-cols-4 gap-1.5">
+                {PRESETS.map((v) => (
+                  <button
+                    key={v}
+                    disabled={!rightFuelChosen}
+                    onClick={() => start('MONEY', v)}
+                    className={`py-2 rounded-lg font-bold text-[11px] font-mono transition-all ${
+                      rightFuelChosen
+                        ? 'bg-slate-950 hover:bg-slate-800 text-white border border-slate-700'
+                        : 'bg-slate-950/50 text-slate-600 border border-slate-800 cursor-not-allowed'
+                    }`}
+                  >
+                    ₺{v.toLocaleString('tr-TR')}
+                  </button>
+                ))}
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">Rezerve: {tank.reservedStock.toFixed(0)} L</div>
+
+              {/* Custom amount + start / full */}
+              <div className="flex gap-1.5">
+                <input
+                  type="number"
+                  min={10}
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value)}
+                  placeholder="₺ tutar gir"
+                  className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-500"
+                />
+                <button
+                  disabled={!rightFuelChosen || !(amount > 0)}
+                  onClick={() => start('MONEY', amount)}
+                  className={`px-4 rounded-xl font-black text-xs transition-all ${
+                    rightFuelChosen && amount > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg'
+                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  BAŞLAT
+                </button>
+                <button
+                  disabled={!rightFuelChosen}
+                  onClick={() => start('FULL', demandLiters)}
+                  className={`px-4 rounded-xl font-black text-xs transition-all ${
+                    rightFuelChosen
+                      ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg'
+                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  FULLE
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* The meter */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 grid grid-cols-2 divide-x divide-slate-800">
+            <div className="pr-3">
+              <div className="text-[9px] uppercase font-black text-emerald-500/70 tracking-[0.2em]">
+                Litre
+              </div>
+              <div className="text-3xl font-black font-mono text-emerald-400 leading-tight">
+                {dispensed.toFixed(1)}
+              </div>
+            </div>
+            <div className="pl-4 text-right">
+              <div className="text-[9px] uppercase font-black text-amber-500/70 tracking-[0.2em]">
+                Tutar ₺
+              </div>
+              <div className="text-3xl font-black font-mono text-amber-400 leading-tight">
+                {Math.round(runningTotal).toLocaleString('tr-TR')}
+              </div>
             </div>
           </div>
 
-          {/* Quick Selection Buttons (If not yet fueling) */}
-          {!isFueling && !isFinished && (
-            <div className="flex flex-col gap-2">
-              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">Dolum Seçeneği</div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => handleSelectQuickAmount('MONEY', 250)}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all"
-                >
-                  250 TL
-                </button>
-                <button
-                  onClick={() => handleSelectQuickAmount('MONEY', 500)}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all"
-                >
-                  500 TL
-                </button>
-                <button
-                  onClick={() => handleSelectQuickAmount('MONEY', 1000)}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all"
-                >
-                  1.000 TL
-                </button>
-                <button
-                  onClick={() => handleSelectQuickAmount('LITERS', 20)}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all"
-                >
-                  20 Litre
-                </button>
-                <button
-                  onClick={() => handleSelectQuickAmount('LITERS', 40)}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all"
-                >
-                  40 Litre
-                </button>
-                <button
-                  onClick={() => handleSelectQuickAmount('FULL', 60)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-lg transition-all"
-                >
-                  FULLE (Tam Depo)
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="text-center text-[11px] text-slate-500 font-bold">{hint}</div>
 
-          {/* Interactive Fuel Pump Gauge & Meter */}
-          {(isFueling || isFinished) && (
-            <div className="bg-slate-950/80 border-2 border-slate-800 rounded-3xl p-5 flex flex-col items-center gap-4">
-              {/* Digital Meter Displays */}
-              <div className="flex justify-between w-full border-b border-slate-800 pb-3 font-mono">
-                <div className="text-center">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">Verilen Yakıt</div>
-                  <div className="text-3xl font-black text-emerald-400">
-                    {dispensedLiters.toFixed(2)} <span className="text-sm text-slate-400">L</span>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">Tutar</div>
-                  <div className="text-3xl font-black text-sky-400">
-                    ₺{currentTotalCost.toFixed(2)}
-                  </div>
-                </div>
-              </div>
+          {/* Squeegee */}
+          <button
+            disabled={!!vehicle.windowsCleaned}
+            onClick={() => cleanVehicleWindows(vehicle.id)}
+            className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+              vehicle.windowsCleaned
+                ? 'bg-slate-800/60 text-emerald-400 cursor-default'
+                : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{vehicle.windowsCleaned ? 'Camlar Temiz ✓' : 'Camları Temizle'}</span>
+          </button>
 
-              {/* Progress Bar Gauge */}
-              <div className="w-full">
-                <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 font-mono">
-                  <span>Dolum İlerlemesi</span>
-                  <span>%{fillProgressPercent.toFixed(0)}</span>
-                </div>
-                <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-                  <div
-                    className={`h-full transition-all duration-100 ${
-                      isFinished ? 'bg-emerald-400' : 'bg-gradient-to-r from-sky-500 to-emerald-500'
-                    }`}
-                    style={{ width: `${fillProgressPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Hold-to-Fuel Button */}
-              {!isFinished ? (
-                <button
-                  onMouseDown={() => setIsHolding(true)}
-                  onMouseUp={() => setIsHolding(false)}
-                  onMouseLeave={() => setIsHolding(false)}
-                  onTouchStart={() => setIsHolding(true)}
-                  onTouchEnd={() => setIsHolding(false)}
-                  className={`w-full py-5 rounded-2xl font-black text-base uppercase tracking-wider transition-all shadow-2xl flex items-center justify-center gap-2 ${
-                    isHolding
-                      ? 'bg-emerald-500 text-slate-950 scale-95 shadow-emerald-500/50'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
-                  }`}
-                >
-                  <Zap className={`w-5 h-5 ${isHolding ? 'animate-spin' : ''}`} />
-                  <span>{isHolding ? 'YAKIT AKIYOR...' : 'DOLUM İÇİN BASILI TUT'}</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleComplete}
-                  className="w-full py-4 rounded-2xl font-black text-base uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-2xl shadow-emerald-500/40 flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                >
-                  <CheckCircle2 className="w-5 h-5 text-slate-950" />
-                  <span>Ödemeyi Al & Gönder (₺{currentTotalCost.toFixed(2)})</span>
-                </button>
-              )}
-            </div>
+          {/* Hand over / send off */}
+          {isFinished ? (
+            <button
+              onClick={() => completeVehicleFueling(vehicle.id)}
+              className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider bg-red-600 hover:bg-red-500 text-white shadow-xl shadow-red-600/30 transition-all"
+            >
+              Teslim Et — ₺{Math.round(runningTotal).toLocaleString('tr-TR')}
+            </button>
+          ) : (
+            <button
+              onClick={() => dismissCustomer(vehicle.id)}
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
+            >
+              Müşteriyi Gönder
+            </button>
           )}
         </div>
       </div>

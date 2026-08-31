@@ -1948,8 +1948,12 @@ export function finalizeSale(
   const speedRatio = clamp((vehicle.patience / vehicle.maxPatience) * 100, 0, 100);
   const accuracy = vehicle.request.isFinished ? 100 : 80;
   const facilities = blockFacilities(state, vehicleSide(vehicle));
+  // A wiped windscreen is the cheapest goodwill on the forecourt.
+  const squeegee = vehicle.windowsCleaned ? 8 : 0;
   const serviceScore = clamp(
-    calculateServiceScore(speedRatio, accuracy, state.station.cleanliness) + facilities.satisfaction,
+    calculateServiceScore(speedRatio, accuracy, state.station.cleanliness) +
+      facilities.satisfaction +
+      squeegee,
     0,
     100
   );
@@ -3057,7 +3061,7 @@ function isOnForecourt(vehicle: VehicleEntity): boolean {
  * Sends one car away mid-service, giving back everything it was holding.
  * Returns the litres that went into it and will never be paid for.
  */
-function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
+export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
   const reserved = vehicle.request.reservedLiters ?? 0;
   const dispensed = vehicle.request.dispensedLiters;
   let unpaid = 0;

@@ -37,6 +37,7 @@ import {
   closeForecourt,
   evictFromPump,
   dailyPriceReputationDelta,
+  dismissVehicle,
   DRIVEWAY_Z
 } from '../domain/services/simulationEngine';
 import {
@@ -241,6 +242,9 @@ interface GameStore {
   upgradeRoad: () => boolean;
   upgradePump: (pumpId: string) => boolean;
   repairPump: (pumpId: string) => boolean;
+  addPumpFuel: (pumpId: string, fuel: 'diesel' | 'lpg') => boolean;
+  cleanVehicleWindows: (vehicleId: string) => void;
+  dismissCustomer: (vehicleId: string) => void;
   cleanStation: () => boolean;
   /** Development aid: unlocks every level-gated feature for testing. */
   devUnlockEverything: () => void;
@@ -1432,16 +1436,8 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     state.pumps[pumpId].level = nextLevel;
     state.pumps[pumpId].flowRateLps = upgradeConf.flowRateLps || 10;
-    if (nextLevel >= 2 && state.tanks.diesel.capacity > 0) {
-      if (!state.pumps[pumpId].supportedFuels.includes('diesel')) {
-        state.pumps[pumpId].supportedFuels.push('diesel');
-      }
-    }
-    if (nextLevel >= 3 && state.tanks.lpg.capacity > 0) {
-      if (!state.pumps[pumpId].supportedFuels.includes('lpg')) {
-        state.pumps[pumpId].supportedFuels.push('lpg');
-      }
-    }
+    // Which fuels the pump dispenses is a separate purchase (addPumpFuel):
+    // the ladder buys speed and durability, the nozzles buy reach.
 
     sounds.playLevelUp();
     SaveManager.saveGame(state);
@@ -1500,6 +1496,71 @@ export const useGameStore = create<GameStore>((set, get) => {
       message: `${pump.id} tamamen onarıldı (%100 Sağlık).`
     });
     return true;
+  },
+
+  addPumpFuel: (pumpId, fuel) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[pumpId];
+    const module = GAME_CONFIG.pumpFuelModules[fuel];
+    if (!pump || !module || pump.supportedFuels.includes(fuel)) return false;
+
+    // Access opens with level; ownership is bought — per pump, with money.
+    if (gameState.player.level < module.minLevel) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Seviye Yetersiz',
+        message: `${GAME_CONFIG.fuels[fuel].shortName} tabancası için Seviye ${module.minLevel} gerekiyor.`
+      });
+      return false;
+    }
+    if (gameState.player.cash < module.cost) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `${GAME_CONFIG.fuels[fuel].shortName} tabancası için ${module.cost.toLocaleString('tr-TR')} TL gerekiyor.`
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const tx = TransactionService.executeCashTransaction(state, {
+      type: 'UPGRADE',
+      amount: -module.cost,
+      description: `${pump.id} ${GAME_CONFIG.fuels[fuel].shortName} tabancası`
+    });
+    if (!tx.success) return false;
+
+    state.pumps[pumpId].supportedFuels.push(fuel);
+
+    sounds.playBuildPlace();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'REWARD',
+      title: 'Tabanca Takıldı',
+      message: `${pump.id} artık ${GAME_CONFIG.fuels[fuel].shortName} basıyor.`
+    });
+    return true;
+  },
+
+  cleanVehicleWindows: (vehicleId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const vehicle = state.vehicles[vehicleId];
+    if (!vehicle || vehicle.windowsCleaned) return;
+
+    vehicle.windowsCleaned = true;
+    sounds.playClick();
+    set({ gameState: state });
+  },
+
+  dismissCustomer: (vehicleId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const vehicle = state.vehicles[vehicleId];
+    if (!vehicle) return;
+
+    dismissVehicle(state, vehicle);
+    SaveManager.saveGame(state);
+    set({ gameState: state, selectedVehicleId: null, activeModal: 'NONE' });
   },
 
   cleanStation: () => {

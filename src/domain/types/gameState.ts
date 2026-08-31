@@ -150,6 +150,8 @@ export interface VehicleEntity {
    * if the player sells that building, it is this visitor who storms off.
    */
   visitBuildingId?: string | null;
+  /** The player wiped this customer's windscreen — service they remember. */
+  windowsCleaned?: boolean;
   /** Seconds of charging still to go. */
   chargeSecondsLeft?: number;
   /**

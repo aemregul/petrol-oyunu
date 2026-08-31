@@ -164,6 +164,43 @@ describe('pump upgrades and repair', () => {
     expect(useGameStore.getState().gameState.pumps.pump_1.level).toBe(2);
   });
 
+  it('sells nozzles for money, gated only by the promised levels', () => {
+    const state = useGameStore.getState().gameState;
+    state.player.level = 2;
+    useGameStore.setState({ gameState: { ...state } });
+
+    // Diesel opens at level 3; below it the module is not for sale.
+    expect(useGameStore.getState().addPumpFuel('pump_1', 'diesel')).toBe(false);
+
+    const ready = useGameStore.getState().gameState;
+    ready.player.level = 3;
+    useGameStore.setState({ gameState: { ...ready } });
+
+    const cashBefore = useGameStore.getState().gameState.player.cash;
+    expect(useGameStore.getState().addPumpFuel('pump_1', 'diesel')).toBe(true);
+
+    const after = useGameStore.getState().gameState;
+    expect(after.pumps.pump_1.supportedFuels).toContain('diesel');
+    expect(after.player.cash).toBe(cashBefore - GAME_CONFIG.pumpFuelModules.diesel.cost);
+
+    // Already fitted: the same money cannot be taken twice.
+    expect(useGameStore.getState().addPumpFuel('pump_1', 'diesel')).toBe(false);
+  });
+
+  it('no longer bundles fuels into the speed ladder', () => {
+    const state = useGameStore.getState().gameState;
+    state.player.level = 12;
+    useGameStore.setState({ gameState: { ...state } });
+
+    expect(useGameStore.getState().upgradePump('pump_1')).toBe(true);
+    expect(useGameStore.getState().upgradePump('pump_1')).toBe(true);
+
+    // S3 pump, still petrol-only: reach is bought at the nozzle, not the ladder.
+    const pump = useGameStore.getState().gameState.pumps.pump_1;
+    expect(pump.level).toBe(3);
+    expect(pump.supportedFuels).toEqual(['gasoline']);
+  });
+
   it('repairs a worn pump back to full health for a price', () => {
     const state = useGameStore.getState().gameState;
     state.pumps.pump_1.health = 20;
