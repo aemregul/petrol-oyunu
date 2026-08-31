@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { DECAL, decal } from './decal';
 import { concreteTexture } from './concrete';
+import { APRON_FRONT, FAR_APRON_FRONT, pavedSpan } from './forecourt';
 import {
   LAYOUT,
   FORECOURT_FRONT,
@@ -602,18 +603,9 @@ export const GroundGrid: React.FC = () => {
   const plotWidth = plots.width * S;
   const plotDepth = plots.height * S;
 
-  /**
-   * The forecourt starts a verge's width back from the carriageway — but only
-   * ever on a grid line, and the rounding goes AWAY from the road.
-   *
-   * The verge worked out at 0.8 of a cell, which left the concrete stopping
-   * halfway across the front row of squares. Rounding it toward the road was
-   * tried and rejected: it swallowed the verge, shortened the ramps and left
-   * the frontage planting standing on concrete. Rounded backwards, the front
-   * row of squares becomes verge instead — evaluatePlacement refuses builds
-   * on it, and the engine's frontageKeepOut never drove cars there anyway.
-   */
-  const apronFront = FORECOURT_FRONT * S;
+  // Both edges, and the span they trim a parcel to, are defined once in
+  // ./forecourt so the land overlay cannot drift away from the concrete.
+  const apronFront = APRON_FRONT;
 
   /**
    * The concrete texture carries the colour now, so this is a tint over it
@@ -631,16 +623,7 @@ export const GroundGrid: React.FC = () => {
   // begin past the verge line, so a plain mirror would leave the ramps ending
   // in the grass a little short of the concrete: take whichever edge is
   // further from the road so the two always meet.
-  // Same rounding as the near side, mirrored: away from the road, which here
-  // means down. With today's constants this lands exactly on the far parcels'
-  // front boundary, so the far concrete already covers whole cells and its
-  // verge matches the near one's depth. The parcel clamp stays regardless —
-  // concrete must never spill past the land the player owns, whatever the
-  // road constants become.
-  const farApronFront = Math.min(
-    Math.floor((farRoadZ - roadHalfWidth - VERGE_DEPTH) / S) * S,
-    parcelBounds(0, -1).maxZ * S
-  );
+  const farApronFront = FAR_APRON_FRONT;
   /**
    * Far-side mouths only appear once something is actually built over there.
    * Bare or freshly paved land needs no access road yet.
@@ -694,10 +677,7 @@ export const GroundGrid: React.FC = () => {
    * World-space z span of a parcel, held clear of the carriageway. Near-side
    * parcels are trimmed at their front edge, far-side ones at their back.
    */
-  const parcelSpan = (b: { minZ: number; maxZ: number }): [number, number] =>
-    b.minZ >= 0
-      ? [Math.max(b.minZ * S, apronFront), b.maxZ * S]
-      : [b.minZ * S, Math.min(b.maxZ * S, farApronFront)];
+  const parcelSpan = pavedSpan;
 
 
   return (

@@ -25,6 +25,7 @@
 
 import { GameState, VehicleEntity } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
+import { unpavedHoles } from './land';
 
 /**
  * Built but not solid: nothing here is a wall to steer round. A canopy is a
@@ -95,6 +96,20 @@ export function wallRects(
     const w = (turned ? building.size[1] : building.size[0]) / 2;
     const d = (turned ? building.size[0] : building.size[1]) / 2;
     out.push(grow(building.position, w, d, clearance));
+  }
+
+  // Bare ground inside the plot's bounding box is as solid as a wall to a car:
+  // there is no concrete under it. Grown like everything else, so a car keeps
+  // its body off the grass rather than putting two wheels on it.
+  for (const hole of unpavedHoles(state.station.plots, side)) {
+    out.push(
+      grow(
+        [(hole.minX + hole.maxX) / 2, (hole.minZ + hole.maxZ) / 2],
+        (hole.maxX - hole.minX) / 2,
+        (hole.maxZ - hole.minZ) / 2,
+        clearance
+      )
+    );
   }
 
   return out;

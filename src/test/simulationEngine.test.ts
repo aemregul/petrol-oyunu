@@ -288,6 +288,64 @@ describe('simulationEngine - attendants', () => {
     expect(state.player.cash).toBeGreaterThan(cashBefore);
     expect(state.tanks.gasoline.stock).toBeLessThan(1500);
   });
+
+  /**
+   * An island serves from its two long faces, and those faces turn with it.
+   * The bay used to be pinned to world x however the pump was rotated, so a
+   * pump turned to face the entrance still had cars pulling up against its
+   * blank end.
+   */
+  it('parks a car against the face a turned pump presents', () => {
+    const served = (rotation: 0 | 90) => {
+      const state = createInitialGameState();
+      state.dayState.timeSpeed = 1;
+      state.tanks.gasoline.stock = 3000;
+      state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.7;
+
+      const pump = state.pumps.pump_1;
+      pump.rotation = rotation;
+      state.employees.emp_test = {
+        id: 'emp_test',
+        name: 'Test Usta',
+        role: 'PUMP_ATTENDANT',
+        level: 3,
+        wage: 1050,
+        assignedPumpId: 'pump_1',
+        state: 'IDLE',
+        serviceCount: 0,
+        currentVehicleId: null,
+        actionTimerSeconds: 0,
+        worldPosition: [12, 0, 10]
+      };
+
+      const effects = createEffects();
+      for (let i = 0; i < 20000; i++) {
+        runSimulationTick(state, 0.05, effects);
+        for (const v of Object.values(state.vehicles)) {
+          if (v.state !== 'FUELING' && v.state !== 'REQUEST') continue;
+          return {
+            dx: v.worldPosition[0] - pump.position[0],
+            dz: v.worldPosition[2] - pump.position[1],
+            // heading is atan2(dx, dz), so a car facing along z has |cos| > |sin|.
+            facesAlongZ: Math.abs(Math.cos(v.heading)) > Math.abs(Math.sin(v.heading))
+          };
+        }
+      }
+      return null;
+    };
+
+    const straight = served(0);
+    expect(straight).not.toBeNull();
+    // Unturned: beside the island on x, lying along the island's length in z.
+    expect(Math.abs(straight!.dx)).toBeGreaterThan(Math.abs(straight!.dz));
+    expect(straight!.facesAlongZ).toBe(true);
+
+    const turned = served(90);
+    expect(turned).not.toBeNull();
+    // A quarter turn swaps both: the car stands off in z and lies along x.
+    expect(Math.abs(turned!.dz)).toBeGreaterThan(Math.abs(turned!.dx));
+    expect(turned!.facesAlongZ).toBe(false);
+  });
 });
 
 describe('simulationEngine - missions', () => {
@@ -613,10 +671,7 @@ describe('simulationEngine - daily missions', () => {
 });
 
 describe('simulationEngine - forecourt boundary', () => {
-  // 12000 ticks of a busy forecourt: ~4.3s on an idle machine, which leaves
-  // the default 5s limit nothing to absorb load with — it was failing on
-  // machine contention alone, never on the simulation.
-  it('keeps every parked or queueing vehicle on the concrete', { timeout: 20000 }, () => {
+  it('keeps every parked or queueing vehicle on the concrete', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.player.cash = 200000;

@@ -805,6 +805,42 @@ export function pumpSide(pump: { position: [number, number] }): DrivewaySide {
 /** How far to the side of a pump a vehicle parks, in grid units. */
 export const PUMP_BAY_OFFSET = 1.4;
 
+/** True when a quarter turn has put a pump's serving faces on the z axis. */
+export function pumpFacesAcrossZ(pump: { rotation?: number }): boolean {
+  const turn = ((pump.rotation ?? 0) % 360 + 360) % 360;
+  return turn === 90 || turn === 270;
+}
+
+/**
+ * Where a car stands to be served, relative to the island.
+ *
+ * A pump island serves from its two long faces — PumpMesh draws a till and a
+ * holster on each, at local ±x — and those faces turn with the island. The bay
+ * was pinned to world x regardless, so turning a pump moved the hardware and
+ * left the car parked against its blank end: the player aims the pump at the
+ * entrance and the drivers still pull up sideways to it.
+ *
+ * Unturned, the side is chosen by where the queue feeds from, so the car pulls
+ * in rather than swinging across the island. Turned, the faces look up and down
+ * the plot instead, and the near one is the one the circulation lane is on.
+ */
+export function pumpBayOffset(
+  block: Pick<BlockLayout, 'queueStep' | 'laneZ'>,
+  pump: { position: [number, number]; rotation?: number }
+): [number, number] {
+  if (!pumpFacesAcrossZ(pump)) {
+    return [block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET, 0];
+  }
+  return [0, block.laneZ <= pump.position[1] ? -PUMP_BAY_OFFSET : PUMP_BAY_OFFSET];
+}
+
+/**
+ * How far back along the island a car lines itself up before rolling into a
+ * turned pump's bay. Roughly a car length, so the last leg is long enough to
+ * settle the heading rather than snapping it on arrival.
+ */
+const PUMP_APPROACH_RUN = 2.4;
+
 const BASE_DRIVE_SPEED = 3.6; // grid units per game-second
 
 /**
@@ -876,6 +912,18 @@ const MERGE_GAP = 4;
  * them — a driver waits at the give-way line, not two streets before it.
  */
 const MERGE_LOOKAHEAD = 5;
+
+/**
+ * Where a driver waiting for that gap actually stops.
+ *
+ * It used to be one unit off the lane's centre line — which is not beside the
+ * carriageway, it is *in* it. A car holding there had its nose in the traffic
+ * it was waiting for, close enough to be clipped by it and far enough off the
+ * through path that the passing driver had no reason to brake; the pair then
+ * sat locked together while the queue built up behind. The give-way line
+ * belongs at the kerb, clear of the lane by half a car.
+ */
+const MERGE_HOLD_LINE = LAYOUT.roadHalfWidth + CAR_CLEARANCE / 2;
 
 /**
  * How long a driver will sit behind an obstruction before edging past it. Two
@@ -1008,12 +1056,12 @@ function followThrottle(
   //
   // Only traffic coming up from behind counts, because the carriageway is
   // one-way and anything ahead of the join is already leaving.
-  const joining = (laneZ: number) => {
+  const joining = (laneZ: number, hold: number) => {
     const away = Math.abs(vehicle.worldPosition[2] - laneZ);
-    return Math.abs(target[2] - laneZ) < 1 && away >= 1 && away < MERGE_LOOKAHEAD;
+    return Math.abs(target[2] - laneZ) < 1 && away >= hold && away < MERGE_LOOKAHEAD;
   };
 
-  if (joining(block.roadLaneZ)) {
+  if (joining(block.roadLaneZ, MERGE_HOLD_LINE)) {
     const flow = Math.sign(block.roadEndX - block.roadStartX);
     const noGap = traffic.some((other) => {
       if (other.id === vehicle.id) return false;
@@ -1026,7 +1074,7 @@ function followThrottle(
 
   // The return lane is the other place cars merge rather than follow: they
   // pull out of the bays sideways into traffic already running along it.
-  if (joining(block.exitLaneZ)) {
+  if (joining(block.exitLaneZ, 1)) {
     const occupied = traffic.some(
       (other) =>
         other.id !== vehicle.id &&
@@ -1334,21 +1382,27 @@ function pumpRoute(
   pump: PumpEntity
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
-  // Park on the side the traffic came from, so the car pulls in rather than
-  // swinging across the pump island.
-  const offset = block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET;
-  const bay = clampToApron(block, [pump.position[0] + offset, 0, pump.position[1]]);
+  const bay = pumpBay(block, pump);
 
   // Pull straight out of the waiting bay before turning along the lane. Cutting
   // the corner would take the car back down the line it was just standing in,
   // through everyone still waiting there.
-  return driveable(
-    state,
-    vehicle,
-    block,
-    [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
-    pump.id
-  );
+  //
+  // A car ends up facing the way its last leg ran, and it has to come to rest
+  // alongside the island rather than nosed into it — so the final approach runs
+  // down whichever axis the island is long on. Unturned that is z, straight off
+  // the lane; turned a quarter, it is x, which needs one more corner to line the
+  // car up before it rolls in.
+  const legs: Array<[number, number, number]> = pumpFacesAcrossZ(pump)
+    ? [
+        [vehicle.worldPosition[0], 0, block.laneZ],
+        [bay[0] + Math.sign(block.queueStep) * PUMP_APPROACH_RUN, 0, block.laneZ],
+        [bay[0] + Math.sign(block.queueStep) * PUMP_APPROACH_RUN, 0, bay[2]],
+        bay
+      ]
+    : [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay];
+
+  return driveable(state, vehicle, block, legs, pump.id);
 }
 
 /**
@@ -2214,20 +2268,26 @@ const TANKER_BAY_OFFSET: Record<string, number> = { gasoline: -1.6, diesel: 0, l
  * filler caps, on the road side of it — at its own fuel's berth.
  */
 function tankerBay(
+  state: GameState,
   block: BlockLayout,
   tank: BuildingEntity,
   fuelType: FuelType
-): [number, number, number] {
+): [number, number, number] | null {
   const half = (tank.size?.[1] ?? 3) / 2;
   const inward = block.side === 'far' ? -1 : 1;
+  const x = tank.position[0] + (TANKER_BAY_OFFSET[fuelType] ?? 0);
+
   // Behind the farm, away from the road — the far side from the customers.
   // Berthing on the road side put eighty seconds of unloading lorry across
-  // the lane the cars leave by.
-  return clampToApron(block, [
-    tank.position[0] + (TANKER_BAY_OFFSET[fuelType] ?? 0),
-    0,
-    tank.position[1] + inward * (half + 1.3)
-  ]);
+  // the lane the cars leave by. If the player has built there, the other side
+  // will do; if both are built over, the lorry has nowhere to stand and says
+  // so rather than settling inside the shop and unloading through its wall.
+  const walls = wallRects(state, block.side, 0, tank.id);
+  for (const towards of [inward, -inward]) {
+    const berth = clampToApron(block, [x, 0, tank.position[1] + towards * (half + 1.3)]);
+    if (!inRects(walls, berth[0], berth[2])) return berth;
+  }
+  return null;
 }
 
 /**
@@ -2409,7 +2469,9 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
         // back service lane and along it to the bay. The front lane belongs
         // to the customers — a forty-tonner idling on it corks the whole
         // forecourt, which is exactly what it did before this route.
-        const bay = tankerBay(block, tank, order.fuelType);
+        const bay = tankerBay(state, block, tank, order.fuelType);
+        if (!bay) continue;
+
         const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
         const start: [number, number, number] = [
           block.roadStartX - flow * 8,
@@ -2418,20 +2480,44 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
         ];
         const laneX = drivewayLaneX(block.entry, 0);
         const carrier = { worldPosition: start } as VehicleEntity;
+
+        // The back lane is still where a lorry belongs — but "up from the
+        // mouth, then along the back" was written as fixed waypoints, and on
+        // the starting plot the first of them runs straight through the office.
+        // The planner could only answer "no", and the code took a raw
+        // straight line instead: that is the lorry the player watched drive
+        // over the field and unload inside a building.
+        //
+        // So the back lane is a preference now, not an instruction. If it
+        // cannot be reached, the planner is asked for a way in past the front
+        // lane instead, and if there is no way at all the lorry holds at the
+        // gate — where the corner widget already says it is waiting, and where
+        // moving whatever blocks it is the player's to do. Every branch goes
+        // through the planner; none of them may ignore the plot.
+        const viaBackLane = driveable(
+          state,
+          carrier,
+          block,
+          [
+            [laneX, 0, block.roadLaneZ],
+            [laneX, 0, block.exitLaneZ],
+            [bay[0], 0, block.exitLaneZ],
+            bay
+          ],
+          undefined,
+          tank.id
+        );
         const route =
+          viaBackLane ??
           driveable(
             state,
             carrier,
             block,
-            [
-              [laneX, 0, block.roadLaneZ],
-              [laneX, 0, block.exitLaneZ],
-              [bay[0], 0, block.exitLaneZ],
-              bay
-            ],
+            [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], bay],
             undefined,
             tank.id
-          ) ?? [[laneX, 0, block.roadLaneZ], [laneX, 0, block.exitLaneZ], bay];
+          );
+        if (!route) continue;
 
         order.truck = {
           worldPosition: start,
@@ -3181,8 +3267,8 @@ function findAvailablePump(
 
 /** The spot alongside an island where a car actually stands to be served. */
 function pumpBay(block: BlockLayout, pump: PumpEntity): [number, number, number] {
-  const offset = block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET;
-  return clampToApron(block, [pump.position[0] + offset, 0, pump.position[1]]);
+  const [dx, dz] = pumpBayOffset(block, pump);
+  return clampToApron(block, [pump.position[0] + dx, 0, pump.position[1] + dz]);
 }
 
 function reservePumpFor(

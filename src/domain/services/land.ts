@@ -139,6 +139,69 @@ export function stationBounds(owned: string[]): ReturnType<typeof ownedBounds> {
 }
 
 /**
+ * The parcels inside a block's bounding box that were never concreted.
+ *
+ * Lane and clamp maths all work from that bounding box, because a rectangle is
+ * what they can be written against — but a plot is only a rectangle until the
+ * player buys an L of it. The notch is then inside the box and outside the
+ * forecourt, and everything downstream treated it as driveable: cars cut the
+ * corner over the grass, and a lorry that could not find a way round went
+ * straight across the field. Handing these back as obstacles is what keeps the
+ * rectangle honest without every caller having to know the true shape.
+ */
+const NO_HOLES: Array<{ minX: number; minZ: number; maxX: number; maxZ: number }> = [];
+
+export function unpavedHoles(
+  plots: { width: number; height: number; ownedParcels: string[]; pavedParcels: string[] },
+  side: 'near' | 'far'
+): Array<{ minX: number; minZ: number; maxX: number; maxZ: number }> {
+  // This runs inside route planning, so the common case — a plot that is a
+  // plain rectangle with concrete over all of it — has to cost almost nothing.
+  const far = side === 'far';
+  const paved: Array<{ col: number; row: number }> = [];
+  let ownedHere = 0;
+
+  for (const key of plots.ownedParcels) {
+    if (isFarSide(parseParcelKey(key).row) === far) ownedHere++;
+  }
+  if (ownedHere === 0) return NO_HOLES;
+
+  let minCol = Infinity;
+  let maxCol = -Infinity;
+  let minRow = Infinity;
+  let maxRow = -Infinity;
+
+  for (const key of plots.pavedParcels) {
+    const { col, row } = parseParcelKey(key);
+    if (isFarSide(row) !== far) continue;
+    paved.push({ col, row });
+    minCol = Math.min(minCol, col);
+    maxCol = Math.max(maxCol, col);
+    minRow = Math.min(minRow, row);
+    maxRow = Math.max(maxRow, row);
+  }
+  if (paved.length === 0) return NO_HOLES;
+
+  const cols = maxCol - minCol + 1;
+  const rows = maxRow - minRow + 1;
+  // Concrete fills its own bounding box and covers every parcel owned here:
+  // nothing is missing, so there is no hole to report and nothing to allocate.
+  if (paved.length === cols * rows && paved.length === ownedHere) return NO_HOLES;
+
+  const covered = new Set(paved.map(({ col, row }) => `${col},${row}`));
+  const out: Array<{ minX: number; minZ: number; maxX: number; maxZ: number }> = [];
+
+  for (let col = minCol; col <= maxCol; col++) {
+    for (let row = minRow; row <= maxRow; row++) {
+      if (covered.has(`${col},${row}`)) continue;
+      out.push(parcelBounds(col, row));
+    }
+  }
+
+  return out;
+}
+
+/**
  * Grid x span of the paved parcels fronting the highway on one side of it —
  * row 0 on the station's side, row -1 across the road. Anything that has to
  * meet the carriageway, a driveway mouth above all, has to sit inside this or
