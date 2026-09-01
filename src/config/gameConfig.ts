@@ -337,7 +337,11 @@ export const GAME_CONFIG: GameConfig = {
       size: [5, 5],
       unlockLevel: 5,
       description: 'Gelişmiş finansal raporlama ve istasyon müdürü çalışma alanı.',
-      icon: 'Building2'
+      icon: 'Building2',
+      // İstasyonla birlikte gelir: satın alınacak ya da sökülecek bir şey
+      // değil, yalnızca yükseltilir. `fixed` hem katalogdan çıkarır hem
+      // satışı engeller — tank sahası ve fiyat tabelasıyla aynı kural.
+      fixed: true
     },
     mini_market: {
       type: 'mini_market',

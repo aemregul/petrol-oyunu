@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { X, Hammer, Lock, Map as MapIcon, Milestone } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import { CatalogPreview, CatalogPhotoBooth } from '../CatalogPreview';
 
 /**
  * Land and road work are bought on the map rather than placed from the
@@ -119,6 +120,11 @@ export const BuildModal: React.FC = () => {
           (b) => !b.fixed && (category === 'all' || b.category === category)
         );
 
+  const photographable = useMemo(
+    () => Object.values(GAME_CONFIG.buildings).filter((b) => !b.fixed).map((b) => b.type),
+    []
+  );
+
   const handleSelectBuild = (type: string) => {
     enterBuildMode(type);
   };
@@ -130,7 +136,8 @@ export const BuildModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
+      <CatalogPhotoBooth types={photographable} />
+      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
@@ -179,7 +186,7 @@ export const BuildModal: React.FC = () => {
         </div>
 
         {/* Catalog Grid */}
-        <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+        <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
           {category === 'land' && <LandAndRoadCards
             onBuyLand={() => { enterLandMode(); setActiveModal('NONE'); }}
             onUpgradeRoad={upgradeRoad}
@@ -202,19 +209,32 @@ export const BuildModal: React.FC = () => {
                     : 'border-slate-700/80 hover:border-amber-500/50'
                 }`}
               >
-                <div>
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="font-extrabold text-sm text-white">{item.name}</div>
-                    <div className="font-mono font-bold text-emerald-400 text-sm">
-                      ₺{item.price.toLocaleString('tr-TR')}
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-400 leading-relaxed mb-3">{item.description}</div>
+                <div className="flex flex-col gap-3">
+                  {/* What the thing actually looks like, before paying for it. */}
+                  <CatalogPreview type={item.type} />
 
-                  <div className="flex items-center gap-3 text-[10px] font-mono text-slate-400 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
-                    <div>Boyut: {item.size[0]}x{item.size[1]}m</div>
-                    <div>•</div>
-                    <div>Günlük Bakım: ₺{item.dailyUpkeep}/gün</div>
+                  <div>
+                    <div className="flex justify-between items-baseline gap-2">
+                      <div className="font-extrabold text-sm text-white leading-tight">
+                        {item.name}
+                      </div>
+                      <div className="font-mono font-bold text-emerald-400 text-sm whitespace-nowrap">
+                        ₺{item.price.toLocaleString('tr-TR')}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <span className="px-2 py-0.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[10px] font-mono font-bold">
+                        {item.size[0]}x{item.size[1]}m
+                      </span>
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-mono font-bold">
+                        Bakım ₺{item.dailyUpkeep}/gün
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-400 leading-relaxed mt-2">
+                      {item.description}
+                    </div>
                   </div>
                 </div>
 

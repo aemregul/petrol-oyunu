@@ -215,7 +215,9 @@
       "Bash(git -C /Users/emre/petrol-oyunu worktree prune)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/)",
       "Bash(echo \"--- exit $?\")",
-      "Bash(echo \"exit $?\")"
+      "Bash(echo \"exit $?\")",
+      "Bash(node -e \"const d=require\\('/Users/emre/petrol-oyunu/node_modules/@react-three/drei/package.json'\\);console.log\\('drei',d.version\\)\")",
+      "Bash(node -e \"const d=require\\('/Users/emre/petrol-oyunu/node_modules/@react-three/drei/index.cjs.js'\\); for \\(const k of ['Bounds','useBounds','Center','Stage']\\) console.log\\(k, k in d\\);\")"
     ],
     "additionalDirectories": [
       "/private/tmp"
