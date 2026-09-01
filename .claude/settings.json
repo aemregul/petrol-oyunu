@@ -262,7 +262,11 @@
       "Bash(awk '/export function snapPlacement/,/^}/' src/domain/services/placement.ts)",
       "Bash(node .shot.mjs x 3000)",
       "Bash(git merge *)",
-      "Bash(git commit -q -m 'chore: record git merge tool permission *)"
+      "Bash(git commit -q -m 'chore: record git merge tool permission *)",
+      "Bash(git -C /Users/emre/petrol-oyunu-codex status --short)",
+      "Bash(git -C /Users/emre/petrol-oyunu-codex diff)",
+      "Bash(git branch *)",
+      "Bash(git worktree *)"
     ],
     "additionalDirectories": [
       "/private/tmp"
