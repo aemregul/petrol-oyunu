@@ -54,6 +54,10 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
     <group
       position={[posX, 0, posZ]}
       rotation={[0, (pump.rotation * Math.PI) / 180, 0]}
+      // Lets whatever is drawn above the island — a canopy roof, chiefly —
+      // recognise a hit on this pump in its own list of intersections and
+      // stand aside.
+      userData={{ pumpId: pump.id }}
       onClick={(e) => {
         e.stopPropagation();
         if (editable) relocateStructure(pump.id);

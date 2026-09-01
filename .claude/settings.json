@@ -244,7 +244,9 @@
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 shadowoff)",
       "Bash(node --input-type=module -e ' *)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000)",
-      "Bash(grep -n \"const { model, groundOffset\" src/rendering/models/BuildingModel.tsx)"
+      "Bash(grep -n \"const { model, groundOffset\" src/rendering/models/BuildingModel.tsx)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 debug)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 fixed)"
     ],
     "additionalDirectories": [
       "/private/tmp"

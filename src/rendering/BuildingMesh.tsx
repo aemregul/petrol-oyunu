@@ -1,4 +1,5 @@
 import React, { useState, useMemo, Suspense } from 'react';
+import type { Object3D } from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
 import { BuildingModel } from './models/BuildingModel';
@@ -295,6 +296,23 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
  * lorry park: these read as what they are from their own shape, and a name
  * plate over each one turns the forecourt into a wall of labels.
  */
+/**
+ * Whether this pointer event also landed on a pump.
+ *
+ * R3F hands every handler the full list of intersections along the ray, so a
+ * roof can see what is underneath it and decline. The marker lives on the
+ * pump's root group, so any part of the island counts — the body, the nozzles
+ * or the plinth.
+ */
+function raysAPump(event: { intersections?: Array<{ object: Object3D }> }): boolean {
+  for (const hit of event.intersections ?? []) {
+    for (let node: Object3D | null = hit.object; node; node = node.parent) {
+      if (node.userData?.pumpId) return true;
+    }
+  }
+  return false;
+}
+
 const SIGNAGE: Record<
   string,
   { text: string; height?: number; color: string; textColor: string }
@@ -346,6 +364,15 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const posZ = anchored[1] * 2;
 
   const handleClick = (e: any) => {
+    // A canopy is a roof over the pump islands, and the whole reason to own
+    // one is that cars — and the player — go underneath it. Its own roof
+    // panel is the nearest thing to the camera over every pump it covers, so
+    // it was swallowing every click meant for the hardware below: the only
+    // way to reach a pump was to swing the camera round and aim between the
+    // legs. Stand aside when the same ray also found a pump; the pump's own
+    // handler runs next and takes it.
+    if (building.type === 'canopy' && raysAPump(e)) return;
+
     e.stopPropagation();
 
     // In edit mode a click lifts the structure straight into placement rather
@@ -394,6 +421,9 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
       rotation={[0, (building.rotation * Math.PI) / 180, 0]}
       onClick={handleClick}
       onPointerOver={(e) => {
+        // Same courtesy for the highlight: a roof must not light up as though
+        // it were the thing under the cursor.
+        if (building.type === 'canopy' && raysAPump(e)) return;
         e.stopPropagation();
         setHovered(true);
       }}
