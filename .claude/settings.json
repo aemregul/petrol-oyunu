@@ -241,7 +241,10 @@
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 textured)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 flat)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 shadowon)",
-      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 shadowoff)"
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 shadowoff)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000)",
+      "Bash(grep -n \"const { model, groundOffset\" src/rendering/models/BuildingModel.tsx)"
     ],
     "additionalDirectories": [
       "/private/tmp"

@@ -67,11 +67,56 @@ function stripBox(
  * it was given, so a board positioned from the footprint ends up hanging in the
  * air beside the building rather than fixed to it.
  */
+/**
+ * The horizontal run of the building at one height, and how far forward its
+ * front face reaches there.
+ *
+ * Walks the model's own vertices rather than its bounding box, because the box
+ * describes the widest part of the building at any height — which is exactly
+ * the wrong number for a board hung at the top of it.
+ */
+function facadeAt(
+  object: THREE.Object3D,
+  y: number,
+  onWall: boolean
+): { minX: number; maxX: number; frontZ: number } {
+  // A band rather than a plane: a roofline is never perfectly flat, and a wall
+  // sign wants the storey it sits on, not the single row of vertices at its
+  // exact height.
+  const band = onWall ? 0.9 : 0.55;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let frontZ = -Infinity;
+  const vertex = new THREE.Vector3();
+
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const position = mesh.geometry?.getAttribute('position');
+    if (!position) return;
+
+    for (let i = 0; i < position.count; i++) {
+      vertex.fromBufferAttribute(position as THREE.BufferAttribute, i);
+      mesh.localToWorld(vertex);
+      if (Math.abs(vertex.y - y) > band) continue;
+      minX = Math.min(minX, vertex.x);
+      maxX = Math.max(maxX, vertex.x);
+      frontZ = Math.max(frontZ, vertex.z);
+    }
+  });
+
+  // Nothing at that height — a model whose top is a spire, say. The caller
+  // falls back to the bounding box.
+  if (minX === Infinity) return { minX: NaN, maxX: NaN, frontZ: NaN };
+  return { minX, maxX, frontZ };
+}
+
 export const BuildingModel: React.FC<BuildingModelProps> = ({ type, footprint, sign }) => {
   const config = BUILDING_MODELS[type];
   const { scene } = useGLTF(config.url);
 
-  const { model, groundOffset, extent } = useMemo(() => {
+  const { model, groundOffset, extent, facade } = useMemo(() => {
     const clone = scene.clone(true);
 
     clone.traverse((child) => {
@@ -113,10 +158,21 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, footprint, s
     clone.updateMatrixWorld(true);
     const scaled = new THREE.Box3().setFromObject(clone);
 
+    const size2 = scaled.getSize(new THREE.Vector3());
+    const anchor = config.signAnchor;
+    // Where the board will hang, measured from the ground the model stands on.
+    const signHeight = anchor != null ? size2.y * anchor : size2.y;
+
     return {
       model: clone,
       groundOffset: -scaled.min.y,
-      extent: scaled.getSize(new THREE.Vector3())
+      extent: size2,
+      // The building is rarely one block. A shop with a low wing beside a tall
+      // one is as wide at the ground as it is narrow at the roof, and a board
+      // sized from the whole bounding box then hangs off the end of the tall
+      // part into thin air. So the board is measured against the mass that is
+      // actually there at the height it hangs at, not against the footprint.
+      facade: facadeAt(clone, scaled.min.y + signHeight, anchor != null)
     };
   }, [scene, config, footprint]);
 
@@ -129,20 +185,27 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, footprint, s
   // wherever the building ends up pointing.
   const signYaw = rotation + ((config.signYaw || 0) * Math.PI) / 180;
 
+  // Measured span where the board hangs, falling back to the bounding box for
+  // a model that has nothing at that height to measure.
+  const spanX = Number.isFinite(facade.minX) ? facade.maxX - facade.minX : extent.x;
+  const signWidth = Math.max(2.2, spanX * 0.82);
+  const signCentreX = Number.isFinite(facade.minX) ? (facade.minX + facade.maxX) / 2 : 0;
+  const signWallOffset = Number.isFinite(facade.frontZ) ? facade.frontZ : extent.z / 2;
+
   return (
     <>
       <primitive object={model} position={[0, groundOffset, 0]} rotation={[0, rotation, 0]} />
 
       {sign && (
-        <group rotation={[0, signYaw, 0]}>
+        <group rotation={[0, signYaw, 0]} position={[signCentreX, 0, 0]}>
           <FasciaSign
             text={sign.text}
             color={sign.color}
             textColor={sign.textColor}
-            width={Math.max(2.2, extent.x * 0.72)}
+            width={signWidth}
             y={onWall ? extent.y * config.signAnchor! : extent.y}
             anchor={onWall ? 'center' : 'bottom'}
-            wallOffset={onWall ? extent.z / 2 : 0}
+            wallOffset={onWall ? signWallOffset : 0}
           />
         </group>
       )}
