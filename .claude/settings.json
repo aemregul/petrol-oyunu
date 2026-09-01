@@ -260,7 +260,9 @@
       "Bash(awk '/export function priceSignPosition/,/^}/' src/domain/services/simulationEngine.ts)",
       "Bash(npx tsx -e ' *)",
       "Bash(awk '/export function snapPlacement/,/^}/' src/domain/services/placement.ts)",
-      "Bash(node .shot.mjs x 3000)"
+      "Bash(node .shot.mjs x 3000)",
+      "Bash(git merge *)",
+      "Bash(git commit -q -m 'chore: record git merge tool permission *)"
     ],
     "additionalDirectories": [
       "/private/tmp"
