@@ -1,5 +1,4 @@
 import React, { useState, useMemo, Suspense } from 'react';
-import type { Object3D } from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
 import { BuildingModel } from './models/BuildingModel';
@@ -83,61 +82,6 @@ const FallbackGeometry: React.FC<{ building: BuildingEntity }> = ({ building }) 
         </mesh>
       );
   }
-};
-
-/** The island roof: hand-built, since no CC0 kit ships a forecourt canopy. */
-const Canopy: React.FC<{ building: BuildingEntity }> = ({ building }) => {
-  const w = building.size[0] * 2;
-  const d = building.size[1] * 2;
-  const height = 6.2;
-  const pillarX = w / 2 - 1;
-  const pillarZ = d / 2 - 1;
-
-  return (
-    <group>
-      {[
-        [-pillarX, -pillarZ],
-        [pillarX, -pillarZ],
-        [-pillarX, pillarZ],
-        [pillarX, pillarZ]
-      ].map(([x, z]) => (
-        <mesh key={`${x},${z}`} position={[x, height / 2, z]} castShadow>
-          <cylinderGeometry args={[0.22, 0.26, height, 12]} />
-          <meshStandardMaterial color="#cbd5e1" metalness={0.35} roughness={0.5} />
-        </mesh>
-      ))}
-
-      {/* Roof slab with a coloured fascia band around all four sides */}
-      <mesh position={[0, height + 0.45, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, 0.5, d]} />
-        <meshStandardMaterial color="#94a3b8" roughness={0.65} metalness={0.15} />
-      </mesh>
-      <mesh position={[0, height + 0.05, 0]}>
-        <boxGeometry args={[w + 0.25, 0.42, d + 0.25]} />
-        <meshStandardMaterial
-          color="#0284c7"
-          emissive="#0284c7"
-          emissiveIntensity={0.45}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Recessed downlights so the island reads as lit from above */}
-      {[-w / 4, w / 4].map((x) =>
-        [-d / 4, d / 4].map((z) => (
-          <mesh key={`${x}_${z}`} position={[x, height - 0.16, z]} rotation={[Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.42, 12]} />
-            <meshStandardMaterial
-              color="#fff8e1"
-              emissive="#ffedb8"
-              emissiveIntensity={1.6}
-              toneMapped={false}
-            />
-          </mesh>
-        ))
-      )}
-    </group>
-  );
 };
 
 /**
@@ -296,23 +240,6 @@ const TankFixtures: React.FC<{ building: BuildingEntity }> = ({ building }) => {
  * lorry park: these read as what they are from their own shape, and a name
  * plate over each one turns the forecourt into a wall of labels.
  */
-/**
- * Whether this pointer event also landed on a pump.
- *
- * R3F hands every handler the full list of intersections along the ray, so a
- * roof can see what is underneath it and decline. The marker lives on the
- * pump's root group, so any part of the island counts — the body, the nozzles
- * or the plinth.
- */
-function raysAPump(event: { intersections?: Array<{ object: Object3D }> }): boolean {
-  for (const hit of event.intersections ?? []) {
-    for (let node: Object3D | null = hit.object; node; node = node.parent) {
-      if (node.userData?.pumpId) return true;
-    }
-  }
-  return false;
-}
-
 const SIGNAGE: Record<
   string,
   { text: string; height?: number; color: string; textColor: string }
@@ -364,15 +291,6 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const posZ = anchored[1] * 2;
 
   const handleClick = (e: any) => {
-    // A canopy is a roof over the pump islands, and the whole reason to own
-    // one is that cars — and the player — go underneath it. Its own roof
-    // panel is the nearest thing to the camera over every pump it covers, so
-    // it was swallowing every click meant for the hardware below: the only
-    // way to reach a pump was to swing the camera round and aim between the
-    // legs. Stand aside when the same ray also found a pump; the pump's own
-    // handler runs next and takes it.
-    if (building.type === 'canopy' && raysAPump(e)) return;
-
     e.stopPropagation();
 
     // In edit mode a click lifts the structure straight into placement rather
@@ -401,8 +319,6 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
         <BuildingModel type={building.type} footprint={building.size} sign={signage} />
       </Suspense>
     </ModelErrorBoundary>
-  ) : building.type === 'canopy' ? (
-    <Canopy building={building} />
   ) : building.type === 'pylon_sign' ? (
     <PylonSign />
   ) : building.type === 'price_sign' ? (
@@ -421,9 +337,6 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
       rotation={[0, (building.rotation * Math.PI) / 180, 0]}
       onClick={handleClick}
       onPointerOver={(e) => {
-        // Same courtesy for the highlight: a roof must not light up as though
-        // it were the thing under the cursor.
-        if (building.type === 'canopy' && raysAPump(e)) return;
         e.stopPropagation();
         setHovered(true);
       }}

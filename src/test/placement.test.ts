@@ -90,16 +90,15 @@ describe('structures', () => {
     return state;
   };
 
-  it('lets a canopy stand over a pump, and nothing else overlap one', () => {
+  it('keeps every structure off the pump islands', () => {
     const state = ready();
     const pump = Object.values(state.pumps)[0];
 
-    // A roof over the island is the whole point of the thing.
-    expect(evaluatePlacement(state, 'canopy', pump.position, 0).valid).toBe(true);
-    // But it has to be over a pump, not parked on spare concrete.
-    expect(evaluatePlacement(state, 'canopy', [3, 3], 0).valid).toBe(false);
-    // Everything else still keeps its distance.
+    // The canopy used to be the one exception, allowed to share ground with
+    // the island it roofed. Roofs belong to the pump now, so the forecourt
+    // has no overlap exemptions left at all.
     expect(evaluatePlacement(state, 'mini_market', pump.position, 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'canopy', pump.position, 0).valid).toBe(false);
   });
 
   it('builds a rest complex over the parade it replaces', () => {

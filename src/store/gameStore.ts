@@ -43,7 +43,8 @@ import {
 import {
   evaluatePlacement,
   snapPlacement,
-  absorbedByRestComplex
+  absorbedByRestComplex,
+  getFootprint
 } from '../domain/services/placement';
 import {
   stationBounds,
@@ -292,6 +293,7 @@ interface GameStore {
       supportedFuels: FuelType[];
       flowRateLps: number;
       employeeId: string | null;
+      hasCanopy?: boolean;
     };
   } | null;
   landMode: LandModeState;
@@ -352,6 +354,12 @@ interface GameStore {
   upgradePump: (pumpId: string) => boolean;
   repairPump: (pumpId: string) => boolean;
   addPumpFuel: (pumpId: string, fuel: 'diesel' | 'lpg') => boolean;
+  /** True while the player is choosing which island to roof. */
+  fittingCanopy: boolean;
+  enterCanopyMode: () => void;
+  exitCanopyMode: () => void;
+  fitCanopy: (pumpId: string) => boolean;
+  removeCanopy: (pumpId: string) => boolean;
   cleanVehicleWindows: (vehicleId: string) => void;
   dismissCustomer: (vehicleId: string) => void;
   cleanStation: () => boolean;
@@ -385,6 +393,54 @@ interface GameStore {
   claimMissionReward: (missionId: string) => boolean;
   resetGameSave: () => void;
   updatePerfMetrics: (metrics: Partial<PerformanceMetrics>) => void;
+}
+
+/**
+ * Hands every canopy in a save to the pumps it stood over, then tears the
+ * building down.
+ *
+ * Canopies used to be free-standing structures parked over whichever islands
+ * they happened to cover; they are part of the island now. A roof that covered
+ * three pumps becomes three roofs, which is what it looked like it was doing
+ * all along, and the player pays nothing for the change.
+ *
+ * Runs on every load — including saves restored from a backup slot — so it has
+ * to be harmless once there is nothing left to convert.
+ */
+export function foldCanopiesIntoPumps(state: GameState): void {
+  const pumpSize = GAME_CONFIG.buildings.pump_standard.size;
+
+  for (const building of Object.values(state.buildings)) {
+    if (building.type !== 'canopy') continue;
+
+    // The saved size is used rather than the catalogue's, so a canopy keeps
+    // whatever reach it was bought with.
+    const roof = getFootprint(building.position, building.size, building.rotation);
+    let covered = 0;
+
+    for (const pump of Object.values(state.pumps)) {
+      const island = getFootprint(pump.position, pumpSize, pump.rotation);
+      const covers =
+        roof.minX < island.maxX &&
+        roof.maxX > island.minX &&
+        roof.minZ < island.maxZ &&
+        roof.maxZ > island.minZ;
+      if (covers) {
+        pump.hasCanopy = true;
+        covered++;
+      }
+    }
+
+    // An orphan — every pump under it was sold off after it went up — has
+    // nothing to become, so its money goes back rather than evaporating.
+    if (covered === 0) {
+      state.player.cash +=
+        Math.round((GAME_CONFIG.buildings.canopy.price * GAME_CONFIG.economy.refundRatio) / 10) *
+        10;
+    }
+
+    delete state.buildings[building.id];
+  }
 }
 
 /**
@@ -433,6 +489,8 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   // The price board is infrastructure: it belongs between the mouths, not
   // wherever an older save happened to leave it.
   syncPriceSign(loaded);
+
+  foldCanopiesIntoPumps(loaded);
 
   // Storage went through two shapes before the farm: bare capacity with no
   // building, then one package building per fuel. Both fold into the single
@@ -521,6 +579,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   selectedVehicleId: null,
   selectedPumpId: null,
   selectedBuildingId: null,
+  fittingCanopy: false,
   buildMode: {
     active: false,
     buildingType: null,
@@ -650,6 +709,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     // one of those is picking up the one that already exists.
     if (GAME_CONFIG.buildings[buildingType]?.fixed) return;
 
+    // A canopy is bolted to a pump rather than set down on the concrete, so
+    // the catalogue card asks which pump instead of opening a ground preview.
+    if (GAME_CONFIG.buildings[buildingType]?.attachTo === 'pump') {
+      get().enterCanopyMode();
+      return;
+    }
+
     sounds.playClick();
     set((state) => {
       // A ramp opens where the mouth it replaces already is, so the preview
@@ -697,7 +763,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           health: relocating.health,
           employeeId: relocating.pump.employeeId,
           currentVehicleId: null,
-          flowRateLps: relocating.pump.flowRateLps
+          flowRateLps: relocating.pump.flowRateLps,
+          hasCanopy: relocating.pump.hasCanopy
         };
         const attendant = relocating.pump.employeeId
           ? state.employees[relocating.pump.employeeId]
@@ -862,7 +929,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         health: carried?.health ?? 100,
         employeeId: null,
         currentVehicleId: null,
-        flowRateLps: carried?.pump?.flowRateLps ?? 8
+        flowRateLps: carried?.pump?.flowRateLps ?? 8,
+        hasCanopy: carried?.pump?.hasCanopy
       };
 
       // The attendant who worked this bay follows it to its new spot.
@@ -975,6 +1043,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     for (let step = 2; step <= level; step++) {
       invested += upgrades?.[step]?.cost ?? 0;
     }
+
+    // A roof is part of the island it stands on, so selling the pump sells
+    // the canopy with it rather than leaving the money behind.
+    if (pump?.hasCanopy) invested += GAME_CONFIG.buildings.canopy.price;
 
     const wear = 0.6 + 0.4 * (health / 100);
     return Math.round((invested * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
@@ -1230,7 +1302,9 @@ export const useGameStore = create<GameStore>((set, get) => {
               pump: {
                 supportedFuels: pump.supportedFuels,
                 flowRateLps: pump.flowRateLps,
-                employeeId: pump.employeeId
+                employeeId: pump.employeeId,
+                // The roof is bolted to the island and travels with it.
+                hasCanopy: pump.hasCanopy
               }
             }
           : {})
@@ -1671,6 +1745,115 @@ export const useGameStore = create<GameStore>((set, get) => {
       type: 'REWARD',
       title: 'Tabanca Takıldı',
       message: `${pump.id} artık ${GAME_CONFIG.fuels[fuel].shortName} basıyor.`
+    });
+    return true;
+  },
+
+  enterCanopyMode: () => {
+    const { gameState } = get();
+    const catalog = GAME_CONFIG.buildings.canopy;
+
+    if (gameState.player.level < catalog.unlockLevel) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Seviye Yetersiz',
+        message: `Ada sundurması için Seviye ${catalog.unlockLevel} gerekiyor.`
+      });
+      return;
+    }
+
+    // Nothing to fit it to is worth saying plainly, rather than dropping the
+    // player into a mode where every click does nothing.
+    const bare = Object.values(gameState.pumps).filter((p) => !p.hasCanopy);
+    if (bare.length === 0) {
+      get().addNotification({
+        type: 'INFO',
+        title: 'Sundurma Gerekmiyor',
+        message: Object.keys(gameState.pumps).length
+          ? 'Bütün pompaların sundurması zaten var.'
+          : 'Önce bir pompa kurun.'
+      });
+      return;
+    }
+
+    sounds.playClick();
+    set({ fittingCanopy: true, activeModal: 'NONE', selectedPumpId: null });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Sundurma Takılıyor',
+      message: 'Sundurmanın kurulacağı pompaya tıklayın.'
+    });
+  },
+
+  exitCanopyMode: () => set({ fittingCanopy: false }),
+
+  fitCanopy: (pumpId) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[pumpId];
+    const catalog = GAME_CONFIG.buildings.canopy;
+    if (!pump || pump.hasCanopy) return false;
+
+    if (gameState.player.level < catalog.unlockLevel) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Seviye Yetersiz',
+        message: `Ada sundurması için Seviye ${catalog.unlockLevel} gerekiyor.`
+      });
+      return false;
+    }
+    if (gameState.player.cash < catalog.price) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `Sundurma için ${catalog.price.toLocaleString('tr-TR')} TL gerekiyor.`
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const tx = TransactionService.executeCashTransaction(state, {
+      type: 'BUILD',
+      amount: -catalog.price,
+      description: `${pumpId} ada sundurması`
+    });
+    if (!tx.success) return false;
+
+    state.pumps[pumpId].hasCanopy = true;
+
+    sounds.playBuildPlace();
+    SaveManager.saveGame(state);
+    set({ gameState: state, fittingCanopy: false });
+    get().addNotification({
+      type: 'REWARD',
+      title: 'Sundurma Kuruldu',
+      message: 'Bu pompada dolum %5 daha hızlı.'
+    });
+    return true;
+  },
+
+  removeCanopy: (pumpId) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[pumpId];
+    if (!pump?.hasCanopy) return false;
+
+    const catalog = GAME_CONFIG.buildings.canopy;
+    const refund = Math.round((catalog.price * GAME_CONFIG.economy.refundRatio) / 10) * 10;
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    TransactionService.executeCashTransaction(state, {
+      type: 'REFUND',
+      amount: refund,
+      description: `${pumpId} sundurma söküldü`
+    });
+    delete state.pumps[pumpId].hasCanopy;
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Sundurma Söküldü',
+      message: `₺${refund.toLocaleString('tr-TR')} kasaya geçti.`
     });
     return true;
   },
@@ -2210,6 +2393,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       totalUpkeep += GAME_CONFIG.buildings.pump_standard.dailyUpkeep;
       // Upgraded hardware costs proportionally more to keep running.
       totalUpkeep += (pump.level - 1) * 40;
+      // A canopy is no longer a building, so its keep is collected here.
+      if (pump.hasCanopy) totalUpkeep += GAME_CONFIG.buildings.canopy.dailyUpkeep;
     }
     for (const bld of Object.values(state.buildings)) {
       const conf = GAME_CONFIG.buildings[bld.type];

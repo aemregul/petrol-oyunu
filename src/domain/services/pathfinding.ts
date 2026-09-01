@@ -28,12 +28,13 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { unpavedHoles } from './land';
 
 /**
- * Built but not solid: nothing here is a wall to steer round. A canopy is a
- * roof, a marked-out park is paint on the ground, and a widened ramp is the
- * driveway itself — treating that one as an obstacle had cars refusing to use
- * their own entrance.
+ * Built but not solid: nothing here is a wall to steer round. A marked-out
+ * park is paint on the ground, and a widened ramp is the driveway itself —
+ * treating that one as an obstacle had cars refusing to use their own
+ * entrance. Canopies are absent because they are no longer buildings; each
+ * one belongs to the pump it roofs.
  */
-const FLAT_TYPES = ['canopy', 'car_park', 'truck_park', 'wide_entry', 'wide_exit'];
+const FLAT_TYPES = ['car_park', 'truck_park', 'wide_entry', 'wide_exit'];
 
 export interface Rect {
   minX: number;

@@ -67,7 +67,10 @@ function entityFor(type: string) {
       health: 100,
       employeeId: null,
       currentVehicleId: null,
-      flowRateLps: 8
+      flowRateLps: 8,
+      // The canopy card is a picture of a roofed island, because a roof on
+      // its own is not what the player is being sold.
+      hasCanopy: type === 'canopy'
     } as PumpEntity
   };
 }
@@ -184,7 +187,7 @@ const Booth: React.FC<{
             {/* One boundary each: a model that never loads costs its own card
                 a picture and nothing else. */}
             <Suspense fallback={null}>
-              {type === 'pump_standard' ? (
+              {type === 'pump_standard' || type === 'canopy' ? (
                 <PumpMesh pump={pump} />
               ) : (
                 <BuildingMesh building={building} />

@@ -91,7 +91,6 @@ const ENTRIES: Entry[] = [
   { label: 'Kahveci', building: buildingOf('cafe') },
   { label: 'Lastik Servisi', building: buildingOf('tyre_service') },
   { label: 'Yağ Değişimi', building: buildingOf('oil_change') },
-  { label: 'Ada Sundurması', building: buildingOf('canopy') },
 
   { label: 'Geniş Giriş Rampası', building: buildingOf('wide_entry') },
   { label: 'Otopark', building: buildingOf('car_park') },

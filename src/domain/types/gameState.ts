@@ -100,6 +100,13 @@ export interface PumpEntity {
   employeeId: string | null;
   currentVehicleId: string | null;
   flowRateLps: number; // 8, 10, 13 L/s
+  /**
+   * A roof of this island's own, on a single column bolted to it.
+   *
+   * Optional because saves written before canopies became part of the pump
+   * have no such field, and an absent one reads as no roof.
+   */
+  hasCanopy?: boolean;
 }
 
 export interface VehicleEntity {

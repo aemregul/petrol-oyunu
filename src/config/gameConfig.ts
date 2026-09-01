@@ -34,6 +34,12 @@ export interface BuildingCatalogItem {
   isUnderground?: boolean;
   /** Comes with the station and cannot be bought, moved or sold. */
   fixed?: boolean;
+  /**
+   * Fitted to an existing structure instead of being placed on the ground.
+   * The catalogue still lists it and still names the price; what changes is
+   * that picking it asks the player which pump it goes on.
+   */
+  attachTo?: 'pump';
 }
 
 export interface BuildingUpgradeConfig {
@@ -319,14 +325,15 @@ export const GAME_CONFIG: GameConfig = {
     },
     canopy: {
       type: 'canopy',
-      name: 'Ada Sundurması (Canopy)',
+      name: 'Ada Sundurması',
       category: 'structure',
       price: 9000,
       dailyUpkeep: 50,
       size: [3, 5],
       unlockLevel: 5,
-      description: 'Altındaki pompalarda +%5 dolum hızı ve temizlik koruması sağlar.',
-      icon: 'Umbrella'
+      description: 'Bir pompanın üstüne kurulur: o pompada +%5 dolum hızı, istasyonda temizlik koruması.',
+      icon: 'Umbrella',
+      attachTo: 'pump'
     },
     office: {
       type: 'office',

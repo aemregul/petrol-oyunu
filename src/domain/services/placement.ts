@@ -167,16 +167,6 @@ function evaluateRoadsideSign(state: GameState, footprint: Footprint): Placement
   return { valid: true };
 }
 
-/** True when this footprint has at least one pump island under it. */
-function coversAPump(state: GameState, footprint: Footprint): boolean {
-  return Object.values(state.pumps).some((pump) =>
-    overlaps(
-      footprint,
-      getFootprint(pump.position, GAME_CONFIG.buildings.pump_standard.size, pump.rotation)
-    )
-  );
-}
-
 /**
  * Pulls a candidate position onto the line the thing being built can actually
  * live on. Ordinary structures go wherever the pointer is; a driveway ramp is
@@ -342,27 +332,20 @@ export function evaluatePlacement(
     return { valid: false, reason: 'Yol banketi inşaata kapalı; betonun gerisine kurun.' };
   }
 
-  // A canopy is a roof: the whole point of it is to stand over the pump
-  // island, so it is the one structure allowed to share ground with what is
-  // already there. Everything else has to find its own space.
-  if (buildingType !== 'canopy') {
-    // A rest complex is built *over* the units it replaces, so those are not
-    // obstacles to it — refusing the placement would mean the player had to
-    // demolish the parade first and lose the money twice.
-    const absorbed = new Set(
-      buildingType === 'rest_complex'
-        ? absorbedByRestComplex(state, drivewaySideAt(position[1])).map((b) => b.id)
-        : []
-    );
+  // A rest complex is built *over* the units it replaces, so those are not
+  // obstacles to it — refusing the placement would mean the player had to
+  // demolish the parade first and lose the money twice.
+  const absorbed = new Set(
+    buildingType === 'rest_complex'
+      ? absorbedByRestComplex(state, drivewaySideAt(position[1])).map((b) => b.id)
+      : []
+  );
 
-    for (const taken of occupiedFootprints(state)) {
-      if (absorbed.has(taken.id)) continue;
-      if (overlaps(footprint, taken.footprint)) {
-        return { valid: false, reason: `${taken.name} ile çakışıyor.` };
-      }
+  for (const taken of occupiedFootprints(state)) {
+    if (absorbed.has(taken.id)) continue;
+    if (overlaps(footprint, taken.footprint)) {
+      return { valid: false, reason: `${taken.name} ile çakışıyor.` };
     }
-  } else if (!coversAPump(state, footprint)) {
-    return { valid: false, reason: 'Sundurma bir pompanın üzerine kurulmalı.' };
   }
 
   return { valid: true };

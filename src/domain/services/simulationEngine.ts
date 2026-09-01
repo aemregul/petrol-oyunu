@@ -433,8 +433,11 @@ const FRONTAGE_DEPTH = 2;
 /**
  * Buildings a car drives under rather than into. Everything else is solid, so
  * a lane has to be routed around it.
+ *
+ * Empty since canopies became part of the pump they cover: a roof carried by
+ * the island can no longer stand in a lane on its own.
  */
-export const DRIVE_THROUGH_TYPES = ['canopy'];
+export const DRIVE_THROUGH_TYPES: string[] = [];
 
 /**
  * The z spans a lane has to keep clear of, counting only what actually stands
@@ -1932,20 +1935,16 @@ export function beginFueling(
 const CANOPY_FLOW_BONUS = 0.05;
 const CANOPY_GRIME_RELIEF = 0.7;
 
-/** True when a canopy's footprint covers this pump. */
-export function isUnderCanopy(
-  state: { buildings: Record<string, BuildingEntity> },
-  pump: { position: [number, number] }
-): boolean {
-  return Object.values(state.buildings).some((building) => {
-    if (building.type !== 'canopy') return false;
-    const halfX = building.size[0] / 2;
-    const halfZ = building.size[1] / 2;
-    return (
-      Math.abs(pump.position[0] - building.position[0]) <= halfX &&
-      Math.abs(pump.position[1] - building.position[1]) <= halfZ
-    );
-  });
+/**
+ * True when this island has a roof over it.
+ *
+ * A canopy used to be a separate building and this used to be a footprint
+ * test — one that quietly ignored the canopy's own rotation, so a turned roof
+ * covered the wrong pumps. A roof that belongs to the island it stands on
+ * cannot drift away from it, and the question becomes a field read.
+ */
+export function isUnderCanopy(pump: { hasCanopy?: boolean }): boolean {
+  return pump.hasCanopy === true;
 }
 
 /** Pushes fuel for one step. Returns true when the requested amount is met. */
@@ -1965,7 +1964,7 @@ export function dispenseStep(
   if (pump && pump.health < 30) flowRate *= 0.6;
 
   // Working under a roof is quicker, and that is what the canopy is sold on.
-  if (pump && isUnderCanopy(state, pump)) flowRate *= 1 + CANOPY_FLOW_BONUS;
+  if (pump && isUnderCanopy(pump)) flowRate *= 1 + CANOPY_FLOW_BONUS;
 
   const remaining = vehicle.request.calculatedLiters - vehicle.request.dispensedLiters;
   vehicle.request.dispensedLiters += Math.min(remaining, flowRate * deltaSeconds);
@@ -2136,10 +2135,17 @@ export function finalizeSale(
 
   // Serving customers dirties the forecourt; a trash can slows that down.
   const hasTrashCan = Object.values(state.buildings).some((b) => b.type === 'trash_can');
-  // Islands with a roof over them stay markedly cleaner day to day.
-  const roofed = Object.values(state.buildings).some((b) => b.type === 'canopy');
+  // Islands with a roof over them stay markedly cleaner day to day. Roofs
+  // belong to individual pumps, so the relief is earned in proportion: one
+  // canopy on a forecourt of six is worth a sixth of it, and roofing the lot
+  // gives the full protection the single station-wide canopy used to.
+  const pumps = Object.values(state.pumps);
+  const roofedShare = pumps.length
+    ? pumps.filter((p) => p.hasCanopy).length / pumps.length
+    : 0;
+  const grimeRelief = 1 - (1 - CANOPY_GRIME_RELIEF) * roofedShare;
   state.station.cleanliness = clamp(
-    state.station.cleanliness - (hasTrashCan ? 0.21 : 0.3) * (roofed ? CANOPY_GRIME_RELIEF : 1),
+    state.station.cleanliness - (hasTrashCan ? 0.21 : 0.3) * grimeRelief,
     0,
     100
   );
@@ -2775,6 +2781,21 @@ export function blockFacilities(
   let patience = 0;
   let satisfaction = 0;
   const services: Array<{ name: string; chance: number; avgSpend: number }> = [];
+
+  // Canopies sit on pumps rather than in the buildings collection, so the
+  // draw of a well-roofed forecourt is counted from the islands that carry
+  // one. Weighted like a building in mint condition, since a roof has no
+  // separate level or wear of its own.
+  const canopyEffect = GAME_CONFIG.buildingEffects.canopy;
+  if (canopyEffect) {
+    for (const pump of Object.values(state.pumps)) {
+      if (!pump.hasCanopy) continue;
+      if (drivewaySideAt(pump.position[1]) !== side) continue;
+      appeal += canopyEffect.appeal ?? 0;
+      patience += canopyEffect.patience ?? 0;
+      satisfaction += canopyEffect.satisfaction ?? 0;
+    }
+  }
 
   for (const building of Object.values(state.buildings)) {
     if (drivewaySideAt(building.position[1]) !== side) continue;

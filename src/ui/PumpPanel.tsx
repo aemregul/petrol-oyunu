@@ -3,7 +3,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { calculateRepairCost } from '../domain/formulas/economy';
-import { Fuel, X, Trash2 } from 'lucide-react';
+import { Fuel, X, Trash2, Umbrella } from 'lucide-react';
 
 const FUEL_TEXT: Record<string, string> = {
   gasoline: 'text-emerald-400',
@@ -36,6 +36,8 @@ export const PumpPanel: React.FC = () => {
   const addPumpFuel = useGameStore((s) => s.addPumpFuel);
   const sellStructure = useGameStore((s) => s.sellStructure);
   const structureValue = useGameStore((s) => s.structureValue);
+  const fitCanopy = useGameStore((s) => s.fitCanopy);
+  const removeCanopy = useGameStore((s) => s.removeCanopy);
 
   const pump = selectedPumpId ? gameState.pumps[selectedPumpId] : null;
   if (!pump || activeModal !== 'NONE' || buildMode.active) return null;
@@ -48,6 +50,10 @@ export const PumpPanel: React.FC = () => {
     pump.health < 100
       ? calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health)
       : null;
+
+  // A roof for this island, bought and sold from the island it belongs to.
+  const canopy = GAME_CONFIG.buildings.canopy;
+  const canopyLocked = gameState.player.level < canopy.unlockLevel;
 
   const fuelNames = pump.supportedFuels
     .map((f) => GAME_CONFIG.fuels[f]?.shortName ?? f)
@@ -161,6 +167,32 @@ export const PumpPanel: React.FC = () => {
             )}
             {moduleRow('diesel')}
             {moduleRow('lpg')}
+            {pump.hasCanopy ? (
+              <button
+                onClick={() => removeCanopy(pump.id)}
+                className={`game-btn w-full py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 ${TONE_BUTTON.slate}`}
+              >
+                <Umbrella className="w-3.5 h-3.5" />
+                <span>Sundurmayı Sök</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => fitCanopy(pump.id)}
+                disabled={canopyLocked}
+                className={`w-full py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                  canopyLocked
+                    ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                    : `game-btn ${TONE_BUTTON.blue}`
+                }`}
+              >
+                <Umbrella className="w-3.5 h-3.5" />
+                <span>
+                  {canopyLocked
+                    ? `Sundurma — Seviye ${canopy.unlockLevel}`
+                    : `+ Sundurma — ₺${canopy.price.toLocaleString('tr-TR')}`}
+                </span>
+              </button>
+            )}
             <button
               onClick={() => sellStructure(pump.id)}
               className="game-btn w-full py-2.5 rounded-xl font-extrabold text-xs bg-slate-800 hover:bg-slate-700 text-amber-400 border-2 border-slate-700 flex items-center justify-center gap-1.5"

@@ -24,11 +24,103 @@ const STATUS_COLORS: Record<string, string> = {
  * a white skirt, a pitched cap over the top, and a till panel and holster on
  * each face — both sides of an island serve a car.
  */
+/**
+ * The roof over one island, carried on a single column bolted to it.
+ *
+ * Built the way a real forecourt canopy is: the column stands at the back of
+ * the island where it is out of the way of both cars and the nozzle, and the
+ * deck cantilevers forward over the bays on either side. One roof per pump,
+ * so it turns with the island and can never drift off the thing it shelters —
+ * which is what the old free-standing four-legged canopy could do.
+ *
+ * Nothing here takes pointer events. A roof is the nearest thing to the camera
+ * over everything beneath it, and a clickable one swallows every attempt to
+ * reach the pump under it or the building behind it — which is exactly the
+ * bug the old free-standing canopy had.
+ *
+ * Silencing the group alone does nothing: three walks into the children and
+ * asks each mesh to raycast itself, and a Group's own raycast is already a
+ * no-op. So every descendant is told individually. Measured, not assumed —
+ * with the prop on the group, a click 70px out on the overhang still landed
+ * on the pump.
+ */
+const PumpCanopy: React.FC = () => {
+  // Kept low and stocky on purpose: a tall deck on a slim post reads as a
+  // slab hanging in the air rather than a roof something is holding up.
+  const deckY = 4.85;
+  const width = 6.4;
+  const depth = 5.8;
+  // Back of the island, clear of the bollard at z = -1.85.
+  const columnZ = -1.95;
+
+  return (
+    <group
+      ref={(g) => {
+        g?.traverse((child) => {
+          child.raycast = () => null;
+        });
+      }}
+    >
+      {/* Plinth tying the column to the island it stands on */}
+      <mesh position={[0, 0.42, columnZ]} castShadow>
+        <boxGeometry args={[1.36, 0.28, 1.16]} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.9} />
+      </mesh>
+      {/* The column: a broad branded pylon, the way a forecourt does it */}
+      <mesh position={[0, deckY / 2 + 0.3, columnZ]} castShadow>
+        <boxGeometry args={[1.16, deckY - 0.6, 0.98]} />
+        <meshStandardMaterial color="#e2e8f0" roughness={0.55} metalness={0.2} />
+      </mesh>
+      {/* House-colour panel on the column, as the brands do */}
+      <mesh position={[0, 2.9, columnZ + 0.5]} castShadow>
+        <boxGeometry args={[0.94, 2.4, 0.06]} />
+        <meshStandardMaterial color="#0284c7" roughness={0.5} />
+      </mesh>
+      {/* Bracket where the column meets the deck, so the load reads */}
+      <mesh position={[0, deckY - 0.14, columnZ]}>
+        <boxGeometry args={[1.9, 0.4, 1.7]} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.6} metalness={0.25} />
+      </mesh>
+
+      {/* Deck, with the coloured fascia wrapping its edge */}
+      <mesh position={[0, deckY + 0.42, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width, 0.42, depth]} />
+        <meshStandardMaterial color="#94a3b8" roughness={0.65} metalness={0.15} />
+      </mesh>
+      <mesh position={[0, deckY + 0.08, 0]}>
+        <boxGeometry args={[width + 0.22, 0.38, depth + 0.22]} />
+        <meshStandardMaterial
+          color="#0284c7"
+          emissive="#0284c7"
+          emissiveIntensity={0.45}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* Recessed downlights, so the island reads as lit from above */}
+      {[-1.5, 1.5].map((x) =>
+        [-1.3, 1.3].map((z) => (
+          <mesh key={`${x}_${z}`} position={[x, deckY - 0.12, z]} rotation={[Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.38, 12]} />
+            <meshBasicMaterial color="#fef9c3" toneMapped={false} />
+          </mesh>
+        ))
+      )}
+    </group>
+  );
+};
+
 export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
   const selectPump = useGameStore((s) => s.selectPump);
   const editMode = useGameStore((s) => s.editMode);
   const placing = useGameStore((s) => s.buildMode.active);
   const relocateStructure = useGameStore((s) => s.relocateStructure);
+  const fittingCanopy = useGameStore((s) => s.fittingCanopy);
+  const fitCanopy = useGameStore((s) => s.fitCanopy);
+
+  // While a canopy is being fitted, the islands that can take one are the
+  // only thing on the forecourt worth clicking.
+  const awaitingCanopy = fittingCanopy && !pump.hasCanopy;
 
   // A bay is picked up the same way as anything else on the forecourt.
   const editable = editMode && !placing;
@@ -54,13 +146,10 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
     <group
       position={[posX, 0, posZ]}
       rotation={[0, (pump.rotation * Math.PI) / 180, 0]}
-      // Lets whatever is drawn above the island — a canopy roof, chiefly —
-      // recognise a hit on this pump in its own list of intersections and
-      // stand aside.
-      userData={{ pumpId: pump.id }}
       onClick={(e) => {
         e.stopPropagation();
-        if (editable) relocateStructure(pump.id);
+        if (awaitingCanopy) fitCanopy(pump.id);
+        else if (editable) relocateStructure(pump.id);
         else selectPump(pump.id);
       }}
     >
@@ -209,6 +298,22 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
           <meshStandardMaterial color="#0f172a" roughness={0.9} />
         </mesh>
       )}
+
+      {/* Marks out the islands a canopy can still go on */}
+      {awaitingCanopy && (
+        <mesh position={[0, 0.34, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[3.4, 5.4]} />
+          <meshBasicMaterial
+            color="#38bdf8"
+            opacity={0.35}
+            transparent
+            depthWrite={false}
+            {...DECAL}
+          />
+        </mesh>
+      )}
+
+      {pump.hasCanopy && <PumpCanopy />}
 
       {pump.health < 40 && (
         <Html position={[0, 3.3, 0]} center distanceFactor={25} zIndexRange={[5, 0]}>
