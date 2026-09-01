@@ -348,6 +348,42 @@ describe('buying and selling a roof', () => {
     expect(after.player.cash).toBeGreaterThan(cashBefore);
   });
 
+  it('lets go of the fitting mode when the money will not stretch', () => {
+    const broke = JSON.parse(
+      JSON.stringify(useGameStore.getState().gameState)
+    ) as GameState;
+    broke.player.cash = 10;
+    useGameStore.setState({ gameState: broke, fittingCanopy: true });
+
+    const pump = Object.values(broke.pumps)[0];
+    useGameStore.getState().fitCanopy(pump.id);
+
+    // No island is cheaper, so staying in the mode would trap the player:
+    // every bare pump answers a click by refusing instead of opening.
+    expect(useGameStore.getState().fittingCanopy).toBe(false);
+  });
+
+  it('pays the same for a roof whichever way it leaves the forecourt', () => {
+    const store = useGameStore.getState();
+    const pump = Object.values(store.gameState.pumps)[0];
+    store.fitCanopy(pump.id);
+
+    // Worn hardware fetches less, and that has to apply to the roof by both
+    // routes — otherwise unbolting it before selling is free money.
+    const worn = JSON.parse(JSON.stringify(useGameStore.getState().gameState)) as GameState;
+    worn.pumps[pump.id].health = 0;
+    useGameStore.setState({ gameState: worn });
+
+    const sellRoofed = useGameStore.getState().structureValue(pump.id);
+
+    const cashBefore = useGameStore.getState().gameState.player.cash;
+    useGameStore.getState().removeCanopy(pump.id);
+    const detachRefund = useGameStore.getState().gameState.player.cash - cashBefore;
+    const sellBare = useGameStore.getState().structureValue(pump.id);
+
+    expect(detachRefund + sellBare).toBe(sellRoofed);
+  });
+
   it('counts the roof towards what the pump sells for', () => {
     const store = useGameStore.getState();
     const pump = Object.values(store.gameState.pumps)[0];

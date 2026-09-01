@@ -255,7 +255,12 @@
       "Bash(grep -c '\"type\": \"result\"' __TRACKED_VAR__/journal.jsonl)",
       "Bash(grep -n \"raycast={\\(\\) => null}\\\\|const width = 6.4\\\\|<boxGeometry args={\\\\[width, 0.42, depth\\\\]}\\\\|exitCanopyMode: \\(\\) =>\\\\|pump.hasCanopy = true;\\\\|totalUpkeep += GAME_CONFIG.buildings.canopy.dailyUpkeep\" /Users/emre/petrol-oyunu/src/rendering/PumpMesh.tsx /Users/emre/petrol-oyunu/src/store/gameStore.ts)",
       "Bash(git -C /Users/emre/petrol-oyunu status --porcelain)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(awk '/^export function getLayout/,/^}$/' src/domain/services/simulationEngine.ts)",
+      "Bash(awk '/export function priceSignPosition/,/^}/' src/domain/services/simulationEngine.ts)",
+      "Bash(npx tsx -e ' *)",
+      "Bash(awk '/export function snapPlacement/,/^}/' src/domain/services/placement.ts)",
+      "Bash(node .shot.mjs x 3000)"
     ],
     "additionalDirectories": [
       "/private/tmp"

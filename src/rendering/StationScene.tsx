@@ -42,6 +42,7 @@ export const StationScene: React.FC = () => {
   const selectVehicle = useGameStore((s) => s.selectVehicle);
   const selectPump = useGameStore((s) => s.selectPump);
   const selectBuilding = useGameStore((s) => s.selectBuilding);
+  const exitCanopyMode = useGameStore((s) => s.exitCanopyMode);
   const panCamera = useGameStore((s) => s.panCamera);
   const setCameraZoom = useGameStore((s) => s.setCameraZoom);
 
@@ -118,6 +119,10 @@ export const StationScene: React.FC = () => {
   const handleSceneClick = () => {
     // A click that was really a drag should not clear the selection.
     if (pointerState.current.dragged) return;
+    // Ground is the way out of fitting a canopy: while it is on, every bare
+    // island answers a click by fitting one, so without this the player
+    // cannot reach a pump's own panel again.
+    exitCanopyMode();
     selectVehicle(null);
     selectPump(null);
     selectBuilding(null);

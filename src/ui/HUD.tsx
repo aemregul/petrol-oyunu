@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Award, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Award, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Umbrella, Users, X } from 'lucide-react';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -37,6 +37,8 @@ export const HUD: React.FC = () => {
   const cycleCameraView = useGameStore((s) => s.cycleCameraView);
   const cleanStation = useGameStore((s) => s.cleanStation);
   const buildMode = useGameStore((s) => s.buildMode);
+  const fittingCanopy = useGameStore((s) => s.fittingCanopy);
+  const exitCanopyMode = useGameStore((s) => s.exitCanopyMode);
   const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
   const rotateBuildPreview = useGameStore((s) => s.rotateBuildPreview);
   const nudgeBuildPreview = useGameStore((s) => s.nudgeBuildPreview);
@@ -292,6 +294,26 @@ export const HUD: React.FC = () => {
               Çift şerit + yolun karşısı açılır
             </span>
           </button>
+        )}
+
+        {/* Fitting a canopy has no ground preview to cancel, so it gets its
+            own way out — without one the mode can only be left by paying for
+            a roof. */}
+        {fittingCanopy && (
+          <div className="fixed bottom-24 inset-x-0 z-40 flex justify-center pointer-events-none">
+            <div className="game-surface !border-sky-500/70 px-3 py-2 flex items-center gap-3 text-xs font-bold text-slate-100 pointer-events-auto animate-fade-in">
+              <Umbrella className="w-4 h-4 text-sky-400" />
+              <span>Sundurmanın kurulacağı pompaya tıkla</span>
+              <button
+                onClick={exitCanopyMode}
+                className={`game-btn rounded-xl w-8 h-8 flex items-center justify-center ${TONE_BUTTON.red}`}
+                title="Vazgeç"
+                aria-label="Sundurma takmaktan vazgeç"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* The preview follows the cursor only until the first ground click.

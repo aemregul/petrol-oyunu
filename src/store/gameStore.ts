@@ -717,6 +717,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     // one of those is picking up the one that already exists.
     if (GAME_CONFIG.buildings[buildingType]?.fixed) return;
 
+    // Only one thing can be in the middle of being placed.
+    if (get().fittingCanopy) set({ fittingCanopy: false });
+
     // A canopy is bolted to a pump rather than set down on the concrete, so
     // the catalogue card asks which pump instead of opening a ground preview.
     if (GAME_CONFIG.buildings[buildingType]?.attachTo === 'pump') {
@@ -1859,12 +1862,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     sounds.playClick();
+    // The bar across the bottom carries the instruction for as long as the
+    // mode is on, so a toast saying the same thing would only repeat it.
     set({ fittingCanopy: true, activeModal: 'NONE', selectedPumpId: null });
-    get().addNotification({
-      type: 'INFO',
-      title: 'Sundurma Takılıyor',
-      message: 'Sundurmanın kurulacağı pompaya tıklayın.'
-    });
   },
 
   exitCanopyMode: () => set({ fittingCanopy: false }),
@@ -1884,6 +1884,10 @@ export const useGameStore = create<GameStore>((set, get) => {
       return false;
     }
     if (gameState.player.cash < catalog.price) {
+      // No island is any cheaper, so leaving the mode on would trap the
+      // player in it: every pump would refuse, and a bare pump in this mode
+      // answers a click by refusing rather than opening its panel.
+      set({ fittingCanopy: false });
       get().addNotification({
         type: 'WARNING',
         title: 'Yetersiz Bakiye',
@@ -1919,7 +1923,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!pump?.hasCanopy) return false;
 
     const catalog = GAME_CONFIG.buildings.canopy;
-    const refund = Math.round((catalog.price * GAME_CONFIG.economy.refundRatio) / 10) * 10;
+    // Discounted for the island's condition exactly as structureValue does it.
+    // Paying full price for a roof off a worn-out pump, while selling that
+    // same pump paid a wear-scaled share, made "unbolt the roof first" the
+    // strictly better way to sell every pump that was not brand new.
+    const wear = 0.6 + 0.4 * (pump.health / 100);
+    const refund =
+      Math.round((catalog.price * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
     TransactionService.executeCashTransaction(state, {

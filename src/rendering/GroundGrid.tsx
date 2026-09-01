@@ -434,8 +434,12 @@ const FrontageLanding: React.FC<{
       [signX + clear, to - kerb]
     ];
 
+    // Each bed fills its whole span. It used to be capped at 6.5, which was
+    // fine on a starting plot and wrong on a bought-up one: the frontage grew
+    // with the plot, the beds did not, and the gap between bed and ramp was
+    // left as bare ground.
     for (const [a, b] of spans) {
-      if (b - a >= 1.6) out.push({ x: (a + b) / 2, width: Math.min(b - a, 6.5) });
+      if (b - a >= 1.6) out.push({ x: (a + b) / 2, width: b - a });
     }
     return out;
   }, [from, to, signX, signWidth]);

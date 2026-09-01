@@ -147,9 +147,26 @@ describe('signage', () => {
     expect(sign.position[0]).toBeCloseTo((widened.entry.x + widened.exit.x) / 2, 1);
 
     // It is the station's own equipment, so there is nothing to buy — but the
-    // one that exists can be picked up and put somewhere else.
+    // one that exists can be picked up and slid along the frontage.
     expect(GAME_CONFIG.buildings.price_sign.fixed).toBe(true);
-    expect(evaluatePlacement(state, 'price_sign', [10, 10], 0).valid).toBe(true);
+
+    // Along the verge between the mouths is the whole of where it may go: the
+    // board is there to be read from the carriageway, so back on the concrete
+    // it would face the forecourt and eat a bay's worth of ground.
+    const onVerge = snapPlacement(state, 'price_sign', [
+      (widened.entry.x + widened.exit.x) / 2,
+      DRIVEWAY_Z
+    ]);
+    delete state.buildings[sign.id];
+    expect(evaluatePlacement(state, 'price_sign', onVerge, 0).valid).toBe(true);
+
+    // Deep on the concrete, and out past a ramp, are both refused.
+    expect(evaluatePlacement(state, 'price_sign', [onVerge[0], 10], 0).valid).toBe(false);
+    expect(
+      evaluatePlacement(state, 'price_sign', [widened.entry.x, onVerge[1]], 0).valid
+    ).toBe(false);
+
+    state.buildings[sign.id] = sign;
 
     // Once the player has chosen a spot, the layout stops overruling them.
     sign.movedByPlayer = true;

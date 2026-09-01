@@ -135,6 +135,49 @@ export const PYLON_REACH = 2;
  * and never on the carriageway — a sign in the middle of the road is not
  * advertising, it is an obstruction.
  */
+/**
+ * Where the price board may stand: the planted frontage between the two
+ * mouths, and nowhere else.
+ *
+ * It is the one structure whose whole job is to be read from the carriageway
+ * before a driver has decided to pull in, so it belongs on the verge in the
+ * gap between the ramps — never back on the concrete, where it faces the
+ * forecourt instead of the road and takes up a bay's worth of ground.
+ */
+function evaluatePriceSign(state: GameState, footprint: Footprint): PlacementResult {
+  const mouths = drivewayMouths(state, 'near');
+
+  // Clear of both ramps, whichever way round they happen to be.
+  const left = mouths.entry.x < mouths.exit.x ? mouths.entry : mouths.exit;
+  const right = mouths.entry.x < mouths.exit.x ? mouths.exit : mouths.entry;
+  const gapMin = left.x + left.width / 2;
+  const gapMax = right.x - right.width / 2;
+
+  if (footprint.minX < gapMin || footprint.maxX > gapMax) {
+    return { valid: false, reason: 'Fiyat tabelası iki rampanın arasında durmalı.' };
+  }
+
+  // Between the kerb and the concrete: the verge, and only the verge. Measured
+  // at the board's centre rather than its back edge, because the verge is
+  // narrower than the board's own cell — standing on its mark, it already
+  // overhangs the concrete line by half of one.
+  const roadEdge = LAYOUT.roadZ + LAYOUT.roadHalfWidth;
+  if (footprint.minZ < roadEdge) {
+    return { valid: false, reason: 'Tabela yolun üzerine kurulamaz.' };
+  }
+  if ((footprint.minZ + footprint.maxZ) / 2 > FORECOURT_FRONT) {
+    return { valid: false, reason: 'Fiyat tabelası betona değil, yol kenarındaki peyzaja kurulur.' };
+  }
+
+  for (const taken of occupiedFootprints(state)) {
+    if (overlaps(footprint, taken.footprint)) {
+      return { valid: false, reason: `${taken.name} ile çakışıyor.` };
+    }
+  }
+
+  return { valid: true };
+}
+
 function evaluateRoadsideSign(state: GameState, footprint: Footprint): PlacementResult {
   const owned = ownedBounds(state.station.plots.ownedParcels);
 
@@ -199,6 +242,28 @@ export function snapPlacement(
   if (!role) {
     const catalog = GAME_CONFIG.buildings[buildingType];
     if (!catalog) return position;
+
+    // The price board is verge furniture, like the ramps either side of it:
+    // only where along the frontage it stands is the player's to choose. Left
+    // to the ordinary snap it rounded off the narrow verge and onto the
+    // concrete, which is both the wrong place for it and a spot the rules
+    // then refused.
+    if (buildingType === 'price_sign') {
+      const mouths = drivewayMouths(state, 'near');
+      const left = mouths.entry.x < mouths.exit.x ? mouths.entry : mouths.exit;
+      const right = mouths.entry.x < mouths.exit.x ? mouths.exit : mouths.entry;
+      const halfWidth = catalog.size[0] / 2;
+
+      const min = left.x + left.width / 2 + halfWidth;
+      const max = right.x - right.width / 2 - halfWidth;
+      const x = snapToGrid(position[0], catalog.size[0]);
+
+      return [
+        max < min ? (min + max) / 2 : clamp(x, min, max),
+        // The last row that keeps the board wholly clear of the concrete.
+        FORECOURT_FRONT - catalog.size[1] / 2
+      ];
+    }
 
     // A quarter turn swaps which side of the footprint faces which axis.
     const turned = rotation === 90 || rotation === 270;
@@ -306,7 +371,11 @@ export function evaluatePlacement(
   // Signage is meant to be read from the carriageway, so it may stand at the
   // boundary or a little past it — the price board's own default spot is out
   // on the verge, which is nobody's parcel. Neither may stand in the road.
-  if (buildingType === 'pylon_sign' || buildingType === 'price_sign') {
+  if (buildingType === 'price_sign') {
+    return evaluatePriceSign(state, footprint);
+  }
+
+  if (buildingType === 'pylon_sign') {
     return evaluateRoadsideSign(state, footprint);
   }
 
