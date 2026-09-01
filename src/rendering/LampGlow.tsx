@@ -61,13 +61,27 @@ const glowSettings = (color: string, opacity: number) => ({
  * state — and from leaking a material every time a lamp is torn down.
  */
 const materials = {
-  pool: null as THREE.MeshBasicMaterial | null,
   shaft: null as THREE.MeshBasicMaterial | null,
   flare: null as THREE.SpriteMaterial | null
 };
 
-function poolMaterial(): THREE.MeshBasicMaterial {
-  return (materials.pool ??= new THREE.MeshBasicMaterial(glowSettings('#ffd9a0', 0.85)));
+/**
+ * Pools of a given strength, one material each and shared thereafter.
+ *
+ * A wide pool cannot carry the same opacity as a narrow one. These blend
+ * additively, so spreading 0.85 over three times the ground saturates to flat
+ * white and takes the concrete's own texture with it — the lamp stops looking
+ * like light on a surface and starts looking like a hole cut in the scene.
+ */
+const poolMaterials = new Map<number, THREE.MeshBasicMaterial>();
+
+function poolMaterial(opacity: number): THREE.MeshBasicMaterial {
+  let material = poolMaterials.get(opacity);
+  if (!material) {
+    material = new THREE.MeshBasicMaterial(glowSettings('#ffd9a0', opacity));
+    poolMaterials.set(opacity, material);
+  }
+  return material;
 }
 
 function shaftMaterial(): THREE.MeshBasicMaterial {
@@ -92,6 +106,14 @@ export interface LampGlowProps {
    */
   stretch?: number;
   /**
+   * Widens the pool on the ground without touching the lens flare or the
+   * shaft, which are sized by `reach`. A lamp that throws further needs a
+   * bigger pool, not a bigger glare around its own bulb.
+   */
+  spread?: number;
+  /** How strongly the pool is laid on. Wider pools want less. */
+  poolOpacity?: number;
+  /**
    * The shaft between lens and pool. Worth its fill cost on the lamps the
    * player buys and stands next to; not on a row of motorway columns.
    */
@@ -107,6 +129,8 @@ export const LampGlow: React.FC<LampGlowProps> = ({
   position,
   reach,
   stretch = 1.35,
+  spread = 1,
+  poolOpacity = 0.85,
   shaft = true,
   lit
 }) => {
@@ -122,10 +146,10 @@ export const LampGlow: React.FC<LampGlowProps> = ({
         position={[x, 0.06, z]}
         rotation={[-Math.PI / 2, 0, 0]}
         scale={[stretch, 1, 1]}
-        material={poolMaterial()}
+        material={poolMaterial(poolOpacity)}
         renderOrder={2}
       >
-        <planeGeometry args={[reach * 2, reach * 2]} />
+        <planeGeometry args={[reach * 2 * spread, reach * 2 * spread]} />
       </mesh>
 
       {/* Shaft of light. Open-ended and faint: enough to tie the lens to the

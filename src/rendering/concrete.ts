@@ -56,10 +56,11 @@ function draw(): HTMLCanvasElement {
   const ctx = canvas.getContext('2d')!;
   const random = makeRandom(0x5eed);
 
-  // Base pour: a neutral mid grey. Warmer or lighter than this and the scene's
-  // midday light turns it into limestone paving. Left bright enough that the
-  // material tint can take it down for rain rather than having to lift it up.
-  ctx.fillStyle = '#9b9c98';
+  // Base pour: a light neutral grey. The warmth is what turned an earlier,
+  // equally light mix into limestone paving, so this one is kept off the yellow
+  // side of grey — light, but still plainly concrete. Bright enough that the
+  // material tint takes it down for rain rather than having to lift it up.
+  ctx.fillStyle = '#b2b3ae';
   ctx.fillRect(0, 0, TILE_PX, TILE_PX);
 
   /**

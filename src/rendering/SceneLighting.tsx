@@ -11,19 +11,24 @@ import { hourOfDay } from '../domain/services/simulationEngine';
  * light. Now it runs to six the next morning, which means the small hours have
  * to look like the small hours — dark enough for the forecourt lamps to be
  * doing the work, and lifting again before the first commuters.
+ *
+ * The small hours used to sit near black: the concrete read as a void, and the
+ * only way to see the forecourt at all was to stand a lamp on every square.
+ * Night is a moonlit blue now rather than an absence of light — still plainly
+ * night, still worth paying for lamps, but you can see what you own.
  */
 const SUN_KEYFRAMES = [
-  { hour: 0, color: '#5c6ba8', intensity: 0.32, ambient: 0.2, sky: '#141d33' },
-  { hour: 4, color: '#6272aa', intensity: 0.36, ambient: 0.22, sky: '#1a2440' },
-  { hour: 5.5, color: '#c98d78', intensity: 0.8, ambient: 0.4, sky: '#5b5f86' },
+  { hour: 0, color: '#6f7fb8', intensity: 0.62, ambient: 0.46, sky: '#26314e' },
+  { hour: 4, color: '#7182bb', intensity: 0.66, ambient: 0.48, sky: '#2c3757' },
+  { hour: 5.5, color: '#c98d78', intensity: 1.0, ambient: 0.56, sky: '#6b6f95' },
   { hour: 6.5, color: '#ffc590', intensity: 1.5, ambient: 0.62, sky: '#ffd4a8' },
   { hour: 8, color: '#ffe9cc', intensity: 1.9, ambient: 0.72, sky: '#d3eaff' },
   { hour: 12, color: '#fffdf8', intensity: 2.2, ambient: 0.82, sky: '#c6e7ff' },
   { hour: 17, color: '#ffe2bc', intensity: 2.0, ambient: 0.76, sky: '#d0e7fb' },
   { hour: 19.5, color: '#ffab70', intensity: 1.45, ambient: 0.6, sky: '#f7bb87' },
-  { hour: 21, color: '#8d9cd4', intensity: 0.8, ambient: 0.4, sky: '#4a5680' },
-  { hour: 22.5, color: '#6272aa', intensity: 0.4, ambient: 0.24, sky: '#1e2846' },
-  { hour: 24, color: '#5c6ba8', intensity: 0.32, ambient: 0.2, sky: '#141d33' }
+  { hour: 21, color: '#8d9cd4', intensity: 0.95, ambient: 0.52, sky: '#556289' },
+  { hour: 22.5, color: '#7182bb', intensity: 0.68, ambient: 0.48, sky: '#2e3959' },
+  { hour: 24, color: '#6f7fb8', intensity: 0.62, ambient: 0.46, sky: '#26314e' }
 ];
 
 function sampleSun(hour: number) {

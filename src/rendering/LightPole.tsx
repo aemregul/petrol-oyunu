@@ -80,29 +80,58 @@ export const LightPole: React.FC = () => {
         </mesh>
       </group>
 
-      {/* The pool, shaft and flare that make the lamp read as lit. */}
-      <LampGlow position={[1.15, 7.05, 0]} reach={5.4} lit={isDark} />
+      {/* The pool, shaft and flare that make the lamp read as lit. The pool is
+          widened on its own: the lit ground has to match how far the lamp
+          actually throws, while the glare around the bulb stays a bulb. */}
+      <LampGlow
+        position={[1.15, 7.05, 0]}
+        reach={5.4}
+        spread={2.2}
+        poolOpacity={0.12}
+        lit={isDark}
+      />
 
       {/* The actual light. A spot aimed at the apron rather than a bare point:
-          hung this high a point light spreads its falloff over the whole
-          forecourt and lands as a faint wash, while a cone puts the light
-          where the lamp is pointing and gives the pool an edge. Kept off in
-          daylight so it costs nothing then. */}
+          a cone puts the light where the lamp is pointing and gives the pool an
+          edge. The cone was narrow enough that a lamp lit little more than its
+          own base — to see the forecourt the player had to line it with poles —
+          so it opens wider now and its edge is softer, and the intensity goes
+          up with it because the far side of a broader cone is that much further
+          from the bulb.
+
+          The point light beside it is the spill: the part of a lamp that lands
+          on the side of a car or a pump rather than on the ground. Without it a
+          widened cone is still a hard-edged disc of tarmac with darkness
+          standing on it. Both are off in daylight, so they cost nothing then.
+
+          Neither uses a physical falloff. Inverse-square is what a real lamp
+          does, and it is exactly what put all the light in a puddle at the foot
+          of the pole: by the edge of even a wide cone only a third of it was
+          left. Easing the decay carries the light out to the rim instead, which
+          is the whole reason to own a lamp — so the intensity comes down to
+          match, or the middle blows out again. */}
       {isDark && (
         <>
           <primitive object={target} position={[1.15, 0, 0]} />
           <spotLight
             position={[1.15, 7, 0]}
             target={target}
-            angle={0.62}
-            penumbra={0.55}
-            intensity={520}
-            distance={30}
-            decay={2}
+            angle={1.12}
+            penumbra={0.9}
+            intensity={95}
+            distance={62}
+            decay={1.25}
             color="#ffe0ae"
             castShadow={quality === 'HIGH'}
             shadow-mapSize={[512, 512]}
             shadow-bias={-0.002}
+          />
+          <pointLight
+            position={[1.15, 6.4, 0]}
+            intensity={34}
+            distance={34}
+            decay={1.4}
+            color="#ffdba6"
           />
         </>
       )}

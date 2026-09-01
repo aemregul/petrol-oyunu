@@ -217,7 +217,17 @@
       "Bash(echo \"--- exit $?\")",
       "Bash(echo \"exit $?\")",
       "Bash(node -e \"const d=require\\('/Users/emre/petrol-oyunu/node_modules/@react-three/drei/package.json'\\);console.log\\('drei',d.version\\)\")",
-      "Bash(node -e \"const d=require\\('/Users/emre/petrol-oyunu/node_modules/@react-three/drei/index.cjs.js'\\); for \\(const k of ['Bounds','useBounds','Center','Stage']\\) console.log\\(k, k in d\\);\")"
+      "Bash(node -e \"const d=require\\('/Users/emre/petrol-oyunu/node_modules/@react-three/drei/index.cjs.js'\\); for \\(const k of ['Bounds','useBounds','Center','Stage']\\) console.log\\(k, k in d\\);\")",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/lamp-after.png 3001)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad/lamp-after2.png 3001)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001 after)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001 before)",
+      "Bash(echo \"tsc exit $?\")",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001 final)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3001 23 after)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 23 before)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 13 daylight)",
+      "Bash(pkill -f \"node_modules/.bin/vite\")"
     ],
     "additionalDirectories": [
       "/private/tmp"
