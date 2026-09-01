@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { Html } from '@react-three/drei';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { DECAL, decal } from './decal';
+import { getPumpCanopyLayout, PumpCanopyLayout } from './pumpCanopyLayout';
 
 interface PumpMeshProps {
   pump: PumpEntity;
@@ -33,34 +34,32 @@ const STATUS_COLORS: Record<string, string> = {
  * so it turns with the island and can never drift off the thing it shelters —
  * which is what the old free-standing four-legged canopy could do.
  *
- * Nothing here takes pointer events. A roof is the nearest thing to the camera
- * over everything beneath it, and a clickable one swallows every attempt to
- * reach the pump under it or the building behind it — which is exactly the
- * bug the old free-standing canopy had.
- *
- * Silencing the group alone does nothing: three walks into the children and
- * asks each mesh to raycast itself, and a Group's own raycast is already a
- * no-op. So every descendant is told individually. Measured, not assumed —
- * with the prop on the group, a click 70px out on the overhang still landed
- * on the pump.
+ * The canopy deliberately participates in pointer events. It lives inside the
+ * pump group, so a click anywhere on its deck, fascia or column bubbles to the
+ * same handler as the dispenser and selects that pump.
  */
-const PumpCanopy: React.FC = () => {
-  // Kept low and stocky on purpose: a tall deck on a slim post reads as a
-  // slab hanging in the air rather than a roof something is holding up.
-  const deckY = 4.85;
-  const width = 6.4;
-  const depth = 5.8;
+const PumpCanopy: React.FC<{ layout: PumpCanopyLayout }> = ({ layout }) => {
+  // Joined decks can span several islands, so the generous clearance keeps a
+  // wide canopy from visually pressing down on pumps and passing vehicles.
+  const deckY = 7.0;
+  // The fascia normally overhangs the grey deck. At a shared edge it stops at
+  // the midpoint too, otherwise two enlarged blue strips occupy the same
+  // pixels and flicker even though the decks themselves meet cleanly.
+  const fasciaLeft = layout.leftExtent + (layout.joinsLeft ? 0 : 0.11);
+  const fasciaRight = layout.rightExtent + (layout.joinsRight ? 0 : 0.11);
+  const fasciaWidth = fasciaLeft + fasciaRight;
+  const fasciaOffsetX = (fasciaRight - fasciaLeft) / 2;
+  const fasciaNegativeZ =
+    layout.negativeZExtent + (layout.joinsNegativeZ ? 0 : 0.11);
+  const fasciaPositiveZ =
+    layout.positiveZExtent + (layout.joinsPositiveZ ? 0 : 0.11);
+  const fasciaDepth = fasciaNegativeZ + fasciaPositiveZ;
+  const fasciaOffsetZ = (fasciaPositiveZ - fasciaNegativeZ) / 2;
   // Back of the island, clear of the bollard at z = -1.85.
   const columnZ = -1.95;
 
   return (
-    <group
-      ref={(g) => {
-        g?.traverse((child) => {
-          child.raycast = () => null;
-        });
-      }}
-    >
+    <group>
       {/* Plinth tying the column to the island it stands on */}
       <mesh position={[0, 0.42, columnZ]} castShadow>
         <boxGeometry args={[1.36, 0.28, 1.16]} />
@@ -83,12 +82,16 @@ const PumpCanopy: React.FC = () => {
       </mesh>
 
       {/* Deck, with the coloured fascia wrapping its edge */}
-      <mesh position={[0, deckY + 0.42, 0]} castShadow receiveShadow>
-        <boxGeometry args={[width, 0.42, depth]} />
+      <mesh
+        position={[layout.offsetX, deckY + 0.42, layout.offsetZ]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry args={[layout.width, 0.42, layout.depth]} />
         <meshStandardMaterial color="#94a3b8" roughness={0.65} metalness={0.15} />
       </mesh>
-      <mesh position={[0, deckY + 0.08, 0]}>
-        <boxGeometry args={[width + 0.22, 0.38, depth + 0.22]} />
+      <mesh position={[fasciaOffsetX, deckY + 0.08, fasciaOffsetZ]}>
+        <boxGeometry args={[fasciaWidth, 0.38, fasciaDepth]} />
         <meshStandardMaterial
           color="#0284c7"
           emissive="#0284c7"
@@ -111,12 +114,14 @@ const PumpCanopy: React.FC = () => {
 };
 
 export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
+  const pumps = useGameStore((s) => s.gameState.pumps);
   const selectPump = useGameStore((s) => s.selectPump);
   const editMode = useGameStore((s) => s.editMode);
   const placing = useGameStore((s) => s.buildMode.active);
   const relocateStructure = useGameStore((s) => s.relocateStructure);
   const fittingCanopy = useGameStore((s) => s.fittingCanopy);
   const fitCanopy = useGameStore((s) => s.fitCanopy);
+  const canopyLayout = getPumpCanopyLayout(pump, Object.values(pumps));
 
   // While a canopy is being fitted, the islands that can take one are the
   // only thing on the forecourt worth clicking.
@@ -313,7 +318,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
         </mesh>
       )}
 
-      {pump.hasCanopy && <PumpCanopy />}
+      {pump.hasCanopy && <PumpCanopy layout={canopyLayout} />}
 
       {pump.health < 40 && (
         <Html position={[0, 3.3, 0]} center distanceFactor={25} zIndexRange={[5, 0]}>

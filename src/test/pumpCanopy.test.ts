@@ -5,6 +5,12 @@ import { GameState, BuildingEntity, PumpEntity } from '../domain/types/gameState
 import { foldCanopiesIntoPumps, useGameStore } from '../store/gameStore';
 import { isUnderCanopy, dispenseStep } from '../domain/services/simulationEngine';
 import { evaluatePlacement } from '../domain/services/placement';
+import {
+  getPumpCanopyLayout,
+  PUMP_CANOPY_BASE_DEPTH,
+  PUMP_CANOPY_BASE_WIDTH,
+  PUMP_CANOPY_MAX_CLEAR_GAP
+} from '../rendering/pumpCanopyLayout';
 
 /**
  * The canopy stopped being a building the player parks over an island and
@@ -151,6 +157,123 @@ describe('what a roof is worth', () => {
     const sheltered = measure(true);
     expect(sheltered).toBeGreaterThan(plain);
     expect(sheltered / plain).toBeCloseTo(1.05, 5);
+  });
+});
+
+describe('neighbouring pump roofs', () => {
+  it('keeps an isolated roof at its stock width', () => {
+    const pump = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+
+    expect(getPumpCanopyLayout(pump, [pump])).toEqual({
+      width: PUMP_CANOPY_BASE_WIDTH,
+      offsetX: 0,
+      leftExtent: PUMP_CANOPY_BASE_WIDTH / 2,
+      rightExtent: PUMP_CANOPY_BASE_WIDTH / 2,
+      depth: PUMP_CANOPY_BASE_DEPTH,
+      offsetZ: 0,
+      negativeZExtent: PUMP_CANOPY_BASE_DEPTH / 2,
+      positiveZExtent: PUMP_CANOPY_BASE_DEPTH / 2,
+      joinsLeft: false,
+      joinsRight: false,
+      joinsNegativeZ: false,
+      joinsPositiveZ: false
+    });
+  });
+
+  it('meets an aligned neighbour with five clear cells at the midpoint', () => {
+    const first = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+    const centreDistance = 2 + PUMP_CANOPY_MAX_CLEAR_GAP;
+    const second = {
+      ...pumpAt('b', [8 + centreDistance, 8]),
+      hasCanopy: true
+    };
+
+    const firstRoof = getPumpCanopyLayout(first, [first, second]);
+    const secondRoof = getPumpCanopyLayout(second, [first, second]);
+
+    const sharedEdge = (8 + centreDistance / 2) * 2;
+    expect(8 * 2 + firstRoof.rightExtent).toBe(sharedEdge);
+    expect((8 + centreDistance) * 2 - secondRoof.leftExtent).toBe(sharedEdge);
+  });
+
+  it('trims overlapping inner edges so close roofs become one clean deck', () => {
+    const first = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+    const second = { ...pumpAt('b', [10, 8]), hasCanopy: true };
+
+    const firstRoof = getPumpCanopyLayout(first, [first, second]);
+    const secondRoof = getPumpCanopyLayout(second, [first, second]);
+
+    expect(firstRoof.rightExtent).toBe(2);
+    expect(secondRoof.leftExtent).toBe(2);
+  });
+
+  it('does not join bare, offset, differently oriented or distant pumps', () => {
+    const pump = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+    const bare = pumpAt('bare', [10, 8]);
+    const offset = { ...pumpAt('offset', [10, 9]), hasCanopy: true };
+    const turned = {
+      ...pumpAt('turned', [10, 8]),
+      rotation: 90 as const,
+      hasCanopy: true
+    };
+    const distant = {
+      ...pumpAt('distant', [8 + 2 + PUMP_CANOPY_MAX_CLEAR_GAP + 1, 8]),
+      hasCanopy: true
+    };
+
+    expect(getPumpCanopyLayout(pump, [pump, bare, offset, turned, distant]).width)
+      .toBe(PUMP_CANOPY_BASE_WIDTH);
+  });
+
+  it('joins on local z when five clear cells separate the pump footprints', () => {
+    const first = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+    const centreDistance = 3 + PUMP_CANOPY_MAX_CLEAR_GAP;
+    const second = {
+      ...pumpAt('b', [8, 8 + centreDistance]),
+      hasCanopy: true
+    };
+
+    const firstRoof = getPumpCanopyLayout(first, [first, second]);
+    const secondRoof = getPumpCanopyLayout(second, [first, second]);
+    const sharedEdge = (8 + centreDistance / 2) * 2;
+
+    expect(8 * 2 + firstRoof.positiveZExtent).toBe(sharedEdge);
+    expect((8 + centreDistance) * 2 - secondRoof.negativeZExtent).toBe(sharedEdge);
+    expect(firstRoof.joinsPositiveZ).toBe(true);
+    expect(secondRoof.joinsNegativeZ).toBe(true);
+  });
+
+  it('does not join when the clear gap is greater than five on either axis', () => {
+    const pump = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+    const tooFarX = {
+      ...pumpAt('x', [8 + 2 + PUMP_CANOPY_MAX_CLEAR_GAP + 1, 8]),
+      hasCanopy: true
+    };
+    const tooFarZ = {
+      ...pumpAt('z', [8, 8 + 3 + PUMP_CANOPY_MAX_CLEAR_GAP + 1]),
+      hasCanopy: true
+    };
+
+    expect(getPumpCanopyLayout(pump, [pump, tooFarX, tooFarZ]).width)
+      .toBe(PUMP_CANOPY_BASE_WIDTH);
+    expect(getPumpCanopyLayout(pump, [pump, tooFarX, tooFarZ]).depth)
+      .toBe(PUMP_CANOPY_BASE_DEPTH);
+  });
+
+  it('joins along world z after a quarter turn', () => {
+    const first = {
+      ...pumpAt('a', [8, 8]),
+      rotation: 90 as const,
+      hasCanopy: true
+    };
+    const second = {
+      ...pumpAt('b', [8, 12]),
+      rotation: 90 as const,
+      hasCanopy: true
+    };
+
+    expect(getPumpCanopyLayout(first, [first, second]).leftExtent).toBe(4);
+    expect(getPumpCanopyLayout(second, [first, second]).rightExtent).toBe(4);
   });
 });
 
