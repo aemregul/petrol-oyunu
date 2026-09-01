@@ -497,6 +497,13 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   // wherever an older save happened to leave it.
   syncPriceSign(loaded);
 
+  // The pylon's reserved cell shrank to the mast's actual base; a sign saved
+  // under the old size would go on claiming four cells it never stood on.
+  for (const building of Object.values(loaded.buildings)) {
+    if (building.type !== 'pylon_sign') continue;
+    building.size = GAME_CONFIG.buildings.pylon_sign.size;
+  }
+
   foldCanopiesIntoPumps(loaded);
 
   // Storage went through two shapes before the farm: bare capacity with no

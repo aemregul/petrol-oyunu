@@ -100,9 +100,9 @@ export const PylonSign: React.FC = () => {
 
   return (
     <group>
-      {/* Foundation */}
+      {/* Foundation, sized to the single cell the sign reserves */}
       <mesh position={[0, 0.24, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.4, 0.48, 2.4]} />
+        <boxGeometry args={[2, 0.48, 2]} />
         <meshStandardMaterial color="#94a3b8" roughness={0.9} />
       </mesh>
 

@@ -266,7 +266,11 @@
       "Bash(git -C /Users/emre/petrol-oyunu-codex status --short)",
       "Bash(git -C /Users/emre/petrol-oyunu-codex diff)",
       "Bash(git branch *)",
-      "Bash(git worktree *)"
+      "Bash(git worktree *)",
+      "Bash(git fetch *)",
+      "Bash(awk '/export function ownedBounds/,/^}/' src/domain/services/land.ts)",
+      "Bash(awk '/export function ownedBounds/,/^}$/' src/domain/services/land.ts)",
+      "Bash(awk '/^function evaluateRoadsideSign/,/^}$/' src/domain/services/placement.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp"

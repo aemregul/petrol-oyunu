@@ -317,10 +317,16 @@ export const GAME_CONFIG: GameConfig = {
       category: 'structure',
       price: 60000,
       dailyUpkeep: 260,
-      size: [2, 2],
+      /**
+       * One cell, matching the mast's own base. It used to reserve four, which
+       * is nearly three times the concrete it actually stands on — and since
+       * the verge is under a cell deep, that oversized claim was what stopped
+       * the sign ever tucking in beside the road without eating forecourt.
+       */
+      size: [1, 1],
       unlockLevel: 5,
       description:
-        'Yol boyunca kilometrelerce öteden görünen yüksek kule; istasyon adını ve açık/kapalı durumunu duyurur. Arsanın 2 birim dışına kadar kurulabilir.',
+        'Yol boyunca kilometrelerce öteden görünen yüksek kule; istasyon adını ve açık/kapalı durumunu duyurur. Arsanın 3 birim dışına, yola sıfır kurulabilir.',
       icon: 'Megaphone'
     },
     canopy: {

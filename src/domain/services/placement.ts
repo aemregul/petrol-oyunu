@@ -127,8 +127,17 @@ export function absorbedByRestComplex(
     .map((b) => ({ id: b.id, name: GAME_CONFIG.buildings[b.type]?.name ?? b.type }));
 }
 
-/** How far outside the plot a roadside sign may stand, in grid units. */
-export const PYLON_REACH = 2;
+/**
+ * How far outside the plot a roadside sign may stand, in grid units.
+ *
+ * A billboard is advertising to the carriageway, not forecourt equipment, so
+ * standing wholly on the plot is not required of it — kerbside is where one
+ * belongs. Towards the road this is not the binding rule anyway: the verge
+ * between the plot edge and the kerb is under a unit deep, and the sign is
+ * kept off the carriageway separately. It is sideways and to the rear that
+ * this decides how far out the mast may go.
+ */
+export const PYLON_REACH = 3;
 
 /**
  * A sign may sit on the plot or just outside it, but not out in the country
@@ -193,12 +202,20 @@ function evaluateRoadsideSign(state: GameState, footprint: Footprint): Placement
     return { valid: false, reason: `Tabela arsanın en fazla ${PYLON_REACH} birim dışına kurulabilir.` };
   }
 
-  // Keep it off both carriageways and the median between them.
+  // Keep the mast off both carriageways and the median between them.
+  //
+  // Measured at the mast rather than across the whole reserved cell, because
+  // what must not stand in a traffic lane is the column — the board it carries
+  // is thirteen units up, higher than anything that drives under it. Testing
+  // the cell instead kept the pylon a full two units back from the kerb, which
+  // on a verge under one unit deep meant it could never get out to the road at
+  // all: the one place a sign read at speed belongs.
   const roadTop = LAYOUT.roadZ + LAYOUT.roadHalfWidth;
   const roadBottom =
     LAYOUT.roadZ - 2 * LAYOUT.roadHalfWidth - LAYOUT.medianWidth - LAYOUT.roadHalfWidth;
-  if (footprint.minZ < roadTop && footprint.maxZ > roadBottom) {
-    return { valid: false, reason: 'Tabela yolun üzerine kurulamaz.' };
+  const mastZ = (footprint.minZ + footprint.maxZ) / 2;
+  if (mastZ < roadTop && mastZ > roadBottom) {
+    return { valid: false, reason: 'Tabela direği yolun üzerine kurulamaz.' };
   }
 
   for (const taken of occupiedFootprints(state)) {
