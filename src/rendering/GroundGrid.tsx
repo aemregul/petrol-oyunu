@@ -143,12 +143,15 @@ const ConcreteApron: React.FC<{
       <planeGeometry args={[width, depth]} />
       <meshStandardMaterial
         map={map}
-        // Reusing the colour map as the roughness map costs nothing and lets
-        // the sawn joints sit damper than the slabs either side of them.
-        roughnessMap={map}
         color={tint}
+        // No roughness map. The colour map was being used as one, and three
+        // multiplies roughness by it: a light grey pour meant the surface ran
+        // about a third smoother than the number here says, and in the rain
+        // that landed at a near-polish where the sun came back off the
+        // forecourt as a single hard blob — concrete lit like bathroom tile.
+        // Damp joints are not worth an unpredictable finish.
         roughness={roughness}
-        metalness={0.02}
+        metalness={0}
       />
     </mesh>
   );
@@ -615,7 +618,12 @@ export const GroundGrid: React.FC = () => {
    */
   const apronTint =
     weather === 'RAIN' ? '#8b93a0' : cleanliness < 50 ? '#cfccc4' : '#ffffff';
-  const apronRoughness = weather === 'RAIN' ? 0.35 : 0.7 + (1 - cleanliness / 100) * 0.25;
+  /**
+   * Wet concrete is darker and a little glossier than dry, but it is still
+   * concrete: it never returns a mirror image of the sun. The old wet value
+   * was low enough to do exactly that.
+   */
+  const apronRoughness = weather === 'RAIN' ? 0.62 : 0.78 + (1 - cleanliness / 100) * 0.18;
 
   const unpaved = plots.ownedParcels.filter((key) => !plots.pavedParcels.includes(key));
 
