@@ -109,7 +109,17 @@ const Booth: React.FC<{
 
       const extent = box.getSize(new THREE.Vector3());
       const centre = box.getCenter(new THREE.Vector3());
-      const radius = Math.max(0.5, extent.length() / 2);
+      let radius = Math.max(0.5, extent.length() / 2);
+
+      // LampGlow deliberately paints a broad pool and shaft across the ground.
+      // Those transparent helper meshes belong to the lamp's lighting effect,
+      // but including them in the portrait bounds makes the physical pole a
+      // tiny speck. Frame the pole and housing themselves for the catalogue;
+      // the model and its actual illumination remain untouched in the game.
+      if (group.name === 'light_pole') {
+        centre.set(0.45, 3.65, 0);
+        radius = 3.85;
+      }
 
       const lens = camera as THREE.PerspectiveCamera;
       const vertical = (lens.fov * Math.PI) / 180;
