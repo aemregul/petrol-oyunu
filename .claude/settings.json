@@ -230,7 +230,18 @@
       "Bash(pkill -f \"node_modules/.bin/vite\")",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 RAIN after)",
       "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 RAIN before)",
-      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 SUNNY dry)"
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 SUNNY dry)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 before)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 after)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 check)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 check2)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 verify)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 zoom)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 night)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 textured)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 flat)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 shadowon)",
+      "Bash(node .shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/3113a657-43c9-4521-9b7c-453ae69bc18c/scratchpad 3000 shadowoff)"
     ],
     "additionalDirectories": [
       "/private/tmp"

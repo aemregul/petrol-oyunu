@@ -135,7 +135,21 @@ export const StationScene: React.FC = () => {
       <Canvas
         shadows={graphicsQuality !== 'LOW'}
         dpr={graphicsQuality === 'HIGH' ? [1, 2] : [1, 1.5]}
-        camera={{ position: [30, 25, 30], fov: 32 }}
+        /**
+         * A near plane of 1 rather than three's default 0.1, and a far plane
+         * that stops just past the landscape instead of ten times beyond it.
+         *
+         * Depth precision is governed by the ratio between the two, and the
+         * defaults gave 20000:1 — nearly all of it spent on the first few
+         * units in front of the lens, where nothing ever is. Pulled back to
+         * the widest zoom the forecourt is a hundred and seventy units away,
+         * and the buffer could no longer separate the apron from the ramp and
+         * the paint laid on it: they swapped places pixel by pixel and the
+         * ground crawled like static. The camera never comes within twenty
+         * units of what it orbits, so a near plane of 1 costs nothing and buys
+         * back an order of magnitude.
+         */
+        camera={{ position: [30, 25, 30], fov: 32, near: 1, far: 1200 }}
         onPointerMissed={handleSceneClick}
         gl={{ antialias: graphicsQuality !== 'LOW', powerPreference: 'high-performance' }}
       >
