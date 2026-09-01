@@ -27,7 +27,7 @@ export const BuildPlacementPlane: React.FC<BuildPlacementPlaneProps> = ({ pointe
   const buildMode = useGameStore((s) => s.buildMode);
   const plots = useGameStore((s) => s.gameState.station.plots);
   const setBuildPreviewPos = useGameStore((s) => s.setBuildPreviewPos);
-  const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
+  const pinBuildPreviewAt = useGameStore((s) => s.pinBuildPreviewAt);
 
   // The clamp has to follow every parcel the player owns, including columns
   // left of the origin and the rows across the road, which sit at negative
@@ -45,18 +45,18 @@ export const BuildPlacementPlane: React.FC<BuildPlacementPlaneProps> = ({ pointe
   ];
 
   const handleMove = (e: ThreeEvent<PointerEvent>) => {
-    // Hold the preview still while the camera is being dragged.
-    if (pointerState.current.pointerDown) return;
+    // Hold the preview still while the camera is being dragged or after the
+    // player has clicked once to hand control over to the fine-tuning pad.
+    if (pointerState.current.pointerDown || buildMode.pinned) return;
     e.stopPropagation();
     setBuildPreviewPos(toGrid(e.point));
   };
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
-    // A click that was really a camera drag should not drop a building.
+    // A click that was really a camera drag should not anchor the preview.
     if (pointerState.current.dragged) return;
     e.stopPropagation();
-    setBuildPreviewPos(toGrid(e.point));
-    confirmBuildPlacement();
+    pinBuildPreviewAt(toGrid(e.point));
   };
 
   return (

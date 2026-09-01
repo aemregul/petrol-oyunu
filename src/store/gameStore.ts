@@ -260,6 +260,11 @@ export interface LandModeState {
 export interface BuildModeState {
   active: boolean;
   buildingType: string | null;
+  /**
+   * False while the preview follows the cursor; true after the player clicks
+   * the forecourt to anchor it for button/keyboard fine-tuning.
+   */
+  pinned: boolean;
   position: [number, number];
   /**
    * The last raw pointer location, before snapping. Rotation re-snaps from
@@ -333,6 +338,8 @@ interface GameStore {
   enterBuildMode: (buildingType: string) => void;
   exitBuildMode: () => void;
   setBuildPreviewPos: (pos: [number, number]) => void;
+  pinBuildPreviewAt: (pos: [number, number]) => void;
+  nudgeBuildPreview: (direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void;
   rotateBuildPreview: () => void;
   confirmBuildPlacement: () => boolean;
   /** Second-hand value of a pump or building, for the sell button. */
@@ -583,6 +590,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   buildMode: {
     active: false,
     buildingType: null,
+    pinned: false,
     position: [10, 10],
     pointer: [10, 10],
     rotation: 0,
@@ -730,6 +738,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         buildMode: {
           active: true,
           buildingType,
+          pinned: false,
           position,
           pointer: start,
           rotation: 0,
@@ -800,6 +809,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       buildMode: {
         active: false,
         buildingType: null,
+        pinned: false,
         position: [0, 0],
         pointer: [0, 0],
         rotation: 0,
@@ -817,6 +827,77 @@ export const useGameStore = create<GameStore>((set, get) => {
       const snapped = snapPlacement(state.gameState, buildingType, pos, rotation);
       const isValid = evaluatePlacement(state.gameState, buildingType, snapped, rotation).valid;
       return { buildMode: { ...state.buildMode, position: snapped, pointer: pos, isValid } };
+    });
+  },
+
+  pinBuildPreviewAt: (pos) => {
+    set((state) => {
+      const { buildingType, rotation } = state.buildMode;
+      if (!buildingType) {
+        return {
+          buildMode: {
+            ...state.buildMode,
+            pinned: true,
+            position: pos,
+            pointer: pos,
+            isValid: false
+          }
+        };
+      }
+
+      const snapped = snapPlacement(state.gameState, buildingType, pos, rotation);
+      const isValid = evaluatePlacement(
+        state.gameState,
+        buildingType,
+        snapped,
+        rotation
+      ).valid;
+      return {
+        buildMode: {
+          ...state.buildMode,
+          pinned: true,
+          position: snapped,
+          pointer: pos,
+          isValid
+        }
+      };
+    });
+  },
+
+  nudgeBuildPreview: (direction) => {
+    set((state) => {
+      const { buildMode } = state;
+      const { buildingType, rotation } = buildMode;
+      if (!buildMode.active || !buildMode.pinned || !buildingType) {
+        return { buildMode };
+      }
+
+      // One press changes exactly one grid coordinate. Mapping through the
+      // isometric camera made both coordinates change together, so every arrow
+      // walked the structure diagonally across the placement grid.
+      const step: [number, number] =
+        direction === 'LEFT'
+          ? [1, 0]
+          : direction === 'RIGHT'
+            ? [-1, 0]
+            : direction === 'UP'
+              ? [0, 1]
+              : [0, -1];
+      const pointer: [number, number] = [
+        buildMode.pointer[0] + step[0],
+        buildMode.pointer[1] + step[1]
+      ];
+      const snapped = snapPlacement(state.gameState, buildingType, pointer, rotation);
+      const isValid = evaluatePlacement(
+        state.gameState,
+        buildingType,
+        snapped,
+        rotation
+      ).valid;
+
+      return {
+        buildMode: { ...buildMode, position: snapped, pointer, isValid }
+      };
     });
   },
 
@@ -1004,7 +1085,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     set({
       gameState: state,
-      buildMode: { ...buildMode, active: false, buildingType: null },
+      buildMode: { ...buildMode, active: false, buildingType: null, pinned: false },
       relocating: null
     });
 
@@ -1283,6 +1364,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       buildMode: {
         active: true,
         buildingType: type,
+        pinned: false,
         position: snapPlacement(state, type, moved.position, moved.rotation),
         pointer: moved.position,
         rotation: moved.rotation,
@@ -1370,7 +1452,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     sounds.playClick();
     set({
       landMode: { active: true, hovered: null, action: 'NONE', price: 0, canBuy: false },
-      buildMode: { active: false, buildingType: null, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
+      buildMode: { active: false, buildingType: null, pinned: false, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
       activeModal: 'NONE'
     });
   },
@@ -2548,7 +2630,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       cameraZoom: 4,
       cameraAngle: 225,
       cameraView: 0,
-      buildMode: { active: false, buildingType: null, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
+      buildMode: { active: false, buildingType: null, pinned: false, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
       landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false }
     });
   },

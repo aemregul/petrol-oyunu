@@ -18,6 +18,7 @@ export const App: React.FC = () => {
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const buildMode = useGameStore((s) => s.buildMode);
   const rotateBuildPreview = useGameStore((s) => s.rotateBuildPreview);
+  const nudgeBuildPreview = useGameStore((s) => s.nudgeBuildPreview);
   const exitBuildMode = useGameStore((s) => s.exitBuildMode);
   const panCamera = useGameStore((s) => s.panCamera);
   const resetCamera = useGameStore((s) => s.resetCamera);
@@ -60,22 +61,26 @@ export const App: React.FC = () => {
         case 'arrowup':
         case 'w':
           e.preventDefault();
-          panCamera(0, PAN_STEP_PX);
+          if (buildMode.active && buildMode.pinned) nudgeBuildPreview('UP');
+          else panCamera(0, PAN_STEP_PX);
           break;
         case 'arrowdown':
         case 's':
           e.preventDefault();
-          panCamera(0, -PAN_STEP_PX);
+          if (buildMode.active && buildMode.pinned) nudgeBuildPreview('DOWN');
+          else panCamera(0, -PAN_STEP_PX);
           break;
         case 'arrowleft':
         case 'a':
           e.preventDefault();
-          panCamera(PAN_STEP_PX, 0);
+          if (buildMode.active && buildMode.pinned) nudgeBuildPreview('LEFT');
+          else panCamera(PAN_STEP_PX, 0);
           break;
         case 'arrowright':
         case 'd':
           e.preventDefault();
-          panCamera(-PAN_STEP_PX, 0);
+          if (buildMode.active && buildMode.pinned) nudgeBuildPreview('RIGHT');
+          else panCamera(-PAN_STEP_PX, 0);
           break;
         case 'f':
           resetCamera();
@@ -90,7 +95,9 @@ export const App: React.FC = () => {
     setCameraZoom,
     setActiveModal,
     buildMode.active,
+    buildMode.pinned,
     rotateBuildPreview,
+    nudgeBuildPreview,
     exitBuildMode,
     panCamera,
     resetCamera

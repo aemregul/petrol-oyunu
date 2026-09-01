@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { Award, Bell, Box, Building2, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Award, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Users, X } from 'lucide-react';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -25,6 +25,9 @@ const WEATHER_DISPLAY = {
 } as const;
 
 export const HUD: React.FC = () => {
+  const hudRef = useRef<HTMLDivElement>(null);
+  const bottomBarRef = useRef<HTMLDivElement>(null);
+  const placementDockRef = useRef<HTMLDivElement>(null);
   const gameState = useGameStore((s) => s.gameState);
   const activeModal = useGameStore((s) => s.activeModal);
   const [confirmMerge, setConfirmMerge] = useState(false);
@@ -36,6 +39,7 @@ export const HUD: React.FC = () => {
   const buildMode = useGameStore((s) => s.buildMode);
   const confirmBuildPlacement = useGameStore((s) => s.confirmBuildPlacement);
   const rotateBuildPreview = useGameStore((s) => s.rotateBuildPreview);
+  const nudgeBuildPreview = useGameStore((s) => s.nudgeBuildPreview);
   const exitBuildMode = useGameStore((s) => s.exitBuildMode);
   const resetCamera = useGameStore((s) => s.resetCamera);
   const landMode = useGameStore((s) => s.landMode);
@@ -53,6 +57,36 @@ export const HUD: React.FC = () => {
   const editMode = useGameStore((s) => s.editMode);
   const toggleEditMode = useGameStore((s) => s.toggleEditMode);
   const canEdit = gameState.player.level >= EDIT_MODE_LEVEL;
+
+  // The action bar changes size when labels collapse or the viewport is short.
+  // Measure the rendered controls instead of relying on a desktop-only offset.
+  useLayoutEffect(() => {
+    const hud = hudRef.current;
+    const bottomBar = bottomBarRef.current;
+    if (!hud || !bottomBar) return;
+
+    const updateSafeAreas = () => {
+      const bottomBarRect = bottomBar.getBoundingClientRect();
+      const dockRect = placementDockRef.current?.getBoundingClientRect();
+      hud.style.setProperty(
+        '--hud-bottom-clearance',
+        `${Math.max(0, window.innerHeight - bottomBarRect.top) + 12}px`
+      );
+      hud.style.setProperty('--placement-dock-width', `${dockRect?.width ?? 0}px`);
+      hud.style.setProperty('--placement-dock-height', `${dockRect?.height ?? 0}px`);
+    };
+
+    updateSafeAreas();
+    const observer = new ResizeObserver(updateSafeAreas);
+    observer.observe(bottomBar);
+    if (placementDockRef.current) observer.observe(placementDockRef.current);
+    window.addEventListener('resize', updateSafeAreas);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSafeAreas);
+    };
+  }, [buildMode.active, buildMode.pinned]);
 
   const { player, dayState, tanks } = gameState;
 
@@ -107,16 +141,19 @@ export const HUD: React.FC = () => {
   const isGasolineCritical = tanks.gasoline.stock <= tanks.gasoline.capacity * 0.15;
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 font-sans select-none z-10">
+    <div
+      ref={hudRef}
+      className={`hud-root absolute inset-0 pointer-events-none flex flex-col justify-between font-sans select-none z-10 ${buildMode.active ? 'hud-building' : ''}`}
+    >
       {/* ================= TOP BAR ================= */}
-      <div className="flex justify-between items-start w-full">
+      <div className="hud-top flex justify-between items-start w-full">
         {/* Top-Left: Day, Clock & Time Controls */}
-        <div className="game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
+        <div className="hud-status-card game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
           <div className="flex items-center gap-2 border-r border-slate-700/80 pr-3">
             <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold font-mono text-sm border border-sky-500/30">
               G{dayState.currentDay}
             </div>
-            <div>
+            <div className="hud-status-detail">
               <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                 {weatherStyle.label}
               </div>
@@ -139,12 +176,12 @@ export const HUD: React.FC = () => {
             title={gameState.station.open ? 'İstasyonu kapat' : 'İstasyonu aç'}
           >
             <Power className="w-3.5 h-3.5" />
-            {gameState.station.open ? 'Açık' : 'Kapalı'}
+            <span className="hud-status-detail">{gameState.station.open ? 'Açık' : 'Kapalı'}</span>
           </button>
         </div>
 
         {/* Top-Center: Cash Balance & Today's Net Revenue */}
-        <div className="game-surface px-5 py-2.5 pointer-events-auto flex items-center gap-4 text-center">
+        <div className="hud-cash-card game-surface px-5 py-2.5 pointer-events-auto flex items-center gap-4 text-center">
           <div>
             <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">İstasyon Kasası</div>
             <div className="text-xl font-black font-mono text-emerald-400 tracking-tight flex items-center justify-center gap-1">
@@ -152,8 +189,8 @@ export const HUD: React.FC = () => {
               <span>{player.cash.toLocaleString('tr-TR')}</span>
             </div>
           </div>
-          <div className="h-7 w-px bg-slate-700/80" />
-          <div>
+          <div className="hud-revenue h-7 w-px bg-slate-700/80" />
+          <div className="hud-revenue">
             <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Bugün Gelir</div>
             <div className="text-sm font-bold font-mono text-sky-400">
               +₺{dayState.todayStats.fuelRevenue.toLocaleString('tr-TR')}
@@ -162,7 +199,7 @@ export const HUD: React.FC = () => {
         </div>
 
         {/* Top-Right: Reputation, Level & XP */}
-        <div className="game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
+        <div className="hud-reputation-card game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
           {/* Reputation Stars */}
           <div className="flex items-center gap-1.5 border-r border-slate-700/80 pr-3">
             <span className="text-amber-400 text-base">★</span>
@@ -175,7 +212,7 @@ export const HUD: React.FC = () => {
           </div>
 
           {/* Level & XP */}
-          <div>
+          <div className="hud-xp-detail">
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 mb-0.5">
               <span>Seviye {player.level}</span>
               <span className="text-slate-400 font-mono">{player.xp} XP</span>
@@ -191,7 +228,7 @@ export const HUD: React.FC = () => {
       </div>
 
       {/* ================= FLOATING ACTION & CAMERA WIDGETS ================= */}
-      <div className="flex justify-between items-end w-full mb-2">
+      <div className="hud-floating flex justify-between items-end w-full">
         {/* Left Widget: Camera Controls & Cleaning */}
         <div className="flex flex-col gap-2 pointer-events-auto">
           {/* The whole camera rig used to live here as five stacked buttons.
@@ -257,31 +294,88 @@ export const HUD: React.FC = () => {
           </button>
         )}
 
-        {/* Center / Right: Build Mode Placement Bar (When active) */}
+        {/* The preview follows the cursor only until the first ground click.
+            Once anchored, this compact corner pad takes over so moving the
+            mouse towards its buttons cannot drag the structure away. */}
         {buildMode.active && (
-          <div className="game-surface !border-sky-500 px-4 py-3 pointer-events-auto flex items-center gap-3 animate-fade-in">
-            <button
-              onClick={rotateBuildPreview}
-              className={`game-btn rounded-xl px-3.5 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.slate}`}
-            >
-              <RotateCw className="w-3.5 h-3.5" />
-              <span>Döndür (R)</span>
-            </button>
-            <button
-              onClick={() => {
-                if (wouldAbsorb.length > 0) setConfirmMerge(true);
-                else confirmBuildPlacement();
-              }}
-              className={`game-btn rounded-xl px-4 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.green}`}
-            >
-              <span>Onayla & İnşa Et</span>
-            </button>
-            <button
-              onClick={exitBuildMode}
-              className={`game-btn rounded-xl px-3 py-2 text-xs font-extrabold ${TONE_BUTTON.red}`}
-            >
-              İptal
-            </button>
+          <div ref={placementDockRef} className="hud-placement-dock fixed z-40 pointer-events-auto flex flex-col items-end gap-2 animate-fade-in">
+            {!buildMode.pinned ? (
+              <div className="hud-placement-hint game-surface !border-sky-500/70 px-3 py-2 flex items-center gap-2 text-xs font-bold text-slate-100">
+                <Target className="w-4 h-4 text-sky-400" />
+                <span>Konumu sabitlemek için sahaya tıkla</span>
+              </div>
+            ) : (
+              <div className="game-surface !border-sky-500/70 p-1.5 grid grid-cols-3 gap-1">
+                <span />
+                <button
+                  onClick={() => nudgeBuildPreview('UP')}
+                  className={`game-btn w-10 h-10 rounded-xl flex items-center justify-center ${TONE_BUTTON.slate}`}
+                  title="Yukarı taşı (↑ / W)"
+                  aria-label="Yukarı taşı"
+                >
+                  <ArrowUp className="w-5 h-5" />
+                </button>
+                <span />
+                <button
+                  onClick={() => nudgeBuildPreview('LEFT')}
+                  className={`game-btn w-10 h-10 rounded-xl flex items-center justify-center ${TONE_BUTTON.slate}`}
+                  title="Sola taşı (← / A)"
+                  aria-label="Sola taşı"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={rotateBuildPreview}
+                  className={`game-btn w-10 h-10 rounded-xl flex items-center justify-center ${TONE_BUTTON.blue}`}
+                  title="Döndür (R)"
+                  aria-label="Döndür"
+                >
+                  <RotateCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => nudgeBuildPreview('RIGHT')}
+                  className={`game-btn w-10 h-10 rounded-xl flex items-center justify-center ${TONE_BUTTON.slate}`}
+                  title="Sağa taşı (→ / D)"
+                  aria-label="Sağa taşı"
+                >
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+                <span />
+                <button
+                  onClick={() => nudgeBuildPreview('DOWN')}
+                  className={`game-btn w-10 h-10 rounded-xl flex items-center justify-center ${TONE_BUTTON.slate}`}
+                  title="Aşağı taşı (↓ / S)"
+                  aria-label="Aşağı taşı"
+                >
+                  <ArrowDown className="w-5 h-5" />
+                </button>
+                <span />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              {buildMode.pinned && (
+                <button
+                  onClick={() => {
+                    if (wouldAbsorb.length > 0) setConfirmMerge(true);
+                    else confirmBuildPlacement();
+                  }}
+                  className={`game-btn rounded-xl px-4 h-10 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.green}`}
+                  title="Yapıyı bu konuma yerleştir"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Yerleştir</span>
+                </button>
+              )}
+              <button
+                onClick={exitBuildMode}
+                className={`game-btn rounded-xl w-10 h-10 flex items-center justify-center ${TONE_BUTTON.red}`}
+                title="İptal (Esc)"
+                aria-label="Yerleştirmeyi iptal et"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -374,15 +468,17 @@ export const HUD: React.FC = () => {
           </button>
         )}
 
-        <ActiveEventsBar />
+        <div className="hud-events">
+          <ActiveEventsBar />
+        </div>
       </div>
 
       <TankerStatusBar />
       <PumpPanel />
 
       {/* ================= BOTTOM ACTION BAR ================= */}
-      <div className="flex justify-center items-center w-full">
-        <div className="game-surface p-1.5 pointer-events-auto flex items-center gap-1">
+      <div ref={bottomBarRef} className="hud-bottom flex justify-center items-center w-full">
+        <div className="hud-nav game-surface p-1.5 pointer-events-auto flex items-center gap-1">
           <button
             onClick={() => setActiveModal('OFFICE')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
@@ -390,7 +486,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Building2 className="w-4 h-4 text-sky-400" />
-            <span>Ofis</span>
+            <span className="hud-nav-label">Ofis</span>
           </button>
 
           <button
@@ -400,7 +496,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Hammer className="w-4 h-4 text-amber-400" />
-            <span>İnşaat</span>
+            <span className="hud-nav-label">İnşaat</span>
           </button>
 
           {/* One switch for rearranging what is already built, in place of a
@@ -424,7 +520,7 @@ export const HUD: React.FC = () => {
             <Move
               className={`w-4 h-4 ${editMode ? 'text-white' : canEdit ? 'text-sky-400' : 'text-slate-600'}`}
             />
-            <span>Düzenle</span>
+            <span className="hud-nav-label">Düzenle</span>
           </button>
 
           <button
@@ -434,7 +530,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <MapIcon className="w-4 h-4 text-emerald-400" />
-            <span>Arsa Al</span>
+            <span className="hud-nav-label">Arsa Al</span>
           </button>
 
           <button
@@ -444,7 +540,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Target className="w-4 h-4 text-rose-400" />
-            <span>Görevler</span>
+            <span className="hud-nav-label">Görevler</span>
             {claimableMissions > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
                 {claimableMissions}
@@ -459,7 +555,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Fuel className="w-4 h-4 text-emerald-400" />
-            <span>Yakıt Tedarik</span>
+            <span className="hud-nav-label">Yakıt Tedarik</span>
           </button>
 
           <button
@@ -469,7 +565,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Users className="w-4 h-4 text-indigo-400" />
-            <span>Personel & Müdür</span>
+            <span className="hud-nav-label">Personel & Müdür</span>
           </button>
 
           <button
@@ -479,7 +575,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Tag className="w-4 h-4 text-purple-400" />
-            <span>Fiyatlandırma</span>
+            <span className="hud-nav-label">Fiyatlandırma</span>
           </button>
 
           <button
@@ -489,7 +585,7 @@ export const HUD: React.FC = () => {
             }`}
           >
             <Landmark className="w-4 h-4 text-emerald-400" />
-            <span>Banka & Kredi</span>
+            <span className="hud-nav-label">Banka & Kredi</span>
           </button>
 
           {/* Toasts leave on their own, so the bell is where anything missed

@@ -19,6 +19,166 @@
  * it is the whole difference between a dashboard and a game.
  */
 @layer components {
+  /*
+   * HUD geometry is viewport-aware. The placement dock reads the actual
+   * rendered height of the bottom navigation through these variables, so it
+   * remains in the usable lower-right corner even when labels collapse.
+   */
+  .hud-root {
+    --hud-edge: max(0.5rem, env(safe-area-inset-right));
+    --hud-bottom-clearance: 5rem;
+    --placement-dock-width: 0px;
+    --placement-dock-height: 0px;
+    padding:
+      max(0.5rem, env(safe-area-inset-top))
+      max(0.5rem, env(safe-area-inset-right))
+      max(0.5rem, env(safe-area-inset-bottom))
+      max(0.5rem, env(safe-area-inset-left));
+  }
+
+  .hud-top,
+  .hud-floating {
+    gap: 0.5rem;
+  }
+
+  .hud-floating {
+    margin-bottom: 0.5rem;
+    min-width: 0;
+  }
+
+  .hud-placement-dock {
+    right: var(--hud-edge);
+    bottom: var(--hud-bottom-clearance);
+    max-width: calc(100vw - 1rem);
+  }
+
+  .hud-placement-hint {
+    max-width: min(20rem, calc(100vw - 1rem));
+  }
+
+  .hud-events {
+    min-width: 0;
+    transition: margin-right 150ms ease;
+  }
+
+  .hud-building .hud-events {
+    margin-right: calc(var(--placement-dock-width) + 0.75rem);
+  }
+
+  .hud-nav {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  @media (max-width: 1279px) {
+    .hud-nav-label {
+      display: none;
+    }
+
+    .hud-nav > button {
+      justify-content: center;
+      gap: 0;
+      padding-left: 0.625rem;
+      padding-right: 0.625rem;
+    }
+
+    .hud-top .game-surface {
+      gap: 0.625rem;
+      padding: 0.5rem 0.625rem;
+    }
+
+    .hud-cash-card {
+      padding-left: 0.875rem !important;
+      padding-right: 0.875rem !important;
+    }
+  }
+
+  @media (max-width: 899px) {
+    .hud-status-detail,
+    .hud-xp-detail,
+    .hud-revenue {
+      display: none;
+    }
+
+    .hud-status-card > div:first-child,
+    .hud-reputation-card > div:first-child {
+      border-right: 0;
+      padding-right: 0;
+    }
+
+    .hud-cash-card .text-xl {
+      font-size: 1rem;
+      line-height: 1.5rem;
+    }
+
+    .hud-events .game-glass {
+      width: min(14rem, calc(100vw - var(--placement-dock-width) - 2rem));
+    }
+  }
+
+  @media (max-width: 639px) {
+    .hud-root {
+      --hud-edge: max(0.375rem, env(safe-area-inset-right));
+      padding-left: max(0.375rem, env(safe-area-inset-left));
+      padding-right: max(0.375rem, env(safe-area-inset-right));
+    }
+
+    .hud-top .game-surface {
+      border-radius: 0.75rem;
+      padding: 0.375rem 0.5rem;
+    }
+
+    .hud-top .text-xl {
+      font-size: 0.875rem;
+    }
+
+    .hud-nav {
+      gap: 0;
+      padding: 0.25rem;
+      border-radius: 0.875rem;
+    }
+
+    .hud-nav > button {
+      padding: 0.45rem;
+    }
+
+    .hud-nav > button svg {
+      width: 0.875rem;
+      height: 0.875rem;
+    }
+
+    .hud-building .hud-events {
+      position: fixed;
+      right: var(--hud-edge);
+      bottom: calc(var(--hud-bottom-clearance) + var(--placement-dock-height) + 0.5rem);
+      margin-right: 0;
+    }
+
+    .hud-building .hud-events .game-glass {
+      width: min(16rem, calc(100vw - 0.75rem));
+    }
+  }
+
+  @media (max-height: 699px) {
+    .hud-root {
+      padding-top: max(0.375rem, env(safe-area-inset-top));
+      padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+    }
+
+    .hud-floating {
+      margin-bottom: 0.25rem;
+    }
+
+    .hud-floating > div:first-child {
+      gap: 0.25rem;
+    }
+
+    .hud-floating > div:first-child > button:last-child {
+      padding-top: 0.375rem;
+      padding-bottom: 0.375rem;
+    }
+  }
+
   /* Dark slab: HUD cards, side panels, modal shells. */
   .game-surface {
     @apply bg-slate-900 border-2 border-slate-700 rounded-2xl;

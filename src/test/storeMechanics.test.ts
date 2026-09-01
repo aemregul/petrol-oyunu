@@ -38,7 +38,7 @@ beforeEach(() => {
   stubBrowser();
   useGameStore.setState({
     gameState: freshState(),
-    buildMode: { active: false, buildingType: null, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
+    buildMode: { active: false, buildingType: null, pinned: false, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
     relocating: null,
     editMode: true
   });
