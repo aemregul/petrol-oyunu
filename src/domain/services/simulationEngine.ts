@@ -884,6 +884,28 @@ function clampToApron(
 }
 
 /**
+ * The same, for a waypoint that stands in a driveway's lane.
+ *
+ * The apron margin is a *parking* figure — half a car length, so no bodywork
+ * overhangs the edge — and the outer lane of a mouth at the end of the
+ * frontage falls inside it. Clamped by that, the lane collapsed onto the
+ * ramp's centre line: cars left a two-lane ramp down the middle of it instead
+ * of down one of its lanes, which is the whole point of having widened it.
+ * Driving past something only asks for the car's own width, so that is what
+ * the lane is held to sideways; the apron margin still governs how deep into
+ * the plot the point may sit.
+ */
+function clampLaneToApron(
+  block: BlockLayout,
+  point: [number, number, number]
+): [number, number, number] {
+  const [, y, z] = clampToApron(block, point);
+  const min = block.minX + LANE_HALF_WIDTH;
+  const max = Math.max(min, block.maxX - LANE_HALF_WIDTH);
+  return [clamp(point[0], min, max), y, z];
+}
+
+/**
  * Bumper-to-bumper distance a driver holds from whatever is in front, in grid
  * units, and how wide a corridor counts as being in the way. A vehicle is
  * about two units long, so this leaves roughly half a car length of air.
@@ -1244,12 +1266,41 @@ export function queueSlotPosition(
 }
 
 /**
- * Which of a wide mouth's two lanes the next arrival should take. Counting the
- * vehicles already on their way alternates them naturally, so a widened ramp
- * really is two entrances rather than one queue drawn twice as broad.
+ * Which of a wide mouth's two lanes a vehicle should take, so that a widened
+ * ramp really is two entrances rather than one queue drawn twice as broad.
+ *
+ * The lane nobody else is on wins. Counting how many vehicles happened to be
+ * in the state was the old rule, and it only alternates while the traffic is
+ * building: at the usual one car at a time it handed every single driver the
+ * same lane, and the second one was never used. With both lanes free the car
+ * picks by its own name, which splits arrivals evenly however quiet the road
+ * is, and keeps the choice the same each time the route is worked out.
  */
-function nextLaneIndex(state: GameState, states: VehicleState[]): number {
-  return Object.values(state.vehicles).filter((v) => states.includes(v.state)).length;
+function pickLane(
+  state: GameState,
+  vehicleId: string,
+  mouth: DrivewayMouth,
+  states: VehicleState[]
+): number {
+  if (mouth.width <= DRIVEWAY_WIDTH) return 0;
+
+  const claims = [0, 1].map((lane) => {
+    const laneX = drivewayLaneX(mouth, lane);
+    return Object.values(state.vehicles).filter(
+      (other) =>
+        other.id !== vehicleId &&
+        states.includes(other.state) &&
+        [other.targetWaypoint, ...other.route].some(
+          (point) => point && Math.abs(point[0] - laneX) < 0.01
+        )
+    ).length;
+  });
+
+  if (claims[0] !== claims[1]) return claims[0] < claims[1] ? 0 : 1;
+
+  let hash = 0;
+  for (const char of vehicleId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return Math.abs(hash) % 2;
 }
 
 /**
@@ -1366,7 +1417,10 @@ function approachRoute(
   vehicle: VehicleEntity
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
-  const laneX = drivewayLaneX(block.entry, nextLaneIndex(state, ['SPAWN', 'ROAD_APPROACH']));
+  const laneX = drivewayLaneX(
+    block.entry,
+    pickLane(state, vehicle.id, block.entry, ['SPAWN', 'ROAD_APPROACH'])
+  );
 
   return driveable(state, vehicle, block, [
     [laneX, 0, block.roadLaneZ],
@@ -1457,10 +1511,17 @@ function offWalls(
   const inward = block.side === 'far' ? -1 : 1;
   const nearestToRoad = front + inward * FRONTAGE_DEPTH;
 
+  // Only ever along z. The x it was given is the lane it belongs to, and the
+  // caller has already fitted that to the plot — re-clamping it here was what
+  // slid an exit lane back onto the middle of its own ramp.
   for (let step = 0.4; step <= 16; step += 0.4) {
     for (const z of [point[2] + inward * step, point[2] - inward * step]) {
       if ((z - nearestToRoad) * inward < 0) continue;
-      const at = clampToApron(block, [point[0], 0, z]);
+      const at: [number, number, number] = [
+        point[0],
+        point[1],
+        clampToApron(block, [point[0], 0, z])[2]
+      ];
       if (!inRects(rects, at[0], at[2])) return at;
     }
   }
@@ -1492,7 +1553,7 @@ function exitRoute(
   from: VehicleEntity
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, from);
-  const laneX = drivewayLaneX(block.exit, nextLaneIndex(state, ['EXIT']));
+  const laneX = drivewayLaneX(block.exit, pickLane(state, from.id, block.exit, ['EXIT']));
 
   // A driver who never reached a pump is still out at the front of the plot,
   // and has no business cutting across the middle of it to pick up the return
@@ -1543,7 +1604,7 @@ function exitRoute(
       block.side,
       [
         offWalls(state, block, clampToApron(block, [from.worldPosition[0], 0, block.laneZ])),
-        offWalls(state, block, clampToApron(block, [laneX, 0, block.laneZ])),
+        offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
         [laneX, 0, block.roadLaneZ],
         [block.roadEndX, 0, block.roadLaneZ]
       ],
@@ -1564,7 +1625,7 @@ function exitRoute(
     block.side,
     [
       offWalls(state, block, clampToApron(block, [from.worldPosition[0], 0, throughLane])),
-      offWalls(state, block, clampToApron(block, [laneX, 0, throughLane])),
+      offWalls(state, block, clampLaneToApron(block, [laneX, 0, throughLane])),
       // Leaving the plot down the exit driveway and away along the highway.
       [laneX, 0, block.roadLaneZ],
       [block.roadEndX, 0, block.roadLaneZ]

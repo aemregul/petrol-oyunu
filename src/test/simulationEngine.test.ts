@@ -798,6 +798,59 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect([...lanes].sort()).toEqual([drivewayLaneX(mouth, 0), drivewayLaneX(mouth, 1)]);
   });
 
+  /**
+   * The exit mouth sits at the end of the frontage, so its outer lane is
+   * inside the margin a *parked* car is held to. Keeping the leg on the apron
+   * by that figure pulled the lane onto the ramp's centre line, and cars left
+   * a two-lane ramp straight down the middle of it.
+   */
+  it('leaves by the lanes of a widened exit rather than down the middle', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.buildings.ramp = {
+      id: 'ramp',
+      type: 'wide_exit',
+      level: 1,
+      position: [getLayout(state).exitX, DRIVEWAY_Z],
+      rotation: 0,
+      size: [6, 2],
+      health: 100,
+      constructionState: 'ACTIVE',
+      builtAtTimestamp: 0
+    };
+
+    const mouth = drivewayMouths(state).exit;
+    const block = blockLayout(state, 'near')!;
+    const approaches = new Set<number>();
+
+    advanceUntil(
+      state,
+      (s) => {
+        for (const v of Object.values(s.vehicles)) {
+          if (v.state !== 'EXIT') continue;
+          // The waypoint the car lines up on before turning down the mouth:
+          // the last one on the plot, just ahead of the run out to the road.
+          const points = [v.targetWaypoint, ...v.route].filter(Boolean) as Array<
+            [number, number, number]
+          >;
+          const onRoad = points.findIndex((p) => Math.abs(p[2] - block.roadLaneZ) < 0.01);
+          if (onRoad > 0) approaches.add(Math.round(points[onRoad - 1][0] * 100) / 100);
+        }
+        return approaches.size > 3;
+      },
+      3000
+    );
+
+    const lanes = [drivewayLaneX(mouth, 0), drivewayLaneX(mouth, 1)];
+    expect(approaches.size).toBeGreaterThan(0);
+
+    // Every one of them stands in a lane rather than between the two: the
+    // ramp's centre line is the one place a car leaving may not line up on.
+    for (const x of approaches) {
+      expect(Math.min(...lanes.map((lane) => Math.abs(x - lane)))).toBeLessThan(0.01);
+    }
+  });
+
   it('runs the same game on the block across the highway', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
