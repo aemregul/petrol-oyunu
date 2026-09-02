@@ -159,8 +159,13 @@ export const LAYOUT = {
    * How far beyond the plot cars join and leave the highway. Far enough to be
    * off the edge of the screen at any normal zoom: appearing halfway down a
    * road the player can see reads as a glitch, not as traffic.
+   *
+   * 42 kameranın gerçek menziline yetmiyordu (Emre, 2026-09-05): en uzak
+   * zoom'da kuşbakışı görüş, pan sınırıyla birlikte arsa kenarının ~50 grid
+   * ötesini gösterir ve araçlar yolun ortasında belirip yolun ortasında
+   * buharlaşıyordu. 90, o menzilin rahatça dışıdır; yol zaten ±300 çizilir.
    */
-  roadMargin: 42,
+  roadMargin: 90,
   /** Wide enough that a truck in the queue does not overlap the car behind. */
   queueSpacing: 3.4,
   /**
@@ -1547,9 +1552,48 @@ function routeBodyClear(
 }
 
 /**
+ * Bir doğru parçası bu dikdörtgenin İÇİNDEN geçiyor mu — örnekleme değil,
+ * kesin kesişim (slab yöntemi). legIsClear 0.25 aralıkla örnekler ve köşeyi
+ * teğet sıyıran 0.1-0.2 birimlik bir dilim iki örneğin arasından kaçabilir;
+ * fuzz'ın yakaladığı "ofisin köşesinden geçen kaçış adımı" tam buydu.
+ */
+function segmentCrossesRect(
+  a: [number, number],
+  b: [number, number],
+  r: PathRect
+): boolean {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+
+  let enter = 0;
+  let leave = 1;
+  const slab = (p: number, q: number): boolean => {
+    if (Math.abs(p) < 1e-9) return q > 0;
+    const t = q / p;
+    if (p < 0) {
+      if (t > leave) return false;
+      if (t > enter) enter = t;
+    } else {
+      if (t < enter) return false;
+      if (t < leave) leave = t;
+    }
+    return true;
+  };
+
+  const overlapsRect =
+    slab(-dx, a[0] - r.minX) &&
+    slab(dx, r.maxX - a[0]) &&
+    slab(-dz, a[1] - r.minZ) &&
+    slab(dz, r.maxZ - a[1]);
+
+  return overlapsRect && leave - enter > 1e-6;
+}
+
+/**
  * Sıkışan aracın etrafındaki, gövdenin gerçekten durabileceği boş noktalar —
  * hedefe yakınlığına göre sıralı. Nokta yarım araç payıyla (0.5) boşta
- * olmalı; oraya giden düz hamle de gerçek ayak izlerini (sıfır pay) kesmemeli.
+ * olmalı; oraya giden düz hamle de gerçek ayak izlerini kesmemeli — kesin
+ * kesişimle: köşe sıyırığı bile bir binaya doğrultulmuş rota sayılır.
  * Çiçeklik şeridine ve arsa kenarının dışına kaçış yok.
  */
 function escapeHops(
@@ -1583,7 +1627,7 @@ function escapeHops(
       if (x < block.minX + LANE_HALF_WIDTH || x > block.maxX - LANE_HALF_WIDTH) continue;
       if (z < zMin || z > zMax) continue;
       if (inRects(stand, x, z)) continue;
-      if (!legIsClear(solid, [hx, hz], [x, z])) continue;
+      if (solid.some((r) => segmentCrossesRect([hx, hz], [x, z], r))) continue;
       out.push([x, 0, z]);
     }
   }
@@ -3517,8 +3561,16 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
  */
 const ROAD_TRAFFIC_PER_SEC = 0.42;
 
-/** Ceiling on how many of them the scene carries at once. */
-const MAX_ACTIVE_VEHICLES = 14;
+/**
+ * Ceiling on how many of them the scene carries at once.
+ *
+ * roadMargin ile birlikte büyüdü: yol uçları ekran menzilinin dışına
+ * taşınınca her araç yolda daha uzun süre kalıyor; tavan aynı kalsaydı yol
+ * seyrekleşir, üstüne müşteri akışı da geçen trafiğin işgal ettiği kotaya
+ * boğulurdu. Birim yol başına yoğunluk hız ve doğum temposundan gelir, bu
+ * sayı yalnız sahnenin taşıyabildiğidir.
+ */
+const MAX_ACTIVE_VEHICLES = 24;
 
 /** The best a station can ever do: most of the road still drives on by. */
 const MAX_STOP_RATE = 0.72;

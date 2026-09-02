@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
-import { createEffects, runSimulationTick, LAYOUT } from '../domain/services/simulationEngine';
+import {
+  blockLayout,
+  createEffects,
+  runSimulationTick,
+  LAYOUT
+} from '../domain/services/simulationEngine';
+import { CAMERA_VIEWS, groundCoverage, MIN_ZOOM } from '../rendering/cameraFrame';
 
 /**
  * Yol, arsayı beklemez.
@@ -69,5 +75,27 @@ describe('the highway lives on its own', () => {
     // Karşıya sapmaya çalışan olmadı; yakın şerit de akmaya devam etti.
     expect(farOffRoad).toBe(0);
     expect(nearSeen).toBeGreaterThan(0);
+  });
+
+  it('spawns and despawns beyond the camera reach, never mid-screen', () => {
+    // Emre'nin 2026-09-05 şikâyeti: araçlar yolun ortasında beliriyor ve
+    // yolun ortasında buharlaşıyordu — roadMargin (42) kameranın gerçek
+    // menzilinin içindeydi. Bu çivi, marjı kamera matematiğinin kendisine
+    // bağlar: en uzak zoom'da en geniş görüşün (kuşbakışı) yarı genişliği +
+    // pan sınırının arsa kenarını aşabildiği pay. Yarın biri zoom'u ya da
+    // pan'ı genişletirse bu test kırılır, araçlar yine ekranda doğmaz.
+    const widestView = Math.max(...CAMERA_VIEWS.map((v) => v.radiusScale));
+    const halfViewGrid = (groundCoverage(MIN_ZOOM) * widestView) / 2 / 2; // dünya→grid /2
+    const panBeyondEdgeGrid = 24 / 2; // gameStore.panBounds margin, dünya birimi
+    const cameraReachGrid = halfViewGrid + panBeyondEdgeGrid;
+
+    expect(LAYOUT.roadMargin).toBeGreaterThan(cameraReachGrid);
+
+    // Ve bloklar bu marjı gerçekten kullanıyor: doğum/siliniş noktaları arsa
+    // kenarından tam roadMargin ötede.
+    const state = createInitialGameState();
+    const block = blockLayout(state, 'near')!;
+    expect(block.roadStartX).toBe(block.minX - LAYOUT.roadMargin);
+    expect(block.roadEndX).toBe(block.maxX + LAYOUT.roadMargin);
   });
 });
