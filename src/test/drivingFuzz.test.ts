@@ -79,18 +79,33 @@ function round(rnd: () => number, seconds: number): string[] {
   state.pumps = {};
   const bays = 1 + Math.floor(rnd() * 2);
   for (let i = 0; i < bays; i++) {
-    state.pumps[`p${i}`] = {
-      ...proto,
-      id: `p${i}`,
-      // Through the same snap the build flow applies, so every layout dealt
-      // here is one the game can actually produce.
-      position: snapPlacement(state, 'pump_standard', [
-        4 + Math.floor(rnd() * (state.station.plots.width - 8)),
-        6 + Math.floor(rnd() * (state.station.plots.height - 9))
-      ]),
-      currentVehicleId: null,
-      employeeId: null
-    };
+    // Through the same snap AND the same placement rules the build flow
+    // applies, so every layout dealt here is one the game can actually
+    // produce — dealing a pump inside the office proved nothing except that
+    // impossible forecourts behave impossibly. Turned pumps are in the deck
+    // too, the way the starting station now deals its own.
+    for (let tries = 0; tries < 40; tries++) {
+      const rotation = rnd() < 0.5 ? 0 : 90;
+      const at = snapPlacement(
+        state,
+        'pump_standard',
+        [
+          4 + Math.floor(rnd() * (state.station.plots.width - 8)),
+          6 + Math.floor(rnd() * (state.station.plots.height - 9))
+        ],
+        rotation
+      );
+      if (!evaluatePlacement(state, 'pump_standard', at, rotation).valid) continue;
+      state.pumps[`p${i}`] = {
+        ...proto,
+        id: `p${i}`,
+        position: at,
+        rotation,
+        currentVehicleId: null,
+        employeeId: null
+      };
+      break;
+    }
   }
 
   const wanted = 2 + Math.floor(rnd() * 4);

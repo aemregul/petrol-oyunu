@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import * as THREE from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
 import { DECAL, decal } from './decal';
+import { BayPad } from './BayPad';
+import { pumpBayOffset } from '../domain/services/simulationEngine';
 
 /**
  * Hand-built facility geometry for the pieces no CC0 kit covers: wash tunnels,
@@ -453,8 +455,18 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
   const accent = fast ? '#f97316' : '#22c55e';
   const height = fast ? 2.4 : 1.9;
 
+  // Şarj aracının gerçekten durduğu yer: chargerRoute'un bay hesabıyla aynı.
+  // Ön yüz yapının rotasyonuna aittir — oyuncu direği çevirince alan döner.
+  const bayOffset = pumpBayOffset({ rotation: building.rotation });
+
   return (
     <group>
+      <BayPad
+        worldOffset={[bayOffset[0] * 2, bayOffset[1] * 2]}
+        worldAlong={building.rotation % 180 !== 0 ? 'x' : 'z'}
+        rotationDeg={building.rotation}
+      />
+
       {/* Island pad and kerb, same language as the fuel pump */}
       <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
         <boxGeometry args={[w * 0.9, 0.3, d * 0.9]} />

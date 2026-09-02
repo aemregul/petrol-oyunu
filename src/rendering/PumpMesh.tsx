@@ -5,6 +5,8 @@ import { Html } from '@react-three/drei';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { DECAL, decal } from './decal';
 import { getPumpCanopyLayout, PumpCanopyLayout } from './pumpCanopyLayout';
+import { BayPad } from './BayPad';
+import { pumpBayOffset, pumpFacesAcrossZ } from '../domain/services/simulationEngine';
 
 interface PumpMeshProps {
   pump: PumpEntity;
@@ -147,6 +149,11 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
     .filter((f) => pump.supportedFuels.includes(f))
     .map((f, i) => ({ fuel: f, color: GAME_CONFIG.fuels[f].color, index: i }));
 
+  // Duruş alanı, motorun aracı gerçekten durdurduğu bay'den türetilir —
+  // boya ile davranış aynı hesaptan çıkar, ayrışamaz. Ön yüz artık yapının
+  // rotasyonuna aittir: oyuncu pompayı çevirince alan da onunla döner.
+  const bayOffset = pumpBayOffset(pump);
+
   return (
     <group
       position={[posX, 0, posZ]}
@@ -158,6 +165,12 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
         else selectPump(pump.id);
       }}
     >
+      <BayPad
+        worldOffset={[bayOffset[0] * 2, bayOffset[1] * 2]}
+        worldAlong={pumpFacesAcrossZ(pump) ? 'x' : 'z'}
+        rotationDeg={pump.rotation}
+      />
+
       {/* Shown only while rearranging, so the forecourt is left alone
           otherwise — the same treatment every other structure gets. */}
       {editable && (

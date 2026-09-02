@@ -17,7 +17,8 @@ import {
   drivewayMouths,
   defaultMouthX,
   syncPriceSign,
-  getLayout
+  getLayout,
+  serviceBayRect
 } from '../domain/services/simulationEngine';
 import { pavedFrontage } from '../domain/services/land';
 
@@ -32,12 +33,42 @@ describe('placement rules', () => {
     expect(fp).toEqual({ minX: 8, minZ: 9, maxX: 12, maxZ: 11 });
   });
 
+  // Emre'nin 2026-09-02 kuralı: duruş alanı yapıya DAHİLDİR. Rotasyonla
+  // birlikte döner ve üstüne hiçbir şey kurulamaz — iki yönde de: alanın
+  // üstüne bina gelmez, bina üstüne alan gelmez.
+  it('reserves the serving bay as part of the structure', () => {
+    const state = createInitialGameState();
+    state.player.level = 10;
+
+    // Alan rotasyonla döner: 90 öne (yola), 270 arkaya bakar.
+    const front = serviceBayRect([8.5, 7], 90);
+    const back = serviceBayRect([8.5, 7], 270);
+    expect(front.maxZ).toBeCloseTo(6, 3);
+    expect(front.minZ).toBeCloseTo(5, 3);
+    expect(back.minZ).toBeCloseTo(8, 3);
+    expect(back.maxZ).toBeCloseTo(9, 3);
+
+    // Başlangıç pompasının (rot 90, bay z 4.6..6) alanının üstüne çöp kutusu
+    // bile kurulamaz…
+    expect(evaluatePlacement(state, 'trash_can', [8.5, 5.5], 0).valid).toBe(false);
+    // …hemen yanına, alanın dışına kurulabilir.
+    expect(evaluatePlacement(state, 'trash_can', [11.5, 5.5], 0).valid).toBe(true);
+
+    // Ve tersi: yeni pompanın DURUŞ ALANI mevcut ofisin (x 2..6, z 9..13)
+    // üstüne gelirse pompa da reddedilir — ayak izi temiz olsa bile.
+    expect(evaluatePlacement(state, 'pump_standard', [7.5, 11.5], 180).valid).toBe(false);
+    // Aynı nokta, alanı boşluğa bakan rotasyonla: kabul.
+    expect(evaluatePlacement(state, 'pump_standard', [7.5, 11.5], 0).valid).toBe(true);
+  });
+
   it('rejects a structure hanging off the plot edge', () => {
     const state = createInitialGameState();
     state.player.level = 10;
 
     expect(evaluatePlacement(state, 'trash_can', [0, 10], 0).valid).toBe(false);
-    expect(evaluatePlacement(state, 'trash_can', [10, 10], 0).valid).toBe(true);
+    // Arsanın içindeki örnek nokta boş zemin olmalı: [10,10] başlangıç
+    // pompası dönük başlayınca onun köşesine denk geldi.
+    expect(evaluatePlacement(state, 'trash_can', [12, 10], 0).valid).toBe(true);
 
     const { width } = state.station.plots;
     expect(evaluatePlacement(state, 'trash_can', [width, 10], 0).valid).toBe(false);

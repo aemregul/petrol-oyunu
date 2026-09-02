@@ -149,6 +149,12 @@ export interface VehicleEntity {
    * wait for ever, so past a few seconds they edge past whatever is in the way.
    */
   blockedSeconds?: number;
+  /**
+   * How long the solid-structure rule has been refusing this car's next step.
+   * Structures are walls — a car pressed against one stays put — but a car
+   * that can never move again must eventually be taken off the board.
+   */
+  solidStuckSeconds?: number;
   /** Charging point this driver is plugged into, for electric customers. */
   chargingBuildingId?: string | null;
   /**

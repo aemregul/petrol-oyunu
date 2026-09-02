@@ -33,6 +33,12 @@ describe('leaving the forecourt', () => {
         state.tanks.gasoline.stock = 9000;
         state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.65;
 
+        // Seed 13'ün yeniden ürettiği sahne bu üç pompanın BU dizilişiyle
+        // kaydedildi; test çıkışta yola karışmayı sınar, varsayılan pompanın
+        // yönünü değil. Başlangıç pompası artık dönük başladığı için fikstür
+        // kendi geometrisini açıkça sabitler.
+        state.pumps.pump_1.position = [8, 7.5];
+        state.pumps.pump_1.rotation = 0;
         state.pumps.pump_2 = { ...state.pumps.pump_1, id: 'pump_2', position: [12, 7.5] };
         state.pumps.pump_3 = { ...state.pumps.pump_1, id: 'pump_3', position: [4, 7.5] };
         for (const [id, pumpId] of [

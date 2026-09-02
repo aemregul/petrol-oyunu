@@ -18,7 +18,9 @@ import {
   drivewayRole,
   drivewaySideAt,
   drivewayZ,
-  frontageRow
+  frontageRow,
+  SERVICE_BAY_TYPES,
+  serviceBayRect
 } from './simulationEngine';
 
 export interface Footprint {
@@ -97,6 +99,23 @@ export function occupiedFootprints(
         GAME_CONFIG.buildings.pump_standard.size,
         pump.rotation
       )
+    });
+    // Emre'nin 2026-09-02 kuralı: duruş alanı yapıya dahildir — üstüne
+    // başka bir şey kurulamaz.
+    taken.push({
+      id: pump.id,
+      name: 'Pompa duruş alanı',
+      footprint: serviceBayRect(pump.position, pump.rotation)
+    });
+  }
+
+  for (const building of Object.values(state.buildings)) {
+    if (building.id === ignoreId) continue;
+    if (!SERVICE_BAY_TYPES.includes(building.type)) continue;
+    taken.push({
+      id: building.id,
+      name: `${GAME_CONFIG.buildings[building.type]?.name ?? building.type} duruş alanı`,
+      footprint: serviceBayRect(building.position, building.rotation, building.size)
     });
   }
 
@@ -396,12 +415,23 @@ export function evaluatePlacement(
     return evaluateRoadsideSign(state, footprint);
   }
 
-  if (!isFootprintOnOwnedLand(state.station.plots.ownedParcels, footprint)) {
-    return { valid: false, reason: 'Burası sahip olduğunuz arsanın dışında.' };
+  // Emre'nin 2026-09-02 kuralı: pompanın ve şarj direğinin duruş alanı
+  // yapının parçasıdır. Arsa, beton, banket ve çakışma sınavlarının hepsine
+  // ayak iziyle birlikte girer — oyuncu yapıyı çevirince alan da döner ve
+  // yerleşim ona göre kabul ya da red edilir.
+  const zones: Footprint[] = [footprint];
+  if (SERVICE_BAY_TYPES.includes(buildingType)) {
+    zones.push(serviceBayRect(position, rotation, catalog.size as [number, number]));
   }
 
-  if (!isFootprintOnOwnedLand(state.station.plots.pavedParcels, footprint)) {
-    return { valid: false, reason: 'Önce bu parsele beton dökmelisiniz.' };
+  for (const zone of zones) {
+    if (!isFootprintOnOwnedLand(state.station.plots.ownedParcels, zone)) {
+      return { valid: false, reason: 'Burası sahip olduğunuz arsanın dışında.' };
+    }
+
+    if (!isFootprintOnOwnedLand(state.station.plots.pavedParcels, zone)) {
+      return { valid: false, reason: 'Önce bu parsele beton dökmelisiniz.' };
+    }
   }
 
   // The strip between the road and the concrete line is frontage — verge
@@ -410,10 +440,11 @@ export function evaluatePlacement(
   // which the parcel checks alone cannot police because parcelAt folds the
   // whole road corridor into row 0. Signs and ramps returned earlier, so this
   // refuses only ordinary structures.
-  const overFrontage =
+  const overFrontage = zones.some((zone) =>
     drivewaySideAt(position[1]) === 'near'
-      ? footprint.minZ < FORECOURT_FRONT
-      : footprint.maxZ > FAR_SIDE_FRONT;
+      ? zone.minZ < FORECOURT_FRONT
+      : zone.maxZ > FAR_SIDE_FRONT
+  );
   if (overFrontage) {
     return { valid: false, reason: 'Yol banketi inşaata kapalı; betonun gerisine kurun.' };
   }
@@ -429,8 +460,10 @@ export function evaluatePlacement(
 
   for (const taken of occupiedFootprints(state)) {
     if (absorbed.has(taken.id)) continue;
-    if (overlaps(footprint, taken.footprint)) {
-      return { valid: false, reason: `${taken.name} ile çakışıyor.` };
+    for (const zone of zones) {
+      if (overlaps(zone, taken.footprint)) {
+        return { valid: false, reason: `${taken.name} ile çakışıyor.` };
+      }
     }
   }
 

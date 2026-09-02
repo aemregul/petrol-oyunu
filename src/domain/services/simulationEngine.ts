@@ -32,6 +32,7 @@ import {
   routeAroundOrNull,
   canReach,
   wallRects,
+  pumpRects,
   legIsClear,
   inRects,
   Rect as PathRect
@@ -545,9 +546,10 @@ function queueLayByZ(
   laneZ: number,
   exitLaneZ: number,
   inward: number,
-  pumps: Array<{ position: [number, number] }>,
+  pumps: Array<{ position: [number, number]; rotation?: number }>,
   side: DrivewaySide,
-  spans: Array<[number, number]>
+  spans: Array<[number, number]>,
+  buildingSpans: Array<[number, number]>
 ): number {
   const relevant = pumps.filter((p) => drivewaySideAt(p.position[1]) === side);
   const clearance = (z: number) =>
@@ -558,6 +560,35 @@ function queueLayByZ(
       laneClearance(z, spans)
     );
 
+
+  // Emre'nin 2026-09-02 kararı: yola dönük bir pompanın kuyruğu ayrı bir
+  // lay-by'da değil, pompanın KENDİ bay hattında bekler — servis alan aracın
+  // tam arkasında, gerçek bir istasyondaki gibi. Sıradaki aracın pompaya
+  // gidişi de böylece tek bir ileri hamle olur; şeride çıkıp geri dalma
+  // dansı biter. Lay-by seçenekleri ancak öyle bir pompa yoksa, ya da hattı
+  // bir binadan geçiyorsa devreye girer.
+  const flowX = inward === 1 ? 1 : -1;
+  const frontBayLines = relevant
+    // Ön yüz artık oyuncunun rotasyonundan gelir; kuyruk ancak akış yönüne
+    // bakan bir bay'in arkasında dizilebilir (near +x, far -x).
+    .filter((p) => {
+      const dir = bayApproachDir(p as { rotation?: number });
+      return Math.abs(dir[1]) < 0.01 && dir[0] === flowX;
+    })
+    .map((p) => p.position[1] + pumpBayOffset(p as { rotation?: number })[1])
+    .filter(
+      (z) =>
+        (z - laneZ) * inward > 0.8 &&
+        Math.abs(exitLaneZ - z) > 1.5 &&
+        // Yalnızca BİNALARA bakılır: bay tanım gereği pompasına bitişiktir,
+        // pompaları da sayan span listesi kendi hattını her seferinde veto
+        // ediyordu.
+        laneClearance(z, buildingSpans) > 0
+    );
+  if (frontBayLines.length > 0) {
+    // Birden fazla dönük pompa: yola en yakın hat, akışın ilk karşılaştığı.
+    return frontBayLines.reduce((best, z) => ((z - best) * inward < 0 ? z : best));
+  }
 
   const options = QUEUE_LAY_BYS.map((offset) => laneZ + inward * offset).filter(
     (z) => Math.abs(exitLaneZ - z) > 1.5
@@ -673,10 +704,11 @@ export function blockLayout(
   // cars come in at to the far end of the bays, so anything standing along
   // that stretch is in its way. It used to be pinned four units in whatever
   // was built there — which is a lane running through the walls of a shop.
-  const queueHeadX = side === 'far' ? box.maxX - headIn : box.minX + headIn;
+  //
+  const defaultHeadX = side === 'far' ? box.maxX - headIn : box.minX + headIn;
   const drivenX: [number, number] = [
-    Math.min(mouths.entry.x, mouths.exit.x, queueHeadX, ...bayXs),
-    Math.max(mouths.entry.x, mouths.exit.x, queueHeadX, ...bayXs)
+    Math.min(mouths.entry.x, mouths.exit.x, defaultHeadX, ...bayXs),
+    Math.max(mouths.entry.x, mouths.exit.x, defaultHeadX, ...bayXs)
   ];
   const frontSpans = solidSpans(state, side, drivenX);
 
@@ -714,7 +746,24 @@ export function blockLayout(
   const laneZ = front + inward * frontLane;
   const exitLaneZ = front + inward * backLane;
   const laneClear = laneClearance(laneZ, padded);
-  const layByZ = queueLayByZ(laneZ, exitLaneZ, inward, pumps, side, padded);
+  const buildingSpans = solidSpans({ buildings: state.buildings }, side, drivenX).map(
+    ([a, b]) => [a - CAR_HALF_SPAN, b + CAR_HALF_SPAN] as [number, number]
+  );
+  const layByZ = queueLayByZ(laneZ, exitLaneZ, inward, pumps, side, padded, buildingSpans);
+
+  // The head of the queue stays BEHIND any bay that sits on the queue's own
+  // line: a head beyond one is a line whose front car has to squeeze past
+  // whoever is being served to take its place, and that squeeze never opens —
+  // the queue crawled forever and no car ever actually stood in it. Pumps
+  // deep in the plot share no ground with the lay-by, so they leave the head
+  // where it has always been.
+  const baysOnTheLine = sidePumps
+    .filter((p) => Math.abs(p.position[1] - layByZ) < 3)
+    .map((p) => p.position[0]);
+  const queueHeadX =
+    side === 'far'
+      ? Math.max(defaultHeadX, ...baysOnTheLine.map((x) => x + LAYOUT.queueSpacing))
+      : Math.min(defaultHeadX, ...baysOnTheLine.map((x) => x - LAYOUT.queueSpacing));
 
   return side === 'far'
     ? {
@@ -817,24 +866,63 @@ export function pumpFacesAcrossZ(pump: { rotation?: number }): boolean {
 /**
  * Where a car stands to be served, relative to the island.
  *
- * A pump island serves from its two long faces — PumpMesh draws a till and a
- * holster on each, at local ±x — and those faces turn with the island. The bay
- * was pinned to world x regardless, so turning a pump moved the hardware and
- * left the car parked against its blank end: the player aims the pump at the
- * entrance and the drivers still pull up sideways to it.
- *
- * Unturned, the side is chosen by where the queue feeds from, so the car pulls
- * in rather than swinging across the island. Turned, the faces look up and down
- * the plot instead, and the near one is the one the circulation lane is on.
+ * Emre'nin 2026-09-02 kararı: yapının ÖN YÜZÜ oyuncunundur. Duruş alanı
+ * yapının yerel +x yüzüne aittir ve inşaatta yapı hangi yöne çevrildiyse
+ * onunla birlikte döner — motor şeride bakıp kendi kararını vermez. Oyuncu
+ * pompayı/şarjı çevirerek aracın nereye yanaşacağını kendisi seçer:
+ * rot 0 → +x, 90 → -z (yeni oyunun yola dönük pompası), 180 → -x, 270 → +z.
  */
-export function pumpBayOffset(
-  block: Pick<BlockLayout, 'queueStep' | 'laneZ'>,
-  pump: { position: [number, number]; rotation?: number }
-): [number, number] {
-  if (!pumpFacesAcrossZ(pump)) {
-    return [block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET, 0];
-  }
-  return [0, block.laneZ <= pump.position[1] ? -PUMP_BAY_OFFSET : PUMP_BAY_OFFSET];
+export function pumpBayOffset(pump: { rotation?: number }): [number, number] {
+  const theta = ((((pump.rotation ?? 0) % 360) + 360) % 360) * (Math.PI / 180);
+  return [
+    Math.round(PUMP_BAY_OFFSET * Math.cos(theta) * 1000) / 1000 + 0,
+    Math.round(-PUMP_BAY_OFFSET * Math.sin(theta) * 1000) / 1000 + 0
+  ];
+}
+
+/**
+ * Bay'de duran aracın baktığı doğrultu (birim, eksene hizalı): yapının yerel
+ * +z ekseni, rotasyonla dünyaya çevrilmiş. Yanaşma, hazırlık noktası ve
+ * ayrılıştaki "önce ileri çık" hamlesi hep bu doğrultuyu kullanır.
+ */
+export function bayApproachDir(pump: { rotation?: number }): [number, number] {
+  const theta = ((((pump.rotation ?? 0) % 360) + 360) % 360) * (Math.PI / 180);
+  return [
+    Math.round(Math.sin(theta) * 1000) / 1000 + 0,
+    Math.round(Math.cos(theta) * 1000) / 1000 + 0
+  ];
+}
+
+/** Duruş alanının kapladığı zemin: bir araçlık dikdörtgen, grid biriminde. */
+export const SERVICE_BAY_TYPES = ['pump_standard', 'ev_charger_ac', 'ev_charger_dc'];
+
+export function serviceBayRect(
+  position: [number, number],
+  rotation: number,
+  size: [number, number] = [2, 3]
+): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  const [ox, oz] = pumpBayOffset({ rotation });
+  // Uzun kenar, aracın durduğu doğrultuda (bay ofsetine dik eksen).
+  const alongX = Math.abs(ox) < 0.01;
+  const hx = alongX ? 1.0 : 0.6;
+  const hz = alongX ? 0.6 : 1.0;
+  const rect = {
+    minX: position[0] + ox - hx,
+    maxX: position[0] + ox + hx,
+    minZ: position[1] + oz - hz,
+    maxZ: position[1] + oz + hz
+  };
+
+  // İç kenar, yapının kendi ayak izinden başlar: alan adaya yaslıdır ama
+  // adayla çakışmaz — yoksa yapı kendi duruş alanıyla "çarpışır"dı.
+  const turned = rotation % 180 !== 0;
+  const islandHx = (turned ? size[1] : size[0]) / 2;
+  const islandHz = (turned ? size[0] : size[1]) / 2;
+  if (ox > 0.01) rect.minX = Math.max(rect.minX, position[0] + islandHx);
+  if (ox < -0.01) rect.maxX = Math.min(rect.maxX, position[0] - islandHx);
+  if (oz > 0.01) rect.minZ = Math.max(rect.minZ, position[1] + islandHz);
+  if (oz < -0.01) rect.maxZ = Math.min(rect.maxZ, position[1] - islandHz);
+  return rect;
 }
 
 /**
@@ -929,6 +1017,15 @@ const CAR_CLEARANCE = 1.4;
  * forecourt, and the arrivals behind them stack in the entrance.
  */
 const MERGE_GAP = 4;
+
+/**
+ * Extra room demanded from traffic COMING UP BEHIND the join point. A passing
+ * car travels at highway pace and covers four grid units in the half-second
+ * the descent takes — a gap that looked adequate at the kerb closes before
+ * the joining car's tail clears the lane. Ahead of the join the plain gap
+ * still applies; whoever is already past cannot be driven into.
+ */
+const MERGE_GAP_BEHIND_PAD = 3;
 
 /**
  * How close to a lane a driver has to be before waiting for a gap in it. Any
@@ -1092,22 +1189,22 @@ function followThrottle(
       if (other.id === vehicle.id) return false;
       if (Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1) return false;
       const behind = (target[0] - other.worldPosition[0]) * flow;
-      return behind > -CAR_CLEARANCE && behind < MERGE_GAP;
+      return (
+        behind > -CAR_CLEARANCE &&
+        behind < MERGE_GAP + (behind > 0 ? MERGE_GAP_BEHIND_PAD : 0)
+      );
     });
     if (noGap) return { throttle: 0, gap: Infinity };
   }
 
-  // The return lane is the other place cars merge rather than follow: they
-  // pull out of the bays sideways into traffic already running along it.
-  if (joining(block.exitLaneZ, 1)) {
-    const occupied = traffic.some(
-      (other) =>
-        other.id !== vehicle.id &&
-        Math.abs(other.worldPosition[2] - block.exitLaneZ) < 1 &&
-        Math.abs(other.worldPosition[0] - target[0]) < MERGE_GAP
-    );
-    if (occupied) return { throttle: 0, gap: Infinity };
+  // Emre'nin 2026-09-02 kuralı: tesis içinde araç, araca engel değildir —
+  // gerekirse birbirlerinin içinden geçerler ve forecourt'ta trafik düğümü
+  // hiç kurulmaz. Takip etme, yol verme ve kavşak pazarlığı yalnızca
+  // karayoluna aittir; yapılardan kaçınmak ise rotanın işi, frenin değil.
+  if (Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) >= 1.5) {
+    return { throttle: 1, gap: Infinity };
   }
+
   const toTarget = Math.hypot(
     target[0] - vehicle.worldPosition[0],
     target[2] - vehicle.worldPosition[2]
@@ -1159,6 +1256,41 @@ function isWedged(vehicle: VehicleEntity): boolean {
 }
 
 /**
+ * Emre'nin 2026-09-02 kuralı: yapılar KATIDIR. Rota ne derse desin, bir
+ * aracın gövdesi bina ya da pompa adasının içine giremez — duvara gelen araç
+ * orada takılır, içinden sızmaz. Hafif küçültülmüş ayak izi, bay'de pompaya
+ * bitişik duran aracın santimlik sürtünmesini takılma saymamak için.
+ */
+const SOLID_SHRINK = -0.15;
+
+function bodyInSolid(
+  state: GameState,
+  side: DrivewaySide,
+  x: number,
+  z: number,
+  heading: number
+): boolean {
+  const rects = [
+    // Binalar sıfır toleransla katıdır. Küçültme payı yalnız pompalara:
+    // bay'de duran aracın adaya santimlik sürtünmesi takılma sayılmasın.
+    ...wallRects(state, side, 0),
+    ...pumpRects(state, side, undefined, SOLID_SHRINK)
+  ];
+  if (rects.length === 0) return false;
+
+  const ahead = Math.sin(heading);
+  const across = Math.cos(heading);
+  for (const along of [-0.9, 0, 0.9]) {
+    for (const beam of [-0.43, 0.43]) {
+      const cx = x + ahead * along + across * beam;
+      const cz = z + across * along - ahead * beam;
+      if (inRects(rects, cx, cz)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Drives a vehicle for this tick at whatever speed the traffic allows, and
  * reports whether it finished its route. Every moving vehicle goes through
  * here, which is what keeps the spacing rule impossible to forget.
@@ -1189,7 +1321,39 @@ function driveInTraffic(
   // clock restarts so the driver goes back to giving way immediately after.
   if (held) vehicle.blockedSeconds = 0;
 
-  return driveToward(vehicle, dt * pace * (held ? Math.max(throttle, CRAWL_THROTTLE) : throttle));
+  // Katı yapı kuralı: adım bir binanın ya da pompa adasının içinde bitecekse
+  // atılmaz — araç duvarın dibinde durur ve takılı sayılır. Yalnızca İÇERİ
+  // giren adım engellenir; bir şekilde içeride yakalanmış araç (eski kayıt)
+  // dışarı çıkabilir.
+  const before: [number, number, number] = [...vehicle.worldPosition];
+  const headingBefore = vehicle.heading;
+  const wasInside = bodyInSolid(state, block.side, before[0], before[2], headingBefore);
+
+  const arrived = driveToward(
+    vehicle,
+    dt * pace * (held ? Math.max(throttle, CRAWL_THROTTLE) : throttle)
+  );
+
+  if (
+    !wasInside &&
+    bodyInSolid(
+      state,
+      block.side,
+      vehicle.worldPosition[0],
+      vehicle.worldPosition[2],
+      vehicle.heading
+    )
+  ) {
+    vehicle.worldPosition = before;
+    vehicle.heading = headingBefore;
+    // blockedSeconds burada işe yaramaz — bir sonraki tick'in gaz hesabı onu
+    // sıfırlıyor. Duvar takılması kendi saatini tutar.
+    vehicle.solidStuckSeconds = (vehicle.solidStuckSeconds ?? 0) + dt;
+    return false;
+  }
+
+  vehicle.solidStuckSeconds = 0;
+  return arrived;
 }
 
 /** The block a vehicle is working with, falling back to the station's own. */
@@ -1203,7 +1367,11 @@ function blockFor(state: GameState, vehicle: VehicleEntity): BlockLayout {
  * queue — and so the block across the road gets its own limit.
  */
 function maxQueueLength(state: GameState, block: BlockLayout): number {
-  const m = LAYOUT.apronMargin;
+  // Half a lane, not the apron's parking margin: a queue slot is measured
+  // along the lay-by line, and the parking margin priced the tail slots off
+  // a plot they physically fit on — with the head now held behind the bays,
+  // that margin left the whole queue one car long.
+  const m = LANE_HALF_WIDTH;
   const usable =
     block.queueStep < 0 ? block.queueHeadX - (block.minX + m) : block.maxX - m - block.queueHeadX;
   const fits = Math.max(1, Math.min(5, Math.floor(usable / LAYOUT.queueSpacing) + 1));
@@ -1230,8 +1398,12 @@ function queueSlotAt(block: BlockLayout, index: number): [number, number, number
     0,
     block.queueZ
   ];
-  const at = clampToApron(block, raw);
-  return Math.abs(at[0] - raw[0]) > 0.01 ? null : at;
+  // Along the line the slot only needs half a lane of edge room — the apron
+  // margin is for parking nose-in and was voiding tail slots that fit fine.
+  if (raw[0] < block.minX + LANE_HALF_WIDTH || raw[0] > block.maxX - LANE_HALF_WIDTH) {
+    return null;
+  }
+  return [raw[0], 0, clampToApron(block, raw)[2]];
 }
 
 export function queueSlotPosition(
@@ -1263,6 +1435,37 @@ export function queueSlotPosition(
   // Asked for a place further back than the lay-by has: the queue is capped to
   // the slots that exist, so this is the tail rather than a spot in a wall.
   return last ?? clampToApron(block, [block.queueHeadX, 0, block.queueZ]);
+}
+
+/**
+ * The way INTO a queue slot: along the lane, drop onto the lay-by line one
+ * car-length behind the slot, and pull forward into it.
+ *
+ * The route used to be a single waypoint — the slot itself — which the
+ * planner drew as one long diagonal across the forecourt, a different
+ * diagonal for every car. A queue assembled out of diagonals reads as cars
+ * abandoned at angles, not as a line. Arriving along the line instead leaves
+ * every car facing the same way, nose to tail, the moment it stops.
+ */
+function queueJoinRoute(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  index: number,
+  side: DrivewaySide
+): Array<[number, number, number]> | null {
+  const slot = queueSlotPosition(state, index, side);
+  const behindX = clamp(
+    slot[0] + block.queueStep,
+    block.minX + LANE_HALF_WIDTH,
+    Math.max(block.minX + LANE_HALF_WIDTH, block.maxX - LANE_HALF_WIDTH)
+  );
+
+  return driveable(state, vehicle, block, [
+    [behindX, 0, block.laneZ],
+    [behindX, 0, slot[2]],
+    slot
+  ]);
 }
 
 /**
@@ -1438,6 +1641,69 @@ function approachRoute(
  * the route rather than a rendering trick, so the car drives to the spot it
  * will actually occupy instead of snapping sideways on arrival.
  */
+/**
+ * Ortak yanaşma, oyuncunun seçtiği ön yüze göre.
+ *
+ * Araç zaten bay hattında ve bay burnunun İLERİSİNDEyse tek düz hamle: sıra
+ * başından pompaya "önce sol, sonra içeri, sonra sol" dansı gerçek sürücü
+ * davranışı değil. Değilse şeritten hazırlık noktasına (bay'in bir araç boyu
+ * gerisi, yanaşma doğrultusunda) planlı gelinir, son iki bacak DÜZDÜR —
+ * planlayıcının şişkin pompa bandı o bacakları çapraz köşelere büküyor ve
+ * çapraz gelen aracın burnu adaya girip katı kurala takılıyordu. Binalar
+ * gerçekten kesiyorsa null: çağıran son çare planlı yola düşer.
+ */
+function approachBay(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  bay: [number, number, number],
+  dir: [number, number],
+  ignorePumpId?: string,
+  ignoreBuildingId?: string
+): Array<[number, number, number]> | null {
+  const walls = wallRects(state, block.side, 0, ignoreBuildingId);
+
+  const dx = bay[0] - vehicle.worldPosition[0];
+  const dz = bay[2] - vehicle.worldPosition[2];
+  const ahead = dx * dir[0] + dz * dir[1];
+  const sideways = Math.abs(dx * dir[1] - dz * dir[0]);
+  if (
+    sideways < 0.7 &&
+    ahead > 0.5 &&
+    legIsClear(walls, [vehicle.worldPosition[0], vehicle.worldPosition[2]], [bay[0], bay[2]])
+  ) {
+    return [bay];
+  }
+
+  const runUp: [number, number, number] = [
+    bay[0] - dir[0] * PUMP_APPROACH_RUN,
+    0,
+    bay[2] - dir[1] * PUMP_APPROACH_RUN
+  ];
+  const lastLegsClear =
+    legIsClear(walls, [runUp[0], block.laneZ], [runUp[0], runUp[2]]) &&
+    legIsClear(walls, [runUp[0], runUp[2]], [bay[0], bay[2]]);
+  if (!lastLegsClear) return null;
+
+  const toRunUp = driveable(
+    state,
+    vehicle,
+    block,
+    [
+      [vehicle.worldPosition[0], 0, block.laneZ],
+      [runUp[0], 0, block.laneZ]
+    ],
+    ignorePumpId,
+    ignoreBuildingId
+  );
+  if (!toRunUp) return null;
+
+  const tail: Array<[number, number, number]> = [];
+  if (Math.abs(runUp[2] - block.laneZ) > 0.05) tail.push(runUp);
+  tail.push(bay);
+  return [...toRunUp, ...tail];
+}
+
 function pumpRoute(
   state: GameState,
   vehicle: VehicleEntity,
@@ -1445,16 +1711,9 @@ function pumpRoute(
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
   const bay = pumpBay(block, pump);
+  const approach = approachBay(state, vehicle, block, bay, bayApproachDir(pump), pump.id);
+  if (approach) return approach;
 
-  // Pull straight out of the waiting bay before turning along the lane. Cutting
-  // the corner would take the car back down the line it was just standing in,
-  // through everyone still waiting there.
-  //
-  // A car ends up facing the way its last leg ran, and it has to come to rest
-  // alongside the island rather than nosed into it — so the final approach runs
-  // down whichever axis the island is long on. Unturned that is z, straight off
-  // the lane; turned a quarter, it is x, which needs one more corner to line the
-  // car up before it rolls in.
   const legs: Array<[number, number, number]> = pumpFacesAcrossZ(pump)
     ? [
         [vehicle.worldPosition[0], 0, block.laneZ],
@@ -1478,8 +1737,21 @@ function chargerRoute(
   postId?: string
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
-  const offset = block.queueStep < 0 ? PUMP_BAY_OFFSET : -PUMP_BAY_OFFSET;
-  const bay = clampToApron(block, [point[0] + offset, 0, point[1]]);
+  // Şarj direğinin ön yüzü de oyuncunun çevirdiği yöndür — pompayla aynı kural.
+  const rotation = (postId ? state.buildings[postId]?.rotation : 0) ?? 0;
+  const [ox, oz] = pumpBayOffset({ rotation });
+  const bay = clampToApron(block, [point[0] + ox, 0, point[1] + oz]);
+
+  const approach = approachBay(
+    state,
+    vehicle,
+    block,
+    bay,
+    bayApproachDir({ rotation }),
+    undefined,
+    postId
+  );
+  if (approach) return approach;
 
   return driveable(
     state,
@@ -1564,22 +1836,101 @@ function exitRoute(
   // and has no business cutting across the middle of it to pick up the return
   // lane — that is the path that runs through whatever the player built there.
   // Judged by where the car is standing: on the approach lane, or in the
-  // waiting bay. Anywhere else it is out among the pumps. The tolerance is
-  // tight because those are exact spots a car parks on — measuring loosely
-  // catches a pump island that happens to sit near the waiting bay and sends
-  // cars that did reach a pump back out through the arriving traffic.
+  // waiting bay. Anywhere else it is out among the pumps.
+  //
+  // Standing at a pump's bay overrules the z test outright — a bay can sit
+  // right on the queue line, and measuring by z alone misfiles the car.
+  // WHICH way it then leaves depends on which face of the island it stood at:
+  // a bay on the road side pulls forward onto the front lane and flows out —
+  // going backward from there is a car driving straight through its own pump
+  // island, which is what the player watched happen. A side or rear bay has
+  // the island between itself and the road, so it keeps the forward/back-lap
+  // choice below.
+  let bayKind: 'front' | 'other' | null = null;
+  let bayDir: [number, number] | null = null;
+  const inwardHere = block.side === 'far' ? -1 : 1;
+  for (const pump of Object.values(state.pumps)) {
+    if (pumpSide(pump) !== block.side) continue;
+    const bay = pumpBay(block, pump);
+    if (
+      Math.hypot(from.worldPosition[0] - bay[0], from.worldPosition[2] - bay[2]) >= 1
+    ) {
+      continue;
+    }
+    bayKind = (pump.position[1] - bay[2]) * inwardHere > 0 ? 'front' : 'other';
+    bayDir = bayApproachDir(pump);
+    break;
+  }
+  // Bay'den ayrılış gerçek hayattaki gibi: önce burnun doğrultusunda İLERİ
+  // çık, sonra dön. Olduğu yerde burnu başka yöne çevirmek, aracın kuyruğunu
+  // pompa adasının içine sokar — katı yapı kuralı o dönüşü haklı olarak
+  // durduruyor ve araç bay'de sonsuza dek asılı kalıyordu.
+  if (bayKind === 'front' && bayDir) {
+    const rollOut = clampLaneToApron(block, [
+      from.worldPosition[0] + bayDir[0] * 2.4,
+      0,
+      from.worldPosition[2] + bayDir[1] * 2.4
+    ]);
+    const ontoLane = clampLaneToApron(block, [rollOut[0], 0, block.laneZ]);
+
+    // Planlayıcısız, düz eksenli beş nokta: bay'in önü tanım gereği açıktır
+    // ve planlayıcının kestirme çaprazları, dönen aracın köşesini komşu
+    // pompaya sokup katı-yapı kuralına yakalatıyordu. Yalnızca araya
+    // gerçekten bina girmişse (oyuncunun marifeti) olağan akışa düşülür.
+    const walls = wallRects(state, block.side, 0);
+    const clear =
+      legIsClear(walls, [from.worldPosition[0], from.worldPosition[2]], [rollOut[0], rollOut[2]]) &&
+      legIsClear(walls, [rollOut[0], rollOut[2]], [ontoLane[0], ontoLane[2]]) &&
+      legIsClear(walls, [ontoLane[0], ontoLane[2]], [laneX, block.laneZ]);
+    if (clear) {
+      return [
+        rollOut,
+        ontoLane,
+        [laneX, 0, block.laneZ],
+        [laneX, 0, block.roadLaneZ],
+        [block.roadEndX, 0, block.roadLaneZ]
+      ];
+    }
+  }
+
+  // Yan/arka bay'den ayrılan da önce burnu yönünde bir araç boyu çıkar;
+  // gerisini planlayıcı o noktadan devralır. (Gövde, yerinde dönüşte adaya
+  // değmesin diye.)
+  const rollAhead: [number, number, number] | null =
+    bayKind === 'other' && bayDir
+      ? clampLaneToApron(block, [
+          from.worldPosition[0] + bayDir[0] * 2.4,
+          0,
+          from.worldPosition[2] + bayDir[1] * 2.4
+        ])
+      : null;
+  const rollAheadClear =
+    rollAhead !== null &&
+    legIsClear(
+      wallRects(state, block.side, 0),
+      [from.worldPosition[0], from.worldPosition[2]],
+      [rollAhead[0], rollAhead[2]]
+    );
+  const start: [number, number, number] = rollAheadClear
+    ? rollAhead!
+    : [from.worldPosition[0], 0, from.worldPosition[2]];
+  const head: Array<[number, number, number]> = rollAheadClear ? [rollAhead!] : [];
+
   const atFrontOfPlot =
-    Math.abs(from.worldPosition[2] - block.laneZ) < 1 ||
-    Math.abs(from.worldPosition[2] - block.queueZ) < 1;
+    bayKind === 'front' ||
+    (bayKind === null &&
+      (Math.abs(from.worldPosition[2] - block.laneZ) < 1 ||
+        Math.abs(from.worldPosition[2] - block.queueZ) < 1));
 
   // A car at a bay whose exit mouth lies AHEAD of it pulls back onto the
   // front lane and drives on out, the way any real forecourt flows. The lap
   // around the back of the plot is kept only for when the mouth is behind —
   // turning against the incoming traffic would be worse than the detour.
-  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
+  //
   // Attempted only when the straight run to the mouth is actually open: the
   // full search is expensive exactly on the cramped plots where the forward
   // way is usually walled off anyway.
+  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
   const forwardOpen = () => {
     // Never into oncoming traffic. The front lane is the way IN: pulling onto
     // it while cars are arriving puts the leaver nose to nose with them and
@@ -1595,20 +1946,21 @@ function exitRoute(
     if (oncoming) return false;
 
     const walls = wallRects(state, block.side);
-    const a: [number, number] = [from.worldPosition[0], block.laneZ];
+    const a: [number, number] = [start[0], block.laneZ];
     const b: [number, number] = [laneX, block.laneZ];
     return (
-      legIsClear(walls, [from.worldPosition[0], from.worldPosition[2]], a) &&
+      legIsClear(walls, [start[0], start[2]], a) &&
       legIsClear(walls, a, b)
     );
   };
-  if (!atFrontOfPlot && (laneX - from.worldPosition[0]) * flow > 1 && forwardOpen()) {
+  if (!atFrontOfPlot && (laneX - start[0]) * flow > 1 && forwardOpen()) {
     const forward = routeAroundOrNull(
       state,
       from,
       block.side,
       [
-        offWalls(state, block, clampToApron(block, [from.worldPosition[0], 0, block.laneZ])),
+        ...head,
+        offWalls(state, block, clampToApron(block, [start[0], 0, block.laneZ])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
         [laneX, 0, block.roadLaneZ],
         [block.roadEndX, 0, block.roadLaneZ]
@@ -1629,7 +1981,8 @@ function exitRoute(
     from,
     block.side,
     [
-      offWalls(state, block, clampToApron(block, [from.worldPosition[0], 0, throughLane])),
+      ...head,
+      offWalls(state, block, clampToApron(block, [start[0], 0, throughLane])),
       offWalls(state, block, clampLaneToApron(block, [laneX, 0, throughLane])),
       // Leaving the plot down the exit driveway and away along the highway.
       [laneX, 0, block.roadLaneZ],
@@ -2376,8 +2729,14 @@ function tankerBay(
  */
 function truckHeldUp(
   state: GameState,
-  truck: NonNullable<FuelOrderEntity['truck']>
+  truck: NonNullable<FuelOrderEntity['truck']>,
+  roadLaneZ: number
 ): boolean {
+  // Emre'nin 2026-09-02 kuralı tankere de uygulanır: tesis içinde araç araca
+  // engel değildir — kuyruktaki bir müşteri berthe giden kırk tonluğu asla
+  // rehin alamaz. Yol üstünde ise trafiğe saygı sürer.
+  if (Math.abs(truck.worldPosition[2] - roadLaneZ) >= 1.5) return false;
+
   const dx = Math.sin(truck.heading);
   const dz = Math.cos(truck.heading);
   const inPath = (x: number, z: number, reach: number) => {
@@ -2434,14 +2793,15 @@ function advanceTruck(
   truck: NonNullable<FuelOrderEntity['truck']>,
   dt: number
 ): boolean {
-  if (!truckHeldUp(state, truck)) {
+  const tank = truck.tankBuildingId ? state.buildings[truck.tankBuildingId] : null;
+  const side = tank ? drivewaySideAt(tank.position[1]) : 'near';
+  const roadZ = blockLayout(state, side)?.roadLaneZ ?? -3;
+
+  if (!truckHeldUp(state, truck, roadZ)) {
     truck.blockedSeconds = 0;
     // Highway pace out on the road; walking pace once it turns onto the plot.
     // A tanker crawling down the carriageway put a thirty-second tail of
     // braking traffic behind it.
-    const tank = truck.tankBuildingId ? state.buildings[truck.tankBuildingId] : null;
-    const side = tank ? drivewaySideAt(tank.position[1]) : 'near';
-    const roadZ = blockLayout(state, side)?.roadLaneZ ?? -3;
     truck.speed = Math.abs(truck.worldPosition[2] - roadZ) < 1.2 ? 0.95 : 0.7;
     return driveToward(truck as unknown as VehicleEntity, dt);
   }
@@ -2453,8 +2813,6 @@ function advanceTruck(
   const destination = truck.route[truck.route.length - 1] ?? truck.targetWaypoint;
   if (!destination) return false;
 
-  const tank = truck.tankBuildingId ? state.buildings[truck.tankBuildingId] : null;
-  const side = tank ? drivewaySideAt(tank.position[1]) : 'near';
   const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
 
   const detoured = routeAroundOrNull(
@@ -3392,7 +3750,7 @@ function findAvailablePump(
 
 /** The spot alongside an island where a car actually stands to be served. */
 function pumpBay(block: BlockLayout, pump: PumpEntity): [number, number, number] {
-  const [dx, dz] = pumpBayOffset(block, pump);
+  const [dx, dz] = pumpBayOffset(pump);
   return clampToApron(block, [pump.position[0] + dx, 0, pump.position[1] + dz]);
 }
 
@@ -3648,6 +4006,13 @@ function tickVehicles(
       case 'PASSING': {
         if (driveInTraffic(state, vehicle, block, dt)) {
           setVehicleState(vehicle, 'DESPAWN');
+          break;
+        }
+        // Katı yapılarla bir turn-away rotası duvara dayanabilir; duvarın
+        // dibinde sonsuza dek titreyen bir hayalet bırakmak yerine, uzun
+        // süredir kımıldayamayan araç sessizce sahneden alınır.
+        if (isWedged(vehicle) || (vehicle.solidStuckSeconds ?? 0) > 20) {
+          setVehicleState(vehicle, 'DESPAWN');
         }
         break;
       }
@@ -3694,9 +4059,7 @@ function tickVehicles(
           const toCharger = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           const toQueue =
             queued.length < maxQueueLength(state, block)
-              ? driveable(state, vehicle, block, [
-                  queueSlotPosition(state, queued.length, side)
-                ])
+              ? queueJoinRoute(state, vehicle, block, queued.length, side)
               : null;
 
           if (point && toCharger) {
@@ -3749,9 +4112,7 @@ function tickVehicles(
         } else {
           const joining =
             queued.length < maxQueueLength(state, block)
-              ? driveable(state, vehicle, block, [
-                  queueSlotPosition(state, queued.length, side)
-                ])
+              ? queueJoinRoute(state, vehicle, block, queued.length, side)
               : null;
 
           if (joining) {
@@ -3818,7 +4179,20 @@ function tickVehicles(
               ? vehicle.route[vehicle.route.length - 1]
               : vehicle.targetWaypoint;
 
-          if (!heading || heading[0] !== slotPos[0] || heading[2] !== slotPos[2]) {
+          // Already standing on its slot: nothing to re-route. Handing the
+          // car a fresh route to the spot it occupies every tick kept its
+          // waypoint permanently set — so the straighten-out below never ran
+          // once, and queues froze at whatever angle each arrival ended on.
+          const parked =
+            Math.hypot(
+              vehicle.worldPosition[0] - slotPos[0],
+              vehicle.worldPosition[2] - slotPos[2]
+            ) < 0.8;
+
+          if (
+            !parked &&
+            (!heading || heading[0] !== slotPos[0] || heading[2] !== slotPos[2])
+          ) {
             const shuffleUp = driveable(state, vehicle, block, [slotPos]);
             // No way to the slot it has been given: better to stay where it is
             // than to shuffle forward through a wall.
@@ -3828,12 +4202,6 @@ function tickVehicles(
           // Standing at the slot, straighten out along the lane. Cars arrive
           // at whatever angle their last swerve left them on, and a queue of
           // them frozen mid-turn reads as chaos, not a queue.
-          const parked =
-            !vehicle.targetWaypoint &&
-            Math.hypot(
-              vehicle.worldPosition[0] - slotPos[0],
-              vehicle.worldPosition[2] - slotPos[2]
-            ) < 0.8;
           if (parked) {
             const laneHeading = block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2;
             const turn =
@@ -3988,8 +4356,15 @@ function tickVehicles(
 
       case 'EXIT': {
         // This customer is already counted; letting a wedged one sit on the
-        // forecourt only blocks the cars still trying to be served.
-        if (isWedged(vehicle) || driveInTraffic(state, vehicle, block, dt)) {
+        // forecourt only blocks the cars still trying to be served. A car the
+        // solid-structure rule has pinned against a wall for good goes the
+        // same way — pressed steel is honest for a while, a permanent statue
+        // is not.
+        if (
+          isWedged(vehicle) ||
+          (vehicle.solidStuckSeconds ?? 0) > 20 ||
+          driveInTraffic(state, vehicle, block, dt)
+        ) {
           setVehicleState(vehicle, 'DESPAWN');
         }
         break;

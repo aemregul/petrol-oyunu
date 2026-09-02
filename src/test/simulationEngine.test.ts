@@ -17,6 +17,7 @@ import {
   getLayout,
   drivewayMouths,
   drivewayLaneX,
+  pumpBayOffset,
   blockLayout,
   blockFacilities,
   chargingPoints,
@@ -100,6 +101,85 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(vehicle.targetPumpId).toBe('pump_1');
     expect(state.pumps.pump_1.currentVehicleId).toBe(vehicle.id);
     expect(state.pumps.pump_1.state).toBe('REQUEST_READY');
+  });
+
+  // Emre'nin 2026-09-02 kararı: ön yüz OYUNCUNUN rotasyonundan gelir, motor
+  // şeride bakıp karar vermez. Dört yönün dördü de sayıyla çivili.
+  it('puts the serving bay on the face the player turned forward', () => {
+    expect(pumpBayOffset({ rotation: 0 })).toEqual([1.4, 0]);
+    expect(pumpBayOffset({ rotation: 90 })).toEqual([0, -1.4]);
+    expect(pumpBayOffset({ rotation: 180 })).toEqual([-1.4, 0]);
+    expect(pumpBayOffset({ rotation: 270 })).toEqual([0, 1.4]);
+  });
+
+  // Ve araçlar oyuncunun seçtiği yüze itaat eder: pompa arkaya çevrilirse
+  // müşteri pompanın ARKASINDA (z = 7 + 1.4) durur — öne değil.
+  it('parks the customer on whichever face the player chose', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.pumps.pump_1.rotation = 270;
+
+    advanceUntil(state, (s) => Object.values(s.vehicles).some((v) => v.state === 'AT_PUMP'), 900);
+    const vehicle = Object.values(state.vehicles).find((v) => v.state === 'AT_PUMP')!;
+
+    expect(vehicle.worldPosition[0]).toBeCloseTo(8.5, 1);
+    expect(vehicle.worldPosition[2]).toBeCloseTo(7 + 1.4, 1);
+  });
+
+  // Emre'nin 2026-09-02 kararı: yeni oyunun pompası yola dönük başlar —
+  // çeyrek tur dönmüş, ortada ve yola yakın (z=7), araç ön şeritten gelip
+  // TAM ÖNÜNDE durur. Sayılar çivili: pompa [8.5, 7] / 90°, aracın bekleme
+  // yeri [8.5, 7 - 1.4].
+  it('starts a new game with the pump turned to face the road', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+
+    expect(state.pumps.pump_1.rotation).toBe(90);
+    expect(state.pumps.pump_1.position).toEqual([8.5, 7]);
+
+    advanceUntil(state, (s) => Object.values(s.vehicles).some((v) => v.state === 'AT_PUMP'), 600);
+    const vehicle = Object.values(state.vehicles).find((v) => v.state === 'AT_PUMP')!;
+
+    expect(vehicle.worldPosition[0]).toBeCloseTo(8.5, 1);
+    expect(vehicle.worldPosition[2]).toBeCloseTo(7 - 1.4, 1);
+  });
+
+  // Emre'nin 2026-09-02 isteği: kuyruk, ilham alınan oyundaki gibi nizami —
+  // bekleyen her araç aynı şerit çizgisinde (queueZ), burnu aynı yöne dönük,
+  // aralıklar sabit. Çapraz gelip açılı duran araba kuyruğu kabul değil.
+  it('queues cars in one straight file, all facing the same way', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    // Görevli yok, oyuncu da yakıt vermiyor: ilk müşteri pompayı tutar ve
+    // arkası doğal olarak kuyruğa biner.
+
+    const block = blockLayout(state, 'near')!;
+    const laneHeading = Math.PI / 2;
+
+    let sawTwoParked = false;
+    advanceUntil(
+      state,
+      (s) => {
+        const parked = Object.values(s.vehicles).filter(
+          (v) => v.state === 'QUEUE' && !v.targetWaypoint
+        );
+        if (parked.length < 2) return false;
+        sawTwoParked = true;
+
+        for (const v of parked) {
+          // Aynı çizgi üstünde…
+          expect(Math.abs(v.worldPosition[2] - block.queueZ)).toBeLessThan(0.6);
+          // …ve kuyruk yönüne dönük (düzelme payıyla).
+          const turn =
+            ((laneHeading - v.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          expect(Math.abs(turn)).toBeLessThan(0.6);
+        }
+        return true;
+      },
+      1200
+    );
+
+    expect(sawTwoParked).toBe(true);
   });
 
   it('walks a manual sale through REQUEST > FUELING > PAYMENT and pays out', () => {
@@ -946,11 +1026,15 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
   });
 
-  it('keeps vehicles out of one another and never gridlocks', () => {
+  // Emre'nin 2026-09-02 kuralı: tesis İÇİNDE araçlar birbirine engel olmaz —
+  // gerekirse iç içe geçerler, forecourt trafiği diye bir şey yoktur. Mesafe
+  // disiplini yalnızca karayolunda aranır; bu test de yalnızca orayı ölçer.
+  it('keeps road traffic apart and never gridlocks', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.85;
 
+    const roadZ = blockLayout(state, 'near')!.roadLaneZ;
     let pairs = 0;
     let touching = 0;
     let longestTransit = 0;
@@ -958,7 +1042,9 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
     for (let tick = 0; tick < 3000 && !state.dayState.isDayEnding; tick++) {
       runSimulationTick(state, 0.2, createEffects());
-      const vehicles = Object.values(state.vehicles);
+      const vehicles = Object.values(state.vehicles).filter(
+        (v) => Math.abs(v.worldPosition[2] - roadZ) < 1.5
+      );
 
       for (let a = 0; a < vehicles.length; a++) {
         for (let b = a + 1; b < vehicles.length; b++) {
@@ -975,7 +1061,8 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
       // These states have nothing to wait for but the road ahead, so a car
       // that sits in one of them is a car the traffic rules have wedged.
-      for (const vehicle of vehicles) {
+      // Measured over EVERY vehicle, on and off the road.
+      for (const vehicle of Object.values(state.vehicles)) {
         if (!['PASSING', 'ROAD_APPROACH', 'EXIT'].includes(vehicle.state)) {
           enteredTransit.delete(vehicle.id);
           continue;
@@ -1042,7 +1129,12 @@ describe('simulationEngine - highway lanes and driveways', () => {
     // And now electric customers actually turn up and pay for a charge.
     advanceUntil(
       state,
-      (s) => Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc'),
+      (s) => {
+        // Elektrikli müşterinin gelişi zar işi; gün kapanırsa hiç gelemez.
+        // Test şarj hattını sınıyor, gün uzunluğunu değil — öğlen sabit.
+        s.dayState.gameTime = 12;
+        return Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc');
+      },
       6000
     );
     expect(
@@ -1474,7 +1566,12 @@ describe('withdrawing a service mid-visit', () => {
 
     advanceUntil(
       state,
-      (s) => Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc'),
+      (s) => {
+        // Elektrikli müşterinin gelişi zar işi; gün kapanırsa hiç gelemez.
+        // Test şarj hattını sınıyor, gün uzunluğunu değil — öğlen sabit.
+        s.dayState.gameTime = 12;
+        return Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc');
+      },
       6000
     );
     const car = Object.values(state.vehicles).find((v) => v.chargingBuildingId === 'dc')!;
@@ -1509,7 +1606,12 @@ describe('withdrawing a service mid-visit', () => {
 
     advanceUntil(
       state,
-      (s) => Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc'),
+      (s) => {
+        // Elektrikli müşterinin gelişi zar işi; gün kapanırsa hiç gelemez.
+        // Test şarj hattını sınıyor, gün uzunluğunu değil — öğlen sabit.
+        s.dayState.gameTime = 12;
+        return Object.values(s.vehicles).some((v) => v.chargingBuildingId === 'dc');
+      },
       6000
     );
     const car = Object.values(state.vehicles).find((v) => v.chargingBuildingId === 'dc')!;

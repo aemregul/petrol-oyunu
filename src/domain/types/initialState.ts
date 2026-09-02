@@ -105,10 +105,20 @@ export function createInitialGameState(): GameState {
       pump_1: {
         id: 'pump_1',
         level: 1,
-        // Grid koordinatları — 2x3'lük ayak izinin kenarları hücre çizgisine
-        // otursun diye derinlik ekseni yarım koordinatta.
-        position: [8, 7.5],
-        rotation: 0,
+        // Grid koordinatları — çeyrek tur dönünce 2x3'lük ayak izinin uzun
+        // kenarı x eksenine geçer; kenarlar hücre çizgisine otursun diye bu
+        // kez x yarım koordinatta.
+        //
+        // Emre'nin 2026-09-02 kararı: yeni oyun pompası yola dönük başlar
+        // (rotation 90) — araçlar ön şeritten gelip doğrudan önünde durur,
+        // bekleme trafiği ilk andan görülebilir olur.
+        //
+        // z=7 (Emre, 2026-09-02: "bir birim daha öne"): servis yüzü yolda,
+        // araç 5.6'da durur ve kuyruk artık ayrı bir lay-by'da değil, tam bu
+        // bay hattında bekler — servis alanın burnu-kuyruğunda, ilham alınan
+        // oyundaki akış.
+        position: [8.5, 7],
+        rotation: 90,
         supportedFuels: ['gasoline'],
         state: 'IDLE',
         health: 100,
