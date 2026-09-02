@@ -35,6 +35,7 @@ import {
   pumpRects,
   legIsClear,
   inRects,
+  FLAT_TYPES,
   Rect as PathRect
 } from './pathfinding';
 import {
@@ -56,7 +57,7 @@ import {
   calculateManagerAvailableBudget,
   clamp
 } from '../formulas/economy';
-import { FAR_SIDE_FRONT, farSideBounds } from './land';
+import { FAR_SIDE_FRONT, farSideBounds, unpavedHoles } from './land';
 
 export type SoundCue =
   | 'click'
@@ -1270,12 +1271,30 @@ function bodyInSolid(
   z: number,
   heading: number
 ): boolean {
-  const rects = [
-    // Binalar sıfır toleransla katıdır. Küçültme payı yalnız pompalara:
-    // bay'de duran aracın adaya santimlik sürtünmesi takılma sayılmasın.
-    ...wallRects(state, side, 0),
-    ...pumpRects(state, side, undefined, SOLID_SHRINK)
-  ];
+  // Binalar sıfır toleransla katıdır. Küçültme payı yalnız araç dibinde
+  // durulan yapılara — pompa adaları VE şarj direkleri: bay'e yanaşan aracın
+  // santimlik sürtünmesi takılma sayılmasın. (Şarj direği bina listesinde
+  // 0 toleransla dururken, katalog boyutundaki direğe yanaşan her müşteri
+  // 3 santimlik köşe teması yüzünden sonsuza dek yarı yolda kalıyordu.)
+  const rects: PathRect[] = [];
+  for (const building of Object.values(state.buildings)) {
+    if (FLAT_TYPES.includes(building.type)) continue;
+    if (drivewaySideAt(building.position[1]) !== side) continue;
+    const turned = building.rotation === 90 || building.rotation === 270;
+    const hw = (turned ? building.size[1] : building.size[0]) / 2;
+    const hd = (turned ? building.size[0] : building.size[1]) / 2;
+    const c = SERVICE_BAY_TYPES.includes(building.type) ? SOLID_SHRINK : 0;
+    rects.push({
+      minX: building.position[0] - hw - c,
+      maxX: building.position[0] + hw + c,
+      minZ: building.position[1] - hd - c,
+      maxZ: building.position[1] + hd + c
+    });
+  }
+  for (const hole of unpavedHoles(state.station.plots, side)) {
+    rects.push(hole);
+  }
+  rects.push(...pumpRects(state, side, undefined, SOLID_SHRINK));
   if (rects.length === 0) return false;
 
   const ahead = Math.sin(heading);
@@ -1740,7 +1759,7 @@ function chargerRoute(
   // Şarj direğinin ön yüzü de oyuncunun çevirdiği yöndür — pompayla aynı kural.
   const rotation = (postId ? state.buildings[postId]?.rotation : 0) ?? 0;
   const [ox, oz] = pumpBayOffset({ rotation });
-  const bay = clampToApron(block, [point[0] + ox, 0, point[1] + oz]);
+  const bay = clampBayToApron(block, [point[0] + ox, 0, point[1] + oz]);
 
   const approach = approachBay(
     state,
@@ -3748,10 +3767,28 @@ function findAvailablePump(
   return ordered.find((pump) => pumpRoute(state, driver, pump) !== null) ?? null;
 }
 
+/**
+ * Bir bay noktasını betona sığdırır — SÜRÜŞ marjıyla, park marjıyla değil.
+ * Park marjı (2.5) kenara yakın bir direğin bay'ini direğin dibine çekiyordu:
+ * araç yanaşırken gövdesi direğe giriyor, katı kural her adımı geri alıyor ve
+ * müşteri şarjın yarım metre önünde sonsuza dek asılı kalıyordu.
+ */
+function clampBayToApron(
+  block: BlockLayout,
+  point: [number, number, number]
+): [number, number, number] {
+  const m = LANE_HALF_WIDTH;
+  return [
+    clamp(point[0], block.minX + m, Math.max(block.minX + m, block.maxX - m)),
+    point[1],
+    clamp(point[2], block.minZ + m, Math.max(block.minZ + m, block.maxZ - m))
+  ];
+}
+
 /** The spot alongside an island where a car actually stands to be served. */
 function pumpBay(block: BlockLayout, pump: PumpEntity): [number, number, number] {
   const [dx, dz] = pumpBayOffset(pump);
-  return clampToApron(block, [pump.position[0] + dx, 0, pump.position[1] + dz]);
+  return clampBayToApron(block, [pump.position[0] + dx, 0, pump.position[1] + dz]);
 }
 
 function reservePumpFor(
@@ -4237,6 +4274,19 @@ function tickVehicles(
       }
 
       case 'PUMP_RESERVED': {
+        // Katı yapı kuralına uzun süredir takılı bir araç bay'ine asla
+        // varamayacak demektir — rezervasyonu rehin tutmak yerine bırakır ve
+        // gider. Güvenlik valfi: bay kırpması düzgünken hiç tetiklenmez.
+        if ((vehicle.solidStuckSeconds ?? 0) > 20) {
+          if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {
+            releasePump(state.pumps[vehicle.targetPumpId]);
+            vehicle.targetPumpId = null;
+          }
+          vehicle.chargingBuildingId = null;
+          sendAway(state, vehicle);
+          break;
+        }
+
         // The post they were promised can be sold, carried off, or cut off at
         // the substation while they are still rolling up to it. A powered
         // point is one chargingPoints still lists; anything else is dead.

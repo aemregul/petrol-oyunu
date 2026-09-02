@@ -154,6 +154,11 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
   // rotasyonuna aittir: oyuncu pompayı çevirince alan da onunla döner.
   const bayOffset = pumpBayOffset(pump);
 
+  // Emre'nin 2026-09-02 isteği: alanın rengi pompanın hâlini anlatır —
+  // "Arızalı" rozetiyle aynı kaynaktan: arızalıysa kırmızı, bakım
+  // rozetindeyse (health < 40) turuncu, sağlıklıysa yeşil.
+  const padColor = isBroken ? '#ef4444' : pump.health < 40 ? '#f59e0b' : '#22c55e';
+
   return (
     <group
       position={[posX, 0, posZ]}
@@ -169,6 +174,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
         worldOffset={[bayOffset[0] * 2, bayOffset[1] * 2]}
         worldAlong={pumpFacesAcrossZ(pump) ? 'x' : 'z'}
         rotationDeg={pump.rotation}
+        color={padColor}
       />
 
       {/* Shown only while rearranging, so the forecourt is left alone

@@ -34,7 +34,7 @@ import { unpavedHoles } from './land';
  * entrance. Canopies are absent because they are no longer buildings; each
  * one belongs to the pump it roofs.
  */
-const FLAT_TYPES = ['car_park', 'truck_park', 'wide_entry', 'wide_exit'];
+export const FLAT_TYPES = ['car_park', 'truck_park', 'wide_entry', 'wide_exit'];
 
 export interface Rect {
   minX: number;
