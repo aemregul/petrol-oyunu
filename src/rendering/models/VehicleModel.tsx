@@ -4,9 +4,11 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { VehicleArchetype } from '../../domain/types/gameState';
 import { VEHICLE_MODELS, VEHICLE_MODEL_URLS } from './vehicleModels';
+import { ElectricVehicleModel } from './ElectricVehicleModel';
 
 interface VehicleModelProps {
   archetype: VehicleArchetype;
+  vehicleId: string;
   /** Metres travelled this frame, used to roll the wheels realistically. */
   speed: number;
 }
@@ -26,7 +28,7 @@ function isRoadWheel(name: string): boolean {
  * the same archetype, so it is cloned per instance and its material cloned
  * alongside it — otherwise tinting one car would tint all of them.
  */
-export const VehicleModel: React.FC<VehicleModelProps> = ({ archetype, speed }) => {
+const KenneyVehicleModel: React.FC<VehicleModelProps> = ({ archetype, speed }) => {
   const config = VEHICLE_MODELS[archetype] || VEHICLE_MODELS.commuter;
   const { scene } = useGLTF(config.url);
   const wheelsRef = useRef<THREE.Object3D[]>([]);
@@ -73,6 +75,14 @@ export const VehicleModel: React.FC<VehicleModelProps> = ({ archetype, speed }) 
 
   // Scale is baked into the clone above, so only the ground offset is applied.
   return <primitive object={model} position={[0, groundOffset, 0]} />;
+};
+
+export const VehicleModel: React.FC<VehicleModelProps> = ({ archetype, vehicleId, speed }) => {
+  if (archetype === 'ev') {
+    return <ElectricVehicleModel vehicleId={vehicleId} speed={speed} />;
+  }
+
+  return <KenneyVehicleModel archetype={archetype} vehicleId={vehicleId} speed={speed} />;
 };
 
 for (const url of VEHICLE_MODEL_URLS) useGLTF.preload(url);
