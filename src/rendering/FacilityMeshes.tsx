@@ -649,55 +649,178 @@ export const WideExit: React.FC<FacilityProps> = ({ building }) => (
   <OneWayRamp building={building} role="exit" />
 );
 
-/** Two-storey roadside restaurant with a terrace of outdoor tables. */
+/** Two-storey roadside restaurant with a glazed dining room and terrace. */
 export const Restaurant: React.FC<FacilityProps> = ({ building }) => {
   const { w, d } = dims(building);
-  const bodyW = w * 0.72;
-  const bodyD = d * 0.66;
-  const floor = 3.2;
+  const bodyW = w * 0.76;
+  const bodyD = d * 0.64;
+  const floor = 3.15;
+  const bodyZ = -d * 0.13;
+  const frontZ = bodyZ + bodyD / 2;
+  const windowMaterial = (
+    <meshStandardMaterial
+      color="#173f5f"
+      emissive="#0c4a6e"
+      emissiveIntensity={0.22}
+      metalness={0.28}
+      roughness={0.18}
+    />
+  );
+  const frameMaterial = <meshStandardMaterial color="#f8fafc" roughness={0.55} />;
 
   return (
     <group>
-      {/* Ground floor with a glazed frontage */}
-      <mesh position={[0, floor / 2, -d * 0.14]} castShadow receiveShadow>
+      {/* Stone plinth gives the building a grounded, finished base. */}
+      <mesh position={[0, 0.16, bodyZ]} castShadow receiveShadow>
+        <boxGeometry args={[bodyW + 0.5, 0.32, bodyD + 0.5]} />
+        <meshStandardMaterial color="#a8a29e" roughness={0.92} />
+      </mesh>
+
+      {/* Warm stucco shells; the upper floor steps back from the terrace. */}
+      <mesh position={[0, floor / 2 + 0.22, bodyZ]} castShadow receiveShadow>
         <boxGeometry args={[bodyW, floor, bodyD]} />
-        <meshStandardMaterial color="#f1e4d0" roughness={0.75} />
+        <meshStandardMaterial color="#eee4d2" roughness={0.78} />
       </mesh>
-      <mesh position={[0, floor * 0.5, -d * 0.14 + bodyD / 2 + 0.02]}>
-        <planeGeometry args={[bodyW * 0.85, floor * 0.55]} />
-        <meshStandardMaterial color="#0ea5e9" roughness={0.15} transparent opacity={0.75} />
-      </mesh>
-
-      {/* Upper floor, set back slightly */}
-      <mesh position={[0, floor + floor * 0.45, -d * 0.18]} castShadow receiveShadow>
-        <boxGeometry args={[bodyW * 0.88, floor * 0.9, bodyD * 0.85]} />
-        <meshStandardMaterial color="#e7d6bd" roughness={0.75} />
-      </mesh>
-      <mesh position={[0, floor + floor * 0.45, -d * 0.18 + (bodyD * 0.85) / 2 + 0.02]}>
-        <planeGeometry args={[bodyW * 0.7, floor * 0.4]} />
-        <meshStandardMaterial color="#0ea5e9" roughness={0.15} transparent opacity={0.7} />
+      <mesh position={[0, floor + 1.45, bodyZ - 0.32]} castShadow receiveShadow>
+        <boxGeometry args={[bodyW * 0.88, 2.9, bodyD * 0.82]} />
+        <meshStandardMaterial color="#ded1b9" roughness={0.8} />
       </mesh>
 
-      {/* Roof trim */}
-      <mesh position={[0, floor * 2.02, -d * 0.18]} castShadow>
-        <boxGeometry args={[bodyW * 0.94, 0.34, bodyD * 0.9]} />
-        <meshStandardMaterial color="#8b5a2b" roughness={0.8} />
+      {/* Ground-floor shopfront: individual panes, mullions and double doors. */}
+      {[-bodyW * 0.36, -bodyW * 0.19, bodyW * 0.19, bodyW * 0.36].map((x) => (
+        <group key={`front-window-${x}`} position={[x, 1.62, frontZ + 0.025]}>
+          <mesh>
+            <planeGeometry args={[bodyW * 0.145, 1.8]} />
+            {windowMaterial}
+          </mesh>
+          <mesh position={[0, 0.95, 0.025]}>
+            <boxGeometry args={[bodyW * 0.16, 0.12, 0.12]} />
+            {frameMaterial}
+          </mesh>
+          <mesh position={[0, -0.95, 0.025]}>
+            <boxGeometry args={[bodyW * 0.16, 0.12, 0.12]} />
+            {frameMaterial}
+          </mesh>
+          {[-1, 1].map((side) => (
+            <mesh key={side} position={[side * bodyW * 0.078, 0, 0.025]}>
+              <boxGeometry args={[0.1, 2, 0.12]} />
+              {frameMaterial}
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      <group position={[0, 1.48, frontZ + 0.04]}>
+        {[-0.42, 0.42].map((x) => (
+          <group key={`door-${x}`} position={[x, 0, 0]}>
+            <mesh>
+              <planeGeometry args={[0.78, 2.45]} />
+              {windowMaterial}
+            </mesh>
+            <mesh position={[x < 0 ? 0.24 : -0.24, 0, 0.035]}>
+              <sphereGeometry args={[0.055, 8, 8]} />
+              <meshStandardMaterial color="#fbbf24" metalness={0.75} roughness={0.25} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[0, 1.28, 0.02]}>
+          <boxGeometry args={[1.82, 0.16, 0.16]} />
+          {frameMaterial}
+        </mesh>
+      </group>
+
+      {/* A row of framed upper windows breaks up the formerly blank box. */}
+      {[-0.36, -0.18, 0, 0.18, 0.36].map((ratio) => (
+        <group key={`upper-window-${ratio}`} position={[bodyW * ratio, 4.72, frontZ - bodyD * 0.09 + 0.03]}>
+          <mesh>
+            <planeGeometry args={[bodyW * 0.115, 1.15]} />
+            {windowMaterial}
+          </mesh>
+          <mesh position={[0, 0, 0.025]}>
+            <boxGeometry args={[0.08, 1.25, 0.1]} />
+            {frameMaterial}
+          </mesh>
+          <mesh position={[0, 0.62, 0.025]}>
+            <boxGeometry args={[bodyW * 0.125, 0.09, 0.1]} />
+            {frameMaterial}
+          </mesh>
+          <mesh position={[0, -0.62, 0.025]}>
+            <boxGeometry args={[bodyW * 0.125, 0.09, 0.1]} />
+            {frameMaterial}
+          </mesh>
+        </group>
+      ))}
+
+      {/* Side windows make the restaurant read from every camera angle. */}
+      {[-1, 1].map((side) =>
+        [-bodyD * 0.22, bodyD * 0.06].map((z) => (
+          <group
+            key={`side-window-${side}-${z}`}
+            position={[side * (bodyW / 2 + 0.025), 1.68, bodyZ + z]}
+            rotation={[0, side > 0 ? Math.PI / 2 : -Math.PI / 2, 0]}
+          >
+            <mesh>
+              <planeGeometry args={[bodyD * 0.2, 1.55]} />
+              {windowMaterial}
+            </mesh>
+            <mesh position={[0, 0, 0.025]}>
+              <boxGeometry args={[0.08, 1.68, 0.1]} />
+              {frameMaterial}
+            </mesh>
+          </group>
+        ))
+      )}
+
+      {/* Layered roof and parapet add a recognizable silhouette. */}
+      <mesh position={[0, 6.35, bodyZ - 0.32]} castShadow>
+        <boxGeometry args={[bodyW * 0.94, 0.28, bodyD * 0.88]} />
+        <meshStandardMaterial color="#713f12" roughness={0.82} />
+      </mesh>
+      <mesh position={[0, 6.58, bodyZ - 0.32]} castShadow>
+        <boxGeometry args={[bodyW, 0.22, bodyD * 0.94]} />
+        <meshStandardMaterial color="#92400e" roughness={0.78} />
+      </mesh>
+      <mesh position={[bodyW * 0.24, 7.03, bodyZ - bodyD * 0.18]} castShadow>
+        <boxGeometry args={[1.15, 0.72, 1.15]} />
+        <meshStandardMaterial color="#78716c" roughness={0.75} metalness={0.18} />
+      </mesh>
+      <mesh position={[bodyW * 0.24, 7.43, bodyZ - bodyD * 0.18]} castShadow>
+        <cylinderGeometry args={[0.26, 0.32, 0.36, 10]} />
+        <meshStandardMaterial color="#57534e" metalness={0.45} roughness={0.5} />
       </mesh>
 
-      {/* Entrance doors */}
-      <mesh position={[0, floor * 0.34, -d * 0.14 + bodyD / 2 + 0.04]}>
-        <planeGeometry args={[bodyW * 0.2, floor * 0.66]} />
-        <meshStandardMaterial color="#3b2413" roughness={0.5} />
-      </mesh>
+      {/* Alternating fabric strips make the terrace canopy read as an awning. */}
+      {Array.from({ length: 8 }, (_, i) => {
+        const stripW = bodyW / 8;
+        return (
+          <mesh
+            key={`awning-${i}`}
+            position={[-bodyW / 2 + stripW * (i + 0.5), floor * 0.98, frontZ + 0.92]}
+            rotation={[0.28, 0, 0]}
+            castShadow
+          >
+            <boxGeometry args={[stripW + 0.03, 0.14, 2.15]} />
+            <meshStandardMaterial color={i % 2 === 0 ? '#b91c1c' : '#f8fafc'} roughness={0.82} />
+          </mesh>
+        );
+      })}
 
-      {/* Striped awning over the terrace */}
-      <mesh position={[0, floor * 0.95, -d * 0.14 + bodyD / 2 + 0.9]} rotation={[0.28, 0, 0]} castShadow>
-        <boxGeometry args={[bodyW, 0.14, 2.2]} />
-        <meshStandardMaterial color="#b91c1c" roughness={0.8} />
-      </mesh>
+      {/* Warm wall lamps frame the entrance. */}
+      {[-1.2, 1.2].map((x) => (
+        <group key={`wall-light-${x}`} position={[x, 2.7, frontZ + 0.16]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.22, 0.34, 0.2]} />
+            <meshStandardMaterial color="#292524" metalness={0.55} roughness={0.4} />
+          </mesh>
+          <mesh position={[0, -0.03, 0.12]}>
+            <sphereGeometry args={[0.09, 10, 8]} />
+            <meshStandardMaterial color="#fde68a" emissive="#f59e0b" emissiveIntensity={1.1} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
 
       {/* Timber terrace deck the tables stand on */}
-      <mesh position={[0, 0.07, d * 0.28]} receiveShadow>
+      <mesh position={[0, 0.07, d * 0.28]} receiveShadow castShadow>
         <boxGeometry args={[bodyW * 1.05, 0.14, d * 0.4]} />
         <meshStandardMaterial color="#a97c50" roughness={0.9} />
       </mesh>
