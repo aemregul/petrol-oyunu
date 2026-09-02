@@ -139,9 +139,6 @@ export const HUD: React.FC = () => {
   const targetXp = nextLvlConf ? nextLvlConf.requiredTotalXp : prevXp + 1000;
   const xpPercent = Math.min(100, Math.max(0, ((player.xp - prevXp) / (targetXp - prevXp)) * 100));
 
-  // Critical stock warning
-  const isGasolineCritical = tanks.gasoline.stock <= tanks.gasoline.capacity * 0.15;
-
   return (
     <div
       ref={hudRef}
@@ -479,17 +476,8 @@ export const HUD: React.FC = () => {
           </div>
         )}
 
-        {/* Critical Stock Warning Banner */}
-        {isGasolineCritical && (
-          <button
-            onClick={() => setActiveModal('FUEL_ORDER')}
-            className={`game-btn rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-2 animate-breathe game-title text-white text-xs ${TONE_BUTTON.red}`}
-          >
-            <ShieldAlert className="w-4 h-4" />
-            <span>KRİTİK STOK: Benzin Siparişi Ver!</span>
-          </button>
-        )}
-
+        {/* Kritik stok uyarısı ekranın ortasını işgal etmez: sağdaki olay
+            kartlarının arasında, ActiveEventsBar'ın tepesinde yaşar. */}
         <div className="hud-events">
           <ActiveEventsBar />
         </div>

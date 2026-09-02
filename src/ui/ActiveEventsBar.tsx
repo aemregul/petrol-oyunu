@@ -18,7 +18,8 @@ import {
   Crown,
   Truck,
   Star,
-  Sparkles
+  Sparkles,
+  ShieldAlert
 } from 'lucide-react';
 
 const EVENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -88,11 +89,39 @@ export const ActiveEventsBar: React.FC = () => {
   const activeEvents = useGameStore((s) => s.gameState.activeEvents);
   const rushLeft = useGameStore((s) => s.gameState.dayState.rushSecondsLeft ?? 0);
   const dealLeft = useGameStore((s) => s.gameState.dayState.fuelDealSecondsLeft ?? 0);
+  const gasoline = useGameStore((s) => s.gameState.tanks.gasoline);
+  const setActiveModal = useGameStore((s) => s.setActiveModal);
 
-  if (activeEvents.length === 0 && rushLeft <= 0 && dealLeft <= 0) return null;
+  // Kritik stok uyarısı eskiden ekranın ortasında bir bant olarak beliriyordu
+  // ve sahneyi kapatıyordu (Emre, 2026-09-05). Artık diğer olay kartlarının
+  // arasında yaşar: aynı köşe, aynı görsel dil — ama tıklanınca doğrudan
+  // sipariş ekranını açar.
+  const gasolineCritical = gasoline.stock <= gasoline.capacity * 0.15;
+
+  if (activeEvents.length === 0 && rushLeft <= 0 && dealLeft <= 0 && !gasolineCritical) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col gap-2 pointer-events-auto">
+      {gasolineCritical && (
+        <button
+          onClick={() => setActiveModal('FUEL_ORDER')}
+          className="animate-breathe text-left"
+        >
+          <div className={`game-glass px-3 py-2.5 w-64 flex flex-col gap-1 ${TONE_GLASS.red}`}>
+            <div className="flex items-center gap-2.5">
+              <ShieldAlert className={`w-4 h-4 shrink-0 ${TONE_TEXT.red}`} />
+              <span className={`game-title text-[12px] flex-1 leading-tight ${TONE_TEXT.red}`}>
+                Kritik Stok: Benzin
+              </span>
+            </div>
+            <p className={`text-[11px] font-semibold leading-snug ${PILL_BODY}`}>
+              Depo %15'in altında — sipariş vermek için tıklayın.
+            </p>
+          </div>
+        </button>
+      )}
       {dealLeft > 0 && (
         <LiveWindow
           title={`Toptan Yakıt İndirimi %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`}
