@@ -3630,9 +3630,18 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const tankCapacity = Math.round(demand * (1.25 + Math.random() * 0.35));
   const id = 'veh_' + Math.random().toString(36).substring(2, 8);
 
+  // The highway belongs to the whole town, not only to this station's
+  // customers. One car in roughly five is shown as an EV while driving past,
+  // even before the player owns a charger. Deriving it from the already-made
+  // id adds no random roll, so traffic timing and routing remain untouched.
+  let idHash = 0;
+  for (const char of id) idHash = (idHash * 31 + char.charCodeAt(0)) | 0;
+  const throughTrafficArchetype: VehicleArchetype =
+    !stops && Math.abs(idHash) % 5 === 0 ? 'ev' : archetype;
+
   state.vehicles[id] = {
     id,
-    archetype,
+    archetype: throughTrafficArchetype,
     fuelType,
     tankCapacity,
     currentFuel: Math.max(0, tankCapacity - demand),

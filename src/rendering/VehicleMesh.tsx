@@ -65,6 +65,8 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
     vehicle.state === 'PUMP_RESERVED' ||
     vehicle.state === 'EXIT';
   const isFueling = vehicle.state === 'FUELING';
+  const isElectric = vehicle.archetype === 'ev';
+  const serviceUnit = isElectric ? 'kWh' : 'L';
 
   // Archetype color palettes
   const getCarColor = () => {
@@ -101,7 +103,11 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
       {/* Vehicle body: Kenney CC0 model, primitives kept as a fallback */}
       <ModelErrorBoundary fallback={<FallbackBody color={carColor} />}>
         <Suspense fallback={<FallbackBody color={carColor} />}>
-          <VehicleModel archetype={vehicle.archetype} speed={isMoving ? vehicle.speed : 0} />
+          <VehicleModel
+            archetype={vehicle.archetype}
+            vehicleId={vehicle.id}
+            speed={isMoving ? vehicle.speed : 0}
+          />
         </Suspense>
       </ModelErrorBoundary>
 
@@ -124,18 +130,20 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
           >
             <div
               className={`bg-slate-900/95 border-2 text-white text-xs px-2.5 py-1 rounded-xl shadow-xl flex items-center gap-1.5 backdrop-blur font-mono whitespace-nowrap ${
-                isFueling ? 'border-sky-500' : 'border-emerald-500'
+                isFueling || isElectric ? 'border-sky-500' : 'border-emerald-500'
               }`}
             >
-              <span className={isFueling ? 'text-sky-400' : 'text-emerald-400'}>⛽</span>
+              <span className={isFueling || isElectric ? 'text-sky-400' : 'text-emerald-400'}>
+                {isElectric ? '⚡' : '⛽'}
+              </span>
               {isFueling ? (
                 <span className="font-bold">
                   {vehicle.request.dispensedLiters.toFixed(1)} /{' '}
-                  {vehicle.request.calculatedLiters.toFixed(0)} L
+                  {vehicle.request.calculatedLiters.toFixed(0)} {serviceUnit}
                 </span>
               ) : (
                 <span className="font-bold">
-                  {vehicle.request.calculatedLiters.toFixed(0)} L
+                  {vehicle.request.calculatedLiters.toFixed(0)} {serviceUnit}
                 </span>
               )}
             </div>
