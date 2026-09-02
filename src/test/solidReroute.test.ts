@@ -106,4 +106,67 @@ describe('the walled-off leaver finds another way out', () => {
     // Yeni yol binanın İÇİNDEN geçmedi.
     expect(everInsideCafe).toBe(false);
   });
+
+  it('side-steps out of a pinch the planner alone cannot solve', () => {
+    // İki bina arasında 1.2 birimlik bir boğaz: gövde (0.86) sığar ama
+    // planlayıcının dönüş payı (1.1) iki taraftan da taşar — A* daha ilk
+    // hücrede mühürlü. Direkt replan burada ne kadar denenirse denensin
+    // null döner; Emre'nin istediği "sağa sola kaçınma hamlesi" tam bu an:
+    // araç yanındaki boş noktaya sıyrılır ve rotayı oradan çizer.
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    delete state.buildings.office_1;
+    delete state.buildings.tank_1;
+    state.pumps = {};
+
+    const block = blockLayout(state, 'near')!;
+    for (const [id, x] of [['pinchL', 5.5], ['pinchR', 9.7]] as const) {
+      state.buildings[id] = {
+        id, type: 'cafe', level: 1, position: [x, block.exitLaneZ], rotation: 0,
+        size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+      } as GameState['buildings'][string];
+    }
+
+    const exitX = drivewayLaneX(block.exit, 0);
+    state.vehicles.pinched = {
+      id: 'pinched', archetype: 'commuter', fuelType: 'gasoline', tankCapacity: 60,
+      currentFuel: 50,
+      request: {
+        mode: 'FULL', targetValue: 10, calculatedLiters: 10, calculatedPrice: 0,
+        dispensedLiters: 0, isFinished: true
+      },
+      patience: 60, maxPatience: 60, satisfaction: 100, state: 'EXIT',
+      targetPumpId: null, assignedActor: null,
+      worldPosition: [7.6, 0, block.exitLaneZ] as [number, number, number],
+      targetWaypoint: [exitX, 0, block.exitLaneZ] as [number, number, number],
+      route: [
+        [exitX, 0, block.roadLaneZ],
+        [block.roadEndX, 0, block.roadLaneZ]
+      ] as Array<[number, number, number]>,
+      // Boğazın ekseninde duruyor (1.8'lik gövde 1.2'lik aralığa yalnız böyle
+      // sığar); doğuya, çıkışa dönmek istiyor ama o dönüşü katı kural durdurur.
+      heading: Math.PI, speed: 1, routeProgress: 0,
+      waitingTimeSeconds: 0, shoppingIntent: false, chargingBuildingId: null,
+      chargeSecondsLeft: 0
+    } as GameState['vehicles'][string];
+
+    const effects = createEffects();
+    let maxSolidStuck = 0;
+    let lastSeen: [number, number, number] = [7.6, 0, block.exitLaneZ];
+
+    for (let i = 0; i < 4000; i++) {
+      state.dayState.gameTime = 12;
+      runSimulationTick(state, 0.05, effects);
+      const alive = state.vehicles.pinched;
+      if (!alive) break;
+      maxSolidStuck = Math.max(maxSolidStuck, alive.solidStuckSeconds ?? 0);
+      lastSeen = [...alive.worldPosition];
+    }
+
+    // Kaçış adımı ikinci denemede (4.5 sn) devreye girer; valfe (20 sn)
+    // yaklaşılmadan araç yoldan çıkmış olmalı.
+    expect(state.vehicles.pinched).toBeUndefined();
+    expect(lastSeen[2]).toBeLessThan(0);
+    expect(maxSolidStuck).toBeLessThan(8);
+  });
 });

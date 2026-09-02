@@ -15,13 +15,17 @@ import {
   DrivewaySide,
   WIDE_DRIVEWAY_WIDTH,
   drivewayMouths,
+  drivewayReserveRects,
   drivewayRole,
   drivewaySideAt,
   drivewayZ,
+  forecourtStaysOpen,
   frontageRow,
   SERVICE_BAY_TYPES,
-  serviceBayRect
+  serviceBayRect,
+  vehiclesCanStillLeave
 } from './simulationEngine';
+import { FLAT_TYPES } from './pathfinding';
 
 export interface Footprint {
   minX: number;
@@ -449,6 +453,24 @@ export function evaluatePlacement(
     return { valid: false, reason: 'Yol banketi inşaata kapalı; betonun gerisine kurun.' };
   }
 
+  // Emre'nin kuralı (ilham alınan oyundaki kırmızı taralı alan): U biçimli
+  // araç yolu rezervi araca aittir, katı yapıya kapalıdır. Ağız koridorları
+  // duruş alanını da dışlar (boğazda park eden araç kapıyı tıkar); bağlantı
+  // şeridi yalnız ayak izini dışlar ki yola dönük pompanın bay'i şeride
+  // değebilsin. Düz zeminler (otopark boyası) serbest — onlar duvar değil.
+  if (!FLAT_TYPES.includes(buildingType)) {
+    const reserves = drivewayReserveRects(state, drivewaySideAt(position[1]));
+    const blocked = reserves.some((reserve) =>
+      (reserve.kind === 'mouth' ? zones : [footprint]).some((zone) => overlaps(zone, reserve))
+    );
+    if (blocked) {
+      return {
+        valid: false,
+        reason: 'Araç yolu rezervi — giriş/çıkış koridoruna yapı kurulamaz.'
+      };
+    }
+  }
+
   // A rest complex is built *over* the units it replaces, so those are not
   // obstacles to it — refusing the placement would mean the player had to
   // demolish the parade first and lose the money twice.
@@ -464,6 +486,66 @@ export function evaluatePlacement(
       if (overlaps(zone, taken.footprint)) {
         return { valid: false, reason: `${taken.name} ile çakışıyor.` };
       }
+    }
+  }
+
+  // Koridor dışında da hiçbir yerleşim arsayı mühürleyemez: aday yapı hayalet
+  // olarak eklenir ve girişten çıkışa sürülebilir bir yol kaldığı doğrulanır.
+  // Rezerv kapıları korur; bu sınav, koridora hiç dokunmadan arsanın ortasında
+  // kapalı cep kuran son parçayı yakalar. En sona bırakıldı çünkü en pahalısı
+  // — ucuz redler onu hiç çalıştırmaz.
+  if (!FLAT_TYPES.includes(buildingType)) {
+    const side = drivewaySideAt(position[1]);
+    const ghost: GameState = {
+      ...state,
+      buildings: { ...state.buildings },
+      pumps: { ...state.pumps }
+    };
+    for (const id of absorbed) delete ghost.buildings[id];
+
+    if (buildingType === 'pump_standard') {
+      ghost.pumps.__ghost = {
+        id: '__ghost',
+        level: 1,
+        position,
+        rotation,
+        supportedFuels: [],
+        state: 'IDLE',
+        health: 100,
+        employeeId: null,
+        currentVehicleId: null,
+        flowRateLps: 0.5,
+        hasCanopy: false
+      } as unknown as GameState['pumps'][string];
+    } else {
+      ghost.buildings.__ghost = {
+        id: '__ghost',
+        type: buildingType,
+        level: 1,
+        position,
+        rotation,
+        size: catalog.size as [number, number],
+        health: 100,
+        constructionState: 'ACTIVE',
+        builtAtTimestamp: 0
+      } as GameState['buildings'][string];
+    }
+
+    if (!forecourtStaysOpen(ghost, side)) {
+      return {
+        valid: false,
+        reason: 'Bu yapı araç yolunu kapatıyor — girişten çıkışa geçit kalmıyor.'
+      };
+    }
+
+    // Girişten çıkışa yol kalması yetmez: yapı, o an sahada duran bir aracın
+    // TEK dönüş yolunun üstüne de inebilir — araç mühürlenir ve buharlaşana
+    // dek duvar dibinde titrer, ki oyuncunun gözünde düpedüz bug'dır.
+    if (!vehiclesCanStillLeave(ghost, side)) {
+      return {
+        valid: false,
+        reason: 'Bu yapı sahadaki bir aracın çıkış yolunu kapatıyor — aracın geçmesini bekleyin.'
+      };
     }
   }
 

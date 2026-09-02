@@ -4,7 +4,7 @@ import { createInitialGameState } from '../domain/types/initialState';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState, BuildingEntity } from '../domain/types/gameState';
 import { DRIVEWAY_Z, drivewayRole } from '../domain/services/simulationEngine';
-import { evaluatePlacement } from '../domain/services/placement';
+import { evaluatePlacement, snapPlacement } from '../domain/services/placement';
 
 /**
  * Every structure on the forecourt has to survive being picked up and put back
@@ -47,7 +47,10 @@ function legalSpot(state: GameState, type: string): [number, number] {
 
   for (const z of rows) {
     for (let x = 2; x <= 22; x += 1) {
-      const at: [number, number] = [x, z];
+      // Onay akışı konumu yerine oturtarak değerlendirir; buradaki sınav da
+      // aynı kareyi kullanmalı, yoksa "geçerli" bulunan nokta yarım hücre
+      // kayıp koridor rezervinin kenarına binebiliyor.
+      const at = snapPlacement(state, type, [x, z], 0);
       if (evaluatePlacement(state, type, at, 0).valid) return at;
     }
   }
@@ -133,7 +136,9 @@ describe('relocating structures', () => {
       'diesel'
     ]);
 
-    useGameStore.getState().setBuildPreviewPos([12, 6]);
+    // z=6 çıkış koridorunun (araç yolu rezervi) kuyruğuna değiyordu; bay
+    // artık rezervin gerisine taşınır — taşıma akışının kendisi değişmedi.
+    useGameStore.getState().setBuildPreviewPos([12, 8]);
     expect(useGameStore.getState().confirmBuildPlacement()).toBe(true);
 
     const pumps = Object.values(useGameStore.getState().gameState.pumps);

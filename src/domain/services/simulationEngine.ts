@@ -1186,16 +1186,45 @@ function followThrottle(
 
   if (joining(block.roadLaneZ, MERGE_HOLD_LINE)) {
     const flow = Math.sign(block.roadEndX - block.roadStartX);
-    const noGap = traffic.some((other) => {
+    const myAway = Math.abs(vehicle.worldPosition[2] - block.roadLaneZ);
+
+    // İniş SERİLEŞTİRİLİR: aynı katılım noktasına inenlerden yalnız şeride en
+    // yakın olan yola iner; diğerleri onunkini "kullanılan boşluk" sayar.
+    // Tesis içinde araçlar birbirine hayalet olduğundan iki araç aynı bekleme
+    // noktasında üst üste durabiliyor ve aynı boşlukta BİRLİKTE inip
+    // karayolunda 0.1 arayla kilitli bir çift doğuruyordu. Beraberlik (üst
+    // üste duran çift) kimlikle bozulur ki karar her tick aynı çıksın.
+    const descentBusy = traffic.some((other) => {
       if (other.id === vehicle.id) return false;
-      if (Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1) return false;
-      const behind = (target[0] - other.worldPosition[0]) * flow;
-      return (
-        behind > -CAR_CLEARANCE &&
-        behind < MERGE_GAP + (behind > 0 ? MERGE_GAP_BEHIND_PAD : 0)
-      );
+      const merging = other.targetWaypoint;
+      if (!merging || merging[0] !== target[0] || merging[2] !== target[2]) return false;
+      const theirAway = Math.abs(other.worldPosition[2] - block.roadLaneZ);
+      if (theirAway < myAway - 0.05) return true;
+      return Math.abs(theirAway - myAway) <= 0.05 && other.id < vehicle.id;
     });
-    if (noGap) return { throttle: 0, gap: Infinity };
+
+    // Açlık valfi: hiç kimse sonsuza dek kapıda bekletilmez. Yoğun günde
+    // konveyör hiç aralık vermeyebilir; birkaç saniye bekleyen sürücü gerçek
+    // hayattaki gibi giderek daha dar aralığa burnunu sokar.
+    const waited = vehicle.blockedSeconds ?? 0;
+    const patience = waited > 10 ? 0.5 : waited > 6 ? 0.75 : 1;
+
+    const noGap =
+      descentBusy ||
+      traffic.some((other) => {
+        if (other.id === vehicle.id) return false;
+        if (Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1) return false;
+        const behind = (target[0] - other.worldPosition[0]) * flow;
+        return (
+          behind > -CAR_CLEARANCE &&
+          behind < (MERGE_GAP + (behind > 0 ? MERGE_GAP_BEHIND_PAD : 0)) * patience
+        );
+      });
+    // gap: 0, bilerek — driveInTraffic'in sabırsızlık dürtmesi "önümde yer
+    // var" (gap > CAR_CLEARANCE) diyen aracı 5 saniyede bir ileri iter. Yol
+    // vermek sabırsızlanılacak bir şey değildir: çizgide dürtülen araç burnu
+    // şeritte, akan trafiğin ortasında kalakalıyordu.
+    if (noGap) return { throttle: 0, gap: 0 };
   }
 
   // Emre'nin 2026-09-02 kuralı: tesis içinde araç, araca engel değildir —
@@ -1370,7 +1399,12 @@ function driveInTraffic(
     const stuckBefore = vehicle.solidStuckSeconds ?? 0;
     vehicle.solidStuckSeconds = stuckBefore + dt;
     if (solidRerouteDue(stuckBefore, vehicle.solidStuckSeconds)) {
-      rerouteAroundSolid(state, vehicle, block);
+      rerouteAroundSolid(
+        state,
+        vehicle,
+        block,
+        solidRerouteAttempts(vehicle.solidStuckSeconds)
+      );
     }
     return false;
   }
@@ -1395,18 +1429,21 @@ function driveInTraffic(
 const SOLID_REROUTE_FIRST_SECONDS = 1.5;
 const SOLID_REROUTE_EVERY_SECONDS = 3;
 
+function solidRerouteAttempts(t: number): number {
+  return t < SOLID_REROUTE_FIRST_SECONDS
+    ? 0
+    : 1 + Math.floor((t - SOLID_REROUTE_FIRST_SECONDS) / SOLID_REROUTE_EVERY_SECONDS);
+}
+
 function solidRerouteDue(stuckBefore: number, stuckNow: number): boolean {
-  const attempts = (t: number) =>
-    t < SOLID_REROUTE_FIRST_SECONDS
-      ? 0
-      : 1 + Math.floor((t - SOLID_REROUTE_FIRST_SECONDS) / SOLID_REROUTE_EVERY_SECONDS);
-  return attempts(stuckNow) > attempts(stuckBefore);
+  return solidRerouteAttempts(stuckNow) > solidRerouteAttempts(stuckBefore);
 }
 
 function rerouteAroundSolid(
   state: GameState,
   vehicle: VehicleEntity,
-  block: BlockLayout
+  block: BlockLayout,
+  attempt: number
 ): void {
   const remaining: Array<[number, number, number]> = vehicle.targetWaypoint
     ? [vehicle.targetWaypoint, ...vehicle.route]
@@ -1417,18 +1454,147 @@ function rerouteAroundSolid(
   const ignorePump = vehicle.targetPumpId ?? undefined;
   const ignoreBuilding = vehicle.chargingBuildingId ?? undefined;
 
-  const rerouted =
-    driveable(state, vehicle, block, remaining, ignorePump, ignoreBuilding) ??
-    driveable(state, vehicle, block, [goal], ignorePump, ignoreBuilding);
-  if (rerouted) {
-    setRoute(vehicle, rerouted);
+  // Her seçenek gövde sınavından geçmek zorunda: planlayıcı, ucu bir adanın
+  // payına düşen rotada o adayı bütünüyle affeder — bay'e yanaşmak için doğru,
+  // kaçış planı içinse yalan. "Temiz" görünen rota gövdeyi adaya sürer, katı
+  // kural adımı geri alır ve araç aynı yalancı planla sonsuza dek yerinde
+  // sayardı.
+  const planFrom = (from: VehicleEntity): Array<[number, number, number]> | null => {
+    // Yoldan uzaktaki bir noktaya (roadEndX) dümdüz inen "kestirme" rota,
+    // yol-verme kuralını atlatır: joining() katılım noktasını hedefin x'inden
+    // ölçer ve hedef ufukta olunca boşluk denetimi hiç tutmaz — araç akan
+    // trafiğin içine dalar. Ayrılan araç bu yüzden ham [goal] yerine, yola
+    // düzgün katılım bacakları kuran exitRoute ile çıkar.
+    const options = [
+      () => driveable(state, from, block, remaining, ignorePump, ignoreBuilding),
+      () => driveable(state, from, block, [goal], ignorePump, ignoreBuilding),
+      ...(vehicle.state === 'EXIT' ? [() => exitRoute(state, from)] : []) // BISECT
+    ];
+    for (const option of options) {
+      const route = option();
+      if (route) return route; // BISECT-BODY
+    }
+    return null;
+  };
+
+  const direct = planFrom(vehicle);
+  if (direct) {
+    setRoute(vehicle, direct);
     return;
   }
 
-  if (vehicle.state === 'EXIT') {
-    const out = exitRoute(state, vehicle);
-    if (out) setRoute(vehicle, out);
+  // Son çare: duvarın dibine yapışmış araç, planlayıcının dönüş payı içinde
+  // kaldığı için A* daha ilk adımda tıkanabilir — oysa gövdenin gerçekten
+  // sığdığı bir kaçış adımı çoğu zaman vardır. Yakın çevrede boş bir nokta
+  // bulunur ve rota ORADAN çizilir; araç önce o noktaya sıyrılır, gerisini
+  // olağan plan götürür. Kaçış adımının kendisini yine katı yapı kuralı
+  // denetler: gerçekten giremeyeceği yere zaten giremez. Böylece cebe düşen
+  // araç rezerve edilmiş ön yola çıkıp çıkışı kullanır; silinip yok olmak
+  // hiçbir yolun kalmadığı arsaya saklanmış son valftir.
+  // Kaçış adımı ilk denemede değil, İKİNCİDEN itibaren: anlık bir sürtünme
+  // kendi kendine çözülür ve daha ilk saniyede yan yollara sapan araçlar
+  // önalanın akışını gereksiz yere karıştırıyordu. İki tam deneme boyunca
+  // kımıldayamamış araç ise gerçekten ceptedir — yan adım artık gürültü
+  // değil, tek çıkış umududur.
+  if (attempt < 2) return;
+
+  for (const escape of escapeHops(state, vehicle, block, goal, ignorePump)) {
+    const ghost = { ...vehicle, worldPosition: escape } as VehicleEntity;
+    const onward = planFrom(ghost);
+    if (onward) {
+      setRoute(vehicle, [escape, ...onward]);
+      return;
+    }
   }
+
+}
+
+/**
+ * Rotanın tamamı gövdeyle sürülebilir mi? Katı yapı kuralının (bodyInSolid)
+ * adım adım soracağı soruyu peşinen sorar: rota boyunca örneklenen her
+ * noktada araç gövdesi bir binanın ya da adanın içine girmemeli. Aracın zaten
+ * durduğu ilk araç boyu muaf — dibine yapıştığı duvarın payı, oradan
+ * UZAKLAŞAN rotayı geçersiz kılmasın.
+ */
+function routeBodyClear(
+  state: GameState,
+  side: DrivewaySide,
+  from: [number, number, number],
+  route: Array<[number, number, number]>
+): boolean {
+  let px = from[0];
+  let pz = from[2];
+  let travelled = 0;
+
+  for (const [wx, , wz] of route) {
+    const dx = wx - px;
+    const dz = wz - pz;
+    const length = Math.hypot(dx, dz);
+    if (length > 1e-6) {
+      const heading = Math.atan2(dx, dz);
+      const steps = Math.ceil(length / 0.3);
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        if (travelled + length * t < 1) continue;
+        if (bodyInSolid(state, side, px + dx * t, pz + dz * t, heading)) return false;
+      }
+    }
+    travelled += length;
+    px = wx;
+    pz = wz;
+  }
+  return true;
+}
+
+/**
+ * Sıkışan aracın etrafındaki, gövdenin gerçekten durabileceği boş noktalar —
+ * hedefe yakınlığına göre sıralı. Nokta yarım araç payıyla (0.5) boşta
+ * olmalı; oraya giden düz hamle de gerçek ayak izlerini (sıfır pay) kesmemeli.
+ * Çiçeklik şeridine ve arsa kenarının dışına kaçış yok.
+ */
+function escapeHops(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  goal: [number, number, number],
+  ignorePump?: string
+): Array<[number, number, number]> {
+  const stand = [
+    ...wallRects(state, block.side, 0.5),
+    ...pumpRects(state, block.side, ignorePump, 0.5)
+  ];
+  const solid = [
+    ...wallRects(state, block.side, 0),
+    ...pumpRects(state, block.side, ignorePump, 0)
+  ];
+
+  const [hx, , hz] = vehicle.worldPosition;
+  const zMin =
+    block.side === 'far' ? block.minZ + LANE_HALF_WIDTH : block.minZ + FRONTAGE_DEPTH;
+  const zMax =
+    block.side === 'far' ? block.maxZ - FRONTAGE_DEPTH : block.maxZ - LANE_HALF_WIDTH;
+
+  const out: Array<[number, number, number]> = [];
+  for (const radius of [1.6, 2.4, 3.2]) {
+    for (let step = 0; step < 8; step++) {
+      const angle = (Math.PI / 4) * step;
+      const x = hx + Math.sin(angle) * radius;
+      const z = hz + Math.cos(angle) * radius;
+      if (x < block.minX + LANE_HALF_WIDTH || x > block.maxX - LANE_HALF_WIDTH) continue;
+      if (z < zMin || z > zMax) continue;
+      if (inRects(stand, x, z)) continue;
+      if (!legIsClear(solid, [hx, hz], [x, z])) continue;
+      out.push([x, 0, z]);
+    }
+  }
+
+  out.sort(
+    (a, b) =>
+      Math.hypot(a[0] - goal[0], a[2] - goal[2]) - Math.hypot(b[0] - goal[0], b[2] - goal[2])
+  );
+  // Her adayın planı bir A* taraması: ilk birkaçı yetmediyse gerisi de
+  // yetmeyecek demektir, tick bütçesini cömertçe yakmanın âlemi yok.
+  return out.slice(0, 6);
 }
 
 /** The block a vehicle is working with, falling back to the station's own. */
@@ -1623,6 +1789,142 @@ function frontageKeepOut(block: BlockLayout): PathRect[] {
   out.push({ minX: x, maxX: block.maxX + LAYOUT.roadMargin, minZ, maxZ });
 
   return out.filter((r) => r.maxX - r.minX > 0.01);
+}
+
+/**
+ * Araç yolu rezervi: U biçiminde, araca her zaman açık kalması gereken zemin —
+ * ilham alınan oyundaki kırmızı taralı alanın buradaki karşılığı (Emre,
+ * 2026-09-02/05). evaluatePlacement buraya yapı koydurmaz; inşaat modu aynı
+ * dikdörtgenleri taralı çizer.
+ *
+ * İki 'mouth' koridoru (giriş/çıkış ağzından ön şeride) + aralarını bağlayan
+ * bir 'lane' şeridi. Ayrım yerleşim kuralının sertliğini belirler: ağız
+ * koridorlarına pompanın DURUŞ ALANI bile giremez (boğazda park eden araç
+ * kapıyı tıkar); bağlantı şeridine yalnız yapının ayak izi giremez — yola
+ * dönük pompanın bay'i şeride değebilir, bay'de duran araç önalan hayatının
+ * olağan hali.
+ *
+ * Derinlik o anki blockLayout'tan okunur: ön şerit oyuncunun inşaatı yüzünden
+ * içeri kaydıysa rezerv de onunla birlikte uzar. Yer çizgisi türü düz
+ * zeminler (otopark boyası, geniş rampalar) rezerve girebilir — onlar duvar
+ * değil, zemin.
+ */
+export interface ReserveRect extends PathRect {
+  kind: 'mouth' | 'lane';
+}
+
+export function drivewayReserveRects(
+  state: Parameters<typeof blockLayout>[0],
+  side: DrivewaySide
+): ReserveRect[] {
+  const block = blockLayout(state, side);
+  if (!block) return [];
+
+  const front = side === 'far' ? block.maxZ : block.minZ;
+  const inward = side === 'far' ? -1 : 1;
+  const laneEdge = block.laneZ + inward * LANE_HALF_WIDTH;
+
+  const mouths = [block.entry, block.exit].map((mouth) => {
+    const half = mouth.width / 2;
+    return {
+      kind: 'mouth' as const,
+      minX: mouth.x - half,
+      maxX: mouth.x + half,
+      minZ: Math.min(front, laneEdge),
+      maxZ: Math.max(front, laneEdge)
+    };
+  });
+
+  // İki koridorun arası: çiçekliğin gerisinden ön şeridin arka kenarına,
+  // ağızdan ağıza kesintisiz. Cebe sıkışan araca son çare olarak her zaman
+  // açık bir ön yol kalır.
+  const inner = front + inward * FRONTAGE_DEPTH;
+  const lane = {
+    kind: 'lane' as const,
+    minX: Math.min(mouths[0].minX, mouths[1].minX),
+    maxX: Math.max(mouths[0].maxX, mouths[1].maxX),
+    minZ: Math.min(inner, laneEdge),
+    maxZ: Math.max(inner, laneEdge)
+  };
+
+  return [...mouths, lane];
+}
+
+/**
+ * Bu arsada giriş ağzından çıkış ağzına hâlâ sürülebilir bir yol var mı?
+ *
+ * evaluatePlacement aday yapıyı hayalet olarak ekleyip bunu sorar: cevabı
+ * hayıra çeviren yerleşim önalanı mühürleyen yerleşimdir ve reddedilir.
+ * Koridor rezervinin tamamlayıcısı — rezerv kapıları korur, bu sınav arsanın
+ * ortasında kapalı cep kurulmasını engeller.
+ */
+export function forecourtStaysOpen(state: GameState, side: DrivewaySide): boolean {
+  const block = blockLayout(state, side);
+  if (!block) return true;
+
+  const entryX = drivewayLaneX(block.entry, 0);
+  const exitX = drivewayLaneX(block.exit, 0);
+  const probe = { worldPosition: [entryX, 0, block.roadLaneZ] } as VehicleEntity;
+
+  // Şerit üzerinde bina olabilir (şerit zaten kaçabildiği kadar kaçmıştır);
+  // ara noktalar duvarın içine düşmüşse kenara kaydırılır ki sınav "şu tek
+  // nokta dolu" diye değil, gerçekten yol kalmadığında hayır desin.
+  return canReach(
+    state,
+    probe,
+    side,
+    [
+      offWalls(state, block, [entryX, 0, block.laneZ]),
+      offWalls(state, block, [exitX, 0, block.laneZ]),
+      [exitX, 0, block.roadLaneZ]
+    ],
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block)
+  );
+}
+
+/**
+ * Sahadaki her müşteri aracı çıkışa hâlâ ulaşabiliyor mu?
+ *
+ * Girişten çıkışa yol kalması yetmez: bir yapı, o an arsanın derinliğindeki
+ * bir aracın TEK dönüş yolunun üstüne inebilir — araç fiziksel olarak
+ * mühürlenir ve 20 saniyelik valfle buharlaşır, ki oyuncunun gözünde bug'dır.
+ * evaluatePlacement aday yapıyı hayalet olarak ekleyip bunu da sorar.
+ */
+export function vehiclesCanStillLeave(state: GameState, side: DrivewaySide): boolean {
+  const block = blockLayout(state, side);
+  if (!block) return true;
+
+  const exitX = drivewayLaneX(block.exit, 0);
+  for (const vehicle of Object.values(state.vehicles)) {
+    // Yolda akanlar arsanın konusu değil; yalnız beton üstündekiler sayılır.
+    if (
+      vehicle.state === 'SPAWN' ||
+      vehicle.state === 'PASSING' ||
+      vehicle.state === 'DESPAWN'
+    ) {
+      continue;
+    }
+    const [x, , z] = vehicle.worldPosition;
+    if (x < block.minX || x > block.maxX || z < block.minZ || z > block.maxZ) continue;
+    if (vehicleSide(vehicle) !== side) continue;
+
+    const out = canReach(
+      state,
+      vehicle,
+      side,
+      [
+        [exitX, 0, block.laneZ],
+        [exitX, 0, block.roadLaneZ]
+      ],
+      { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+      frontageKeepOut(block),
+      vehicle.targetPumpId ?? undefined,
+      vehicle.chargingBuildingId ?? undefined
+    );
+    if (!out) return false;
+  }
+  return true;
 }
 
 /**
@@ -1852,7 +2154,11 @@ function offWalls(
   block: BlockLayout,
   point: [number, number, number]
 ): [number, number, number] {
-  const rects = wallRects(state, block.side);
+  // Pompa adaları da duvar sayılır: kaçan bir şerit adanın üstüne oturabilir
+  // (kafe + ada + ofis dizilişinde arka şeride yer kalmıyor) ve adanın payına
+  // düşen ara nokta, planlayıcının bay muafiyetini tetikleyip rotayı adanın
+  // İÇİNDEN geçiriyordu.
+  const rects = [...wallRects(state, block.side), ...pumpRects(state, block.side)];
   if (!inRects(rects, point[0], point[2])) return point;
 
   // Never toward the frontage: the strip inside the kerb carries the price
@@ -2051,24 +2357,31 @@ function exitRoute(
 
   const throughLane = atFrontOfPlot ? block.laneZ : block.exitLaneZ;
 
-  return routeAroundOrNull(
-    state,
-    from,
-    block.side,
-    [
-      ...head,
-      offWalls(state, block, clampToApron(block, [start[0], 0, throughLane])),
-      offWalls(state, block, clampLaneToApron(block, [laneX, 0, throughLane])),
-      // Leaving the plot down the exit driveway and away along the highway.
-      [laneX, 0, block.roadLaneZ],
-      [block.roadEndX, 0, block.roadLaneZ]
-    ],
-    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
-    frontageKeepOut(block),
-    undefined,
-    undefined,
-    parkedTruckRects(state)
-  );
+  const via = (lane: number): Array<[number, number, number]> | null =>
+    routeAroundOrNull(
+      state,
+      from,
+      block.side,
+      [
+        ...head,
+        offWalls(state, block, clampToApron(block, [start[0], 0, lane])),
+        offWalls(state, block, clampLaneToApron(block, [laneX, 0, lane])),
+        // Leaving the plot down the exit driveway and away along the highway.
+        [laneX, 0, block.roadLaneZ],
+        [block.roadEndX, 0, block.roadLaneZ]
+      ],
+      { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+      frontageKeepOut(block),
+      undefined,
+      undefined,
+      parkedTruckRects(state)
+    );
+
+  // Dönüş şeridi ölü doğmuş olabilir: yeterince dolu bir arsada clearLaneZ
+  // en az kötü satırı seçer ve o satır bir yapının üstüne düşebilir. O zaman
+  // son çare, ağızdan ağıza inşaata kapalı tutulan ön yoldur — araç yolu
+  // rezervi tam da bu an için var.
+  return via(throughLane); // BISECT-VIA
 }
 
 function setRoute(vehicle: VehicleEntity, waypoints: Array<[number, number, number]>): void {

@@ -11,6 +11,7 @@ import {
   wideRamps,
   priceSignPosition,
   drivewayMouths,
+  drivewayReserveRects,
   DRIVEWAY_WIDTH as DRIVEWAY_WIDTH_GRID
 } from '../domain/services/simulationEngine';
 import {
@@ -73,6 +74,68 @@ function kerbSegments(from: number, to: number, mouths: Mouth[]): Array<[number,
   if (cursor < to) out.push([cursor, to]);
   return out.filter(([a, b]) => b - a > 0.4);
 }
+
+/**
+ * Diagonal-stripe paint for the driveway reserve: the corridors a building may
+ * never stand in, shown only while placing one. Drawn once and repeated, so
+ * every corridor shares the same stripe pitch whatever its size.
+ */
+function makeHatchTexture(): THREE.CanvasTexture {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.14)';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  for (let x = -size; x <= size * 2; x += 16) {
+    ctx.moveTo(x + size, -4);
+    ctx.lineTo(x, size + 4);
+  }
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
+/**
+ * One reserved driveway corridor, hatched red over the concrete. Vehicles own
+ * this ground — evaluatePlacement refuses to build on it, and this overlay is
+ * how the player learns that before trying.
+ */
+const ReserveHatch: React.FC<{
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}> = ({ minX, maxX, minZ, maxZ }) => {
+  const width = (maxX - minX) * S;
+  const depth = (maxZ - minZ) * S;
+
+  const texture = useMemo(() => {
+    const t = makeHatchTexture();
+    // One stripe cell per grid unit, anchored to the rect's own corner.
+    t.repeat.set(width / S, depth / S);
+    return t;
+  }, [width, depth]);
+
+  useEffect(() => () => texture.dispose(), [texture]);
+
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[((minX + maxX) / 2) * S, 0.05, ((minZ + maxZ) / 2) * S]}
+    >
+      <planeGeometry args={[width, depth]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} {...decal(2)} />
+    </mesh>
+  );
+};
 
 /**
  * The squares a building snaps to, drawn over one parcel.
@@ -691,6 +754,32 @@ export const GroundGrid: React.FC = () => {
    */
   const parcelSpan = pavedSpan;
 
+  /**
+   * The driveway reserve, shown only while building: the U of ground —
+   * mouth corridors plus the lane strip joining them — that evaluatePlacement
+   * keeps clear of structures. Same rects the rule uses, so the paint can
+   * never disagree with the refusal. The mouth rects overlap the lane strip
+   * by construction; for drawing they are trimmed to the part the strip does
+   * not cover, or the overlap would show as a darker double coat.
+   */
+  const reserveRects = useMemo(() => {
+    if (!buildMode) return [];
+    const world = { station: { plots, roadLevel }, buildings, pumps };
+
+    return (['near', 'far'] as const).flatMap((side) => {
+      const rects = drivewayReserveRects(world, side);
+      const lane = rects.find((r) => r.kind === 'lane');
+
+      return rects.flatMap((r) => {
+        if (r.kind === 'lane' || !lane) return [r];
+        const pieces = [];
+        if (r.minZ < lane.minZ) pieces.push({ ...r, maxZ: Math.min(r.maxZ, lane.minZ) });
+        if (r.maxZ > lane.maxZ) pieces.push({ ...r, minZ: Math.max(r.minZ, lane.maxZ) });
+        return pieces;
+      });
+    });
+  }, [buildMode, plots, roadLevel, buildings, pumps]);
+
 
   return (
     <group>
@@ -959,6 +1048,18 @@ export const GroundGrid: React.FC = () => {
             />
           );
         })}
+
+      {/* Hatched driveway reserve, drawn with the build grid: vehicles own
+          these corridors and nothing may be built over them. */}
+      {reserveRects.map((r, i) => (
+        <ReserveHatch
+          key={`reserve_${i}`}
+          minX={r.minX}
+          maxX={r.maxX}
+          minZ={r.minZ}
+          maxZ={r.maxZ}
+        />
+      ))}
     </group>
   );
 };

@@ -51,8 +51,9 @@ describe('placement rules', () => {
     // Başlangıç pompasının (rot 90, bay z 4.6..6) alanının üstüne çöp kutusu
     // bile kurulamaz…
     expect(evaluatePlacement(state, 'trash_can', [8.5, 5.5], 0).valid).toBe(false);
-    // …hemen yanına, alanın dışına kurulabilir.
-    expect(evaluatePlacement(state, 'trash_can', [11.5, 5.5], 0).valid).toBe(true);
+    // …hemen yanına, alanın dışına kurulabilir. (z 5.5, çıkış koridorunun —
+    // araç yolu rezervinin — kuyruğuna değdiği için bir kare geriden.)
+    expect(evaluatePlacement(state, 'trash_can', [11.5, 6.5], 0).valid).toBe(true);
 
     // Ve tersi: yeni pompanın DURUŞ ALANI mevcut ofisin (x 2..6, z 9..13)
     // üstüne gelirse pompa da reddedilir — ayak izi temiz olsa bile.
@@ -335,14 +336,21 @@ describe('driveway ramps', () => {
 
   it('keeps ordinary structures off the frontage strip, on both blocks', () => {
     const state = ready();
+    // Bu sınav banket kuralınındır. Başlangıç pompa adası ön-orta bölgeye
+    // konan her katı yapıyla birlikte ön şeridi mühürlüyor ve artık o mührü
+    // bağlantı sınavı da yakalıyor — banket ölçümü boş önalanda yapılır.
+    state.pumps = {};
 
     // Near block: the concrete starts one cell behind the plot's front
     // boundary; the strip in front of that line is verge.
     expect(evaluatePlacement(state, 'trash_can', [10.5, 0.5], 0).valid).toBe(false);
     expect(evaluatePlacement(state, 'trash_can', [10.5, 1.5], 0).valid).toBe(true);
-    // A deep footprint dipping into the strip is refused; flush with it is not.
-    expect(evaluatePlacement(state, 'pump_standard', [10, 1.5], 0).valid).toBe(false);
-    expect(evaluatePlacement(state, 'pump_standard', [10, 2.5], 0).valid).toBe(true);
+    // A deep footprint dipping into the strip is refused; behind the reserve
+    // it is not. (Ağızdan ağıza uzanan araç yolu rezervi ön bandı katı yapıya
+    // kapattığı için "banket hizasında pompa" artık kategorik olarak yok —
+    // banket kuralı yine önce konuşur, geçerli yer rezervin gerisidir.)
+    expect(evaluatePlacement(state, 'pump_standard', [9, 1.5], 0).valid).toBe(false);
+    expect(evaluatePlacement(state, 'pump_standard', [9, 7.5], 0).valid).toBe(true);
 
     // Far block: its concrete already ends on the parcel boundary, and the
     // parcel checks alone cannot police an overhang — parcelAt folds the road

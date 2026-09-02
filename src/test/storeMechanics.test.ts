@@ -95,7 +95,9 @@ describe('tank packages', () => {
 
     state.buildings.tank_1.level = 3;
     useGameStore.setState({ gameState: { ...state } });
-    expect(evaluatePlacement(useGameStore.getState().gameState, 'tank_expansion', [4, 4], 0).valid).toBe(true);
+    // [4,4] artık giriş koridorunun (araç yolu rezervi) içinde; genişleme
+    // rezervin gerisindeki boş zemine kurulur.
+    expect(evaluatePlacement(useGameStore.getState().gameState, 'tank_expansion', [10.5, 11.5], 0).valid).toBe(true);
   });
 
   it('doubles every fuel on buying the expansion, and halves them on selling it', () => {
@@ -107,7 +109,7 @@ describe('tank packages', () => {
     useGameStore.setState({ gameState: { ...state } });
 
     useGameStore.getState().enterBuildMode('tank_expansion');
-    useGameStore.getState().setBuildPreviewPos([4, 4]);
+    useGameStore.getState().setBuildPreviewPos([10.5, 11.5]);
     expect(useGameStore.getState().confirmBuildPlacement()).toBe(true);
 
     let tanks = useGameStore.getState().gameState.tanks;
@@ -138,7 +140,7 @@ describe('tank packages', () => {
     useGameStore.setState({ gameState: { ...state } });
 
     expect(useGameStore.getState().relocateStructure('tank_1')).toBe(true);
-    useGameStore.getState().setBuildPreviewPos([4, 4]);
+    useGameStore.getState().setBuildPreviewPos([10.5, 11.5]);
     expect(useGameStore.getState().confirmBuildPlacement()).toBe(true);
 
     const after = useGameStore.getState().gameState;
