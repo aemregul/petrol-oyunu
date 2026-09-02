@@ -1367,12 +1367,68 @@ function driveInTraffic(
     vehicle.heading = headingBefore;
     // blockedSeconds burada işe yaramaz — bir sonraki tick'in gaz hesabı onu
     // sıfırlıyor. Duvar takılması kendi saatini tutar.
-    vehicle.solidStuckSeconds = (vehicle.solidStuckSeconds ?? 0) + dt;
+    const stuckBefore = vehicle.solidStuckSeconds ?? 0;
+    vehicle.solidStuckSeconds = stuckBefore + dt;
+    if (solidRerouteDue(stuckBefore, vehicle.solidStuckSeconds)) {
+      rerouteAroundSolid(state, vehicle, block);
+    }
     return false;
   }
 
   vehicle.solidStuckSeconds = 0;
   return arrived;
+}
+
+/**
+ * Duvara dayanan sürücü heykel olmaz. Katı yapı kuralı adımı geri aldığında
+ * araç kısa bir duraksamadan sonra yolunu, engelleri sayan planlayıcıyla
+ * baştan çizer: önce kalan rotasının tamamı (açık bacaklar aynen kalır, tıkalı
+ * bacağın etrafından dolanılır), o çizilemiyorsa — bir ara nokta sonradan
+ * yapılan binanın içinde kalmışsa — yalnız varış noktasına taze bir yol,
+ * ayrılan araç için o da yoksa çıkışın kendisi. Deneme, boşa çıkarsa birkaç
+ * saniyede bir yenilenir: oyuncu bu arada bir duvarı kaldırmış olabilir.
+ *
+ * Takılma saati burada SIFIRLANMAZ — onu yalnız gerçekten atılan adım sıfırlar
+ * (yukarıda), ki hiçbir yolun kalmadığı arsada 20 saniyelik güvenlik valfleri
+ * aynen işlemeye devam etsin.
+ */
+const SOLID_REROUTE_FIRST_SECONDS = 1.5;
+const SOLID_REROUTE_EVERY_SECONDS = 3;
+
+function solidRerouteDue(stuckBefore: number, stuckNow: number): boolean {
+  const attempts = (t: number) =>
+    t < SOLID_REROUTE_FIRST_SECONDS
+      ? 0
+      : 1 + Math.floor((t - SOLID_REROUTE_FIRST_SECONDS) / SOLID_REROUTE_EVERY_SECONDS);
+  return attempts(stuckNow) > attempts(stuckBefore);
+}
+
+function rerouteAroundSolid(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout
+): void {
+  const remaining: Array<[number, number, number]> = vehicle.targetWaypoint
+    ? [vehicle.targetWaypoint, ...vehicle.route]
+    : [...vehicle.route];
+  const goal = remaining[remaining.length - 1];
+  if (!goal) return;
+
+  const ignorePump = vehicle.targetPumpId ?? undefined;
+  const ignoreBuilding = vehicle.chargingBuildingId ?? undefined;
+
+  const rerouted =
+    driveable(state, vehicle, block, remaining, ignorePump, ignoreBuilding) ??
+    driveable(state, vehicle, block, [goal], ignorePump, ignoreBuilding);
+  if (rerouted) {
+    setRoute(vehicle, rerouted);
+    return;
+  }
+
+  if (vehicle.state === 'EXIT') {
+    const out = exitRoute(state, vehicle);
+    if (out) setRoute(vehicle, out);
+  }
 }
 
 /** The block a vehicle is working with, falling back to the station's own. */
