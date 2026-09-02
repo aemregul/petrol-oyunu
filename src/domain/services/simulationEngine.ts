@@ -1597,9 +1597,37 @@ function escapeHops(
   return out.slice(0, 6);
 }
 
+/**
+ * Karşı şerit, karşı arsa olmadan: yol trafiği oyuncunun ne kurduğuna
+ * bakmaz (Emre, 2026-09-05). Karayolu ikinci şeride çıktığı an karşı
+ * şeritte de araç akar — beton dökülmemişse kimse DURAMAZ ama herkes GEÇER.
+ *
+ * Near bloğunun iskeleti, karşı şeridin yol geometrisiyle: geçen aracın
+ * kullandığı tek şey budur (şerit z'si, akış yönü, katı denetimi için taraf).
+ * Karşıda gerçek bir blok kurulduğu an blockLayout onu döndürür ve bu
+ * iskelet devre dışı kalır.
+ */
+function farRoadOnlyBlock(state: GameState): BlockLayout | null {
+  if (state.station.roadLevel < 2) return null;
+  const near = blockLayout(state, 'near');
+  if (!near) return null;
+  return {
+    ...near,
+    side: 'far',
+    roadLaneZ: FAR_ROAD_Z,
+    roadStartX: near.maxX + LAYOUT.roadMargin,
+    roadEndX: near.minX - LAYOUT.roadMargin
+  };
+}
+
 /** The block a vehicle is working with, falling back to the station's own. */
 function blockFor(state: GameState, vehicle: VehicleEntity): BlockLayout {
-  return blockLayout(state, vehicleSide(vehicle)) ?? blockLayout(state, 'near')!;
+  const side = vehicleSide(vehicle);
+  return (
+    blockLayout(state, side) ??
+    (side === 'far' ? farRoadOnlyBlock(state) : null) ??
+    blockLayout(state, 'near')!
+  );
 }
 
 /**
@@ -3902,10 +3930,11 @@ export function dailyPriceReputationDelta(state: GameState): number {
 /**
  * Which carriageway a driver is on. Both are equally busy — the road does not
  * care what the player has built — so this is a straight coin toss once the
- * second carriageway exists.
+ * second carriageway exists. Yolun varlığı yeter: karşıda beton yoksa bile
+ * şerit akar, oradan yalnızca kimse duramaz.
  */
 function pickSpawnSide(state: GameState): DrivewaySide {
-  return blockLayout(state, 'far') && Math.random() < 0.5 ? 'far' : 'near';
+  return state.station.roadLevel >= 2 && Math.random() < 0.5 ? 'far' : 'near';
 }
 
 /**
@@ -3941,11 +3970,16 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const anyPumps = Object.keys(state.pumps).length > 0;
 
   const side = pickSpawnSide(state);
-  const block = blockLayout(state, side);
+  // Karşıda kurulu bir arsa yoksa araç yine de gelir — yalnız duramaz:
+  // iskelet blok yolun geometrisini verir, aşağıdaki "bare" bayrağı da
+  // durma ihtimalini kapatır (var olmayan önalana rota çizilmesin).
+  const laidOut = blockLayout(state, side);
+  const block = laidOut ?? (side === 'far' ? farRoadOnlyBlock(state) : null);
   if (!block) return;
+  const bare = !laidOut;
 
   // An electric customer is only servable where there is somewhere to plug in.
-  const canCharge = chargingPoints(state, side).length > 0;
+  const canCharge = !bare && chargingPoints(state, side).length > 0;
 
   const servable = (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
     const conf = GAME_CONFIG.customerTypes[a];
@@ -3969,17 +4003,19 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   // only one who could get in. A forecourt walled off by what the player has
   // built has no way through to the bays, and a driver reads that from the
   // road rather than pulling in and finding out.
-  const wayIn = canReach(
-    state,
-    { worldPosition: [block.roadStartX, 0, block.roadLaneZ] } as VehicleEntity,
-    side,
-    [
-      [drivewayLaneX(block.entry, 0), 0, block.laneZ],
-      queueSlotPosition(state, 0, side)
-    ],
-    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
-    frontageKeepOut(block)
-  );
+  const wayIn =
+    !bare &&
+    canReach(
+      state,
+      { worldPosition: [block.roadStartX, 0, block.roadLaneZ] } as VehicleEntity,
+      side,
+      [
+        [drivewayLaneX(block.entry, 0), 0, block.laneZ],
+        queueSlotPosition(state, 0, side)
+      ],
+      { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+      frontageKeepOut(block)
+    );
   const stops = wayIn && servable.length > 0 && Math.random() < stopChance(state, side);
   const archetypes = stops
     ? servable

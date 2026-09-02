@@ -1352,7 +1352,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(insideBuilding).toBe(0);
   });
 
-  it('spawns vehicles on the driving lane', () => {
+  it('spawns vehicles on a driving lane', () => {
     const state = createInitialGameState();
     state.station.roadLevel = 2;
     state.dayState.timeSpeed = 1;
@@ -1360,7 +1360,13 @@ describe('simulationEngine - highway lanes and driveways', () => {
     advanceUntil(state, (s) => Object.keys(s.vehicles).length > 0, 600);
     const vehicle = Object.values(state.vehicles)[0];
 
-    expect(vehicle.worldPosition[2]).toBeCloseTo(getLayout(state).roadLaneZ, 3);
+    // Çift şeritli yolda araç iki şeridin BİRİNDE doğar — karşı arsa hiç
+    // kurulmamışken bile: yol trafiği oyuncunun betonunu beklemez. Şerit
+    // dışında (tarlada, önalanda) doğmak ise hâlâ yasak.
+    const nearLaneZ = getLayout(state).roadLaneZ;
+    const farLaneZ = LAYOUT.roadZ - 2 * LAYOUT.roadHalfWidth - LAYOUT.medianWidth;
+    const z = vehicle.worldPosition[2];
+    expect(Math.min(Math.abs(z - nearLaneZ), Math.abs(z - farLaneZ))).toBeLessThan(0.001);
   });
 });
 
