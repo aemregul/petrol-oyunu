@@ -270,7 +270,10 @@
       "Bash(git fetch *)",
       "Bash(awk '/export function ownedBounds/,/^}/' src/domain/services/land.ts)",
       "Bash(awk '/export function ownedBounds/,/^}$/' src/domain/services/land.ts)",
-      "Bash(awk '/^function evaluateRoadsideSign/,/^}$/' src/domain/services/placement.ts)"
+      "Bash(awk '/^function evaluateRoadsideSign/,/^}$/' src/domain/services/placement.ts)",
+      "Bash(node .tanker.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f2135941-31d6-4105-b7f9-76d743de4f29/scratchpad)",
+      "Bash(grep -n \"tank.id$\\\\|order.truck.tankBuildingId ?? undefined\" src/domain/services/simulationEngine.ts)",
+      "Bash(node .leave.mjs)"
     ],
     "additionalDirectories": [
       "/private/tmp"

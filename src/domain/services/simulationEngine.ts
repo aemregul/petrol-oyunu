@@ -1377,7 +1377,12 @@ function driveable(
   block: BlockLayout,
   waypoints: Array<[number, number, number]>,
   ignorePumpId?: string,
-  ignoreBuildingId?: string
+  ignoreBuildingId?: string,
+  // Cars steer around an unloading tanker; a tanker's own routes must not —
+  // the berth rectangle covers the lorry itself and its neighbours, and a
+  // route asked for from inside a "wall" is refused before it starts. That
+  // refusal is what left leaving lorries with no way out of their own berth.
+  throughParkedTrucks = false
 ): Array<[number, number, number]> | null {
   return routeAroundOrNull(
     state,
@@ -1388,7 +1393,7 @@ function driveable(
     frontageKeepOut(block),
     ignorePumpId,
     ignoreBuildingId,
-    parkedTruckRects(state)
+    throughParkedTrucks ? [] : parkedTruckRects(state)
   );
 }
 
@@ -2349,7 +2354,12 @@ function tankerBay(
   // the lane the cars leave by. If the player has built there, the other side
   // will do; if both are built over, the lorry has nowhere to stand and says
   // so rather than settling inside the shop and unloading through its wall.
-  const walls = wallRects(state, block.side, 0, tank.id);
+  //
+  // The farm itself is a wall here too. It used to be excused, and a farm
+  // parked against the plot edge showed why that was wrong: the clamp above
+  // pulled the berth back inside the farm's own footprint, the excusal let it
+  // through, and the lorry unloaded from inside the silos.
+  const walls = wallRects(state, block.side, 0);
   for (const towards of [inward, -inward]) {
     const berth = clampToApron(block, [x, 0, tank.position[1] + towards * (half + 1.3)]);
     if (!inRects(walls, berth[0], berth[2])) return berth;
@@ -2358,12 +2368,14 @@ function tankerBay(
 }
 
 /**
- * Whether anything stands in the lorry's path — a customer car, or another
- * lorry (each lorry is three body points long, nose to tail).
+ * Whether a customer car stands in the lorry's path. Other lorries
+ * deliberately do not: they held each other at the gate and in the aisles,
+ * and a queue of paid-for fuel sitting on the road felt like the game being
+ * slow rather than the game being busy. Deliveries all run at once now, and
+ * two lorries sharing a berth is accepted as the price.
  */
 function truckHeldUp(
   state: GameState,
-  order: FuelOrderEntity,
   truck: NonNullable<FuelOrderEntity['truck']>
 ): boolean {
   const dx = Math.sin(truck.heading);
@@ -2394,35 +2406,19 @@ function truckHeldUp(
     return true;
   }
 
-  for (const other of state.fuelOrders) {
-    if (other === order || !other.truck) continue;
-    const odx = Math.sin(other.truck.heading);
-    const odz = Math.cos(other.truck.heading);
-    for (const along of [-1.1, 0, 1.1]) {
-      const x = other.truck.worldPosition[0] + odx * along;
-      const z = other.truck.worldPosition[2] + odz * along;
-      if (inPath(x, z, 3.8)) return true;
-    }
-  }
   return false;
 }
 
 /**
- * The traffic on the plot, grown to lorry margins, for steering around. Cars
- * and other lorries alike: a tanker does not drive through either, and a
- * queue it cannot pass it goes around.
+ * The customer traffic on the plot, grown to lorry margins, for steering
+ * around. Other lorries are left out on purpose — see truckHeldUp.
  */
-function truckObstacleRects(state: GameState, order: FuelOrderEntity): PathRect[] {
+function truckObstacleRects(state: GameState): PathRect[] {
   const rects: PathRect[] = [];
 
   for (const vehicle of Object.values(state.vehicles)) {
     const [x, , z] = vehicle.worldPosition;
     rects.push({ minX: x - 1.2, maxX: x + 1.2, minZ: z - 1.2, maxZ: z + 1.2 });
-  }
-  for (const other of state.fuelOrders) {
-    if (other === order || !other.truck) continue;
-    const [x, , z] = other.truck.worldPosition;
-    rects.push({ minX: x - 2.2, maxX: x + 2.2, minZ: z - 2.2, maxZ: z + 2.2 });
   }
   return rects;
 }
@@ -2435,11 +2431,10 @@ function truckObstacleRects(state: GameState, order: FuelOrderEntity): PathRect[
  */
 function advanceTruck(
   state: GameState,
-  order: FuelOrderEntity,
   truck: NonNullable<FuelOrderEntity['truck']>,
   dt: number
 ): boolean {
-  if (!truckHeldUp(state, order, truck)) {
+  if (!truckHeldUp(state, truck)) {
     truck.blockedSeconds = 0;
     // Highway pace out on the road; walking pace once it turns onto the plot.
     // A tanker crawling down the carriageway put a thirty-second tail of
@@ -2471,7 +2466,7 @@ function advanceTruck(
     frontageKeepOut(block),
     undefined,
     truck.tankBuildingId ?? undefined,
-    truckObstacleRects(state, order)
+    truckObstacleRects(state)
   );
 
   if (detoured) {
@@ -2480,6 +2475,99 @@ function advanceTruck(
     truck.routeProgress = 0;
   }
   return false;
+}
+
+/** Road pace of a loaded lorry, in grid units per game-second. */
+const TRUCK_ROAD_SPEED = BASE_DRIVE_SPEED * 0.95;
+
+/**
+ * Puts the order's lorry on the road, aimed in through the entry mouth and
+ * round to its berth — if a berth and a legal way to it exist yet.
+ *
+ * Called every tick while the order counts down: the lorry holds off until
+ * there is just enough road left that it reaches the entry mouth as the
+ * counter shows its last second. "Yolda · 3 sn" over an empty road read as a
+ * lie, and a lorry materialising at the gate on zero read as a glitch — the
+ * spawn point is fixed, so honesty is only a matter of when to start driving.
+ */
+function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
+  const tank = tankBuildingFor(state, order.fuelType);
+  if (!tank) return;
+
+  const side = drivewaySideAt(tank.position[1]);
+  const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
+
+  // Turn off the highway at the entry mouth, then straight up to the back
+  // service lane and along it to the bay. The front lane belongs to the
+  // customers — a forty-tonner idling on it corks the whole forecourt.
+  const bay = tankerBay(state, block, tank, order.fuelType);
+  if (!bay) return;
+
+  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
+  const start: [number, number, number] = [
+    block.roadStartX - flow * 8,
+    0,
+    block.roadLaneZ
+  ];
+  const laneX = drivewayLaneX(block.entry, 0);
+
+  // Too early: it would stand at the mouth with the counter still running.
+  const secondsToGate = 1 + Math.abs(laneX - start[0]) / TRUCK_ROAD_SPEED;
+  if (order.remainingSeconds > secondsToGate) return;
+
+  const carrier = { worldPosition: start } as VehicleEntity;
+
+  // The back lane is still where a lorry belongs — but "up from the mouth,
+  // then along the back" was written as fixed waypoints, and on the starting
+  // plot the first of them runs straight through the office. The planner
+  // could only answer "no", and the code took a raw straight line instead:
+  // that is the lorry the player watched drive over the field and unload
+  // inside a building.
+  //
+  // So the back lane is a preference now, not an instruction. If it cannot
+  // be reached, the planner is asked for a way in past the front lane
+  // instead, and if there is no way at all the lorry holds at the gate —
+  // where the corner widget already says it is waiting, and where moving
+  // whatever blocks it is the player's to do. Every branch goes through the
+  // planner; none of them may ignore the plot.
+  const viaBackLane = driveable(
+    state,
+    carrier,
+    block,
+    [
+      [laneX, 0, block.roadLaneZ],
+      [laneX, 0, block.exitLaneZ],
+      [bay[0], 0, block.exitLaneZ],
+      bay
+    ],
+    undefined,
+    tank.id,
+    true
+  );
+  const route =
+    viaBackLane ??
+    driveable(
+      state,
+      carrier,
+      block,
+      [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], bay],
+      undefined,
+      tank.id,
+      true
+    );
+  if (!route) return;
+
+  order.truck = {
+    worldPosition: start,
+    heading: block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2,
+    route: route.slice(1),
+    targetWaypoint: route[0] ?? null,
+    routeProgress: 0,
+    // A loaded tanker does not corner like a hatchback.
+    speed: 0.55,
+    phase: 'ARRIVING',
+    tankBuildingId: tank.id
+  };
 }
 
 /**
@@ -2497,6 +2585,15 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
 
     if (order.state === 'TRAVELLING') {
       order.remainingSeconds -= dt;
+
+      // The last leg of the countdown is driven, not counted: the lorry is
+      // dispatched with just enough road left to be turning in at the entry
+      // mouth as the counter reaches its final second. Every order sends its
+      // own lorry — they used to hold for each other at the gate, and a queue
+      // of paid-for fuel parked on the horizon read as the game being stuck.
+      if (!order.truck) dispatchTruck(state, order);
+      if (order.truck) advanceTruck(state, order.truck, dt);
+
       if (order.remainingSeconds <= 0) {
         // The corner widget carries the routine progress; the toast feed is
         // for things that need the player, and a lorry turning up is not one.
@@ -2507,112 +2604,32 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
     }
 
     if (order.state === 'QUEUED_AT_GATE') {
-      const tank = tankBuildingFor(state, order.fuelType);
-
       // No tank standing for this fuel (an old save, or it was sold while
       // the lorry was on the road): fall back to the timer-only delivery
       // rather than a lorry with nowhere to go.
-      if (!tank) {
-        const bayBusy = state.fuelOrders.some((o) => o.state === 'UNLOADING');
-        if (!bayBusy) {
-          order.state = setOrderState(order.id, order.state, 'UNLOADING');
-          order.remainingSeconds = order.liters / GAME_CONFIG.economy.tankerUnloadSpeedLps;
-        }
+      if (!tankBuildingFor(state, order.fuelType)) {
+        order.state = setOrderState(order.id, order.state, 'UNLOADING');
+        order.remainingSeconds = order.liters / GAME_CONFIG.economy.tankerUnloadSpeedLps;
         continue;
       }
 
-      const side = drivewaySideAt(tank.position[1]);
-      const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
-
+      // Not dispatched on the way in — no berth stood clear, or no way onto
+      // the plot was open. Keep asking; the widget says it is at the gate.
       if (!order.truck) {
-        // One lorry on the plot at a time. Three tankers threading a small
-        // forecourt at once locked each other in place for good — the one
-        // leaving walled in by the two arriving. The others hold at the gate
-        // and the corner widget says so.
-        const plotBusy = state.fuelOrders.some((o) => o !== order && o.truck);
-        if (plotBusy) continue;
-
-        // Turn off the highway at the entry mouth, then straight up to the
-        // back service lane and along it to the bay. The front lane belongs
-        // to the customers — a forty-tonner idling on it corks the whole
-        // forecourt, which is exactly what it did before this route.
-        const bay = tankerBay(state, block, tank, order.fuelType);
-        if (!bay) continue;
-
-        const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
-        const start: [number, number, number] = [
-          block.roadStartX - flow * 8,
-          0,
-          block.roadLaneZ
-        ];
-        const laneX = drivewayLaneX(block.entry, 0);
-        const carrier = { worldPosition: start } as VehicleEntity;
-
-        // The back lane is still where a lorry belongs — but "up from the
-        // mouth, then along the back" was written as fixed waypoints, and on
-        // the starting plot the first of them runs straight through the office.
-        // The planner could only answer "no", and the code took a raw
-        // straight line instead: that is the lorry the player watched drive
-        // over the field and unload inside a building.
-        //
-        // So the back lane is a preference now, not an instruction. If it
-        // cannot be reached, the planner is asked for a way in past the front
-        // lane instead, and if there is no way at all the lorry holds at the
-        // gate — where the corner widget already says it is waiting, and where
-        // moving whatever blocks it is the player's to do. Every branch goes
-        // through the planner; none of them may ignore the plot.
-        const viaBackLane = driveable(
-          state,
-          carrier,
-          block,
-          [
-            [laneX, 0, block.roadLaneZ],
-            [laneX, 0, block.exitLaneZ],
-            [bay[0], 0, block.exitLaneZ],
-            bay
-          ],
-          undefined,
-          tank.id
-        );
-        const route =
-          viaBackLane ??
-          driveable(
-            state,
-            carrier,
-            block,
-            [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], bay],
-            undefined,
-            tank.id
-          );
-        if (!route) continue;
-
-        order.truck = {
-          worldPosition: start,
-          heading: block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2,
-          route: route.slice(1),
-          targetWaypoint: route[0] ?? null,
-          routeProgress: 0,
-          // A loaded tanker does not corner like a hatchback.
-          speed: 0.55,
-          phase: 'ARRIVING',
-          tankBuildingId: tank.id
-        };
+        dispatchTruck(state, order);
         continue;
       }
 
       if (order.truck.phase === 'ARRIVING') {
         // A lorry that cannot reach its berth — walled in, or nose to nose
         // with something that will not move — unloads where it stands after
-        // a couple of minutes. One tanker at a time is on the plot, so a
-        // lorry stuck forever is every later delivery stuck behind it.
+        // a couple of minutes rather than holding its order hostage forever.
         order.truck.onPlotSeconds = (order.truck.onPlotSeconds ?? 0) + dt;
         const gaveUp = order.truck.onPlotSeconds > 120;
-        const arrived = advanceTruck(state, order, order.truck, dt) || gaveUp;
-        // One hose per tank: a second lorry for the same fuel waits its turn.
-        const bayBusy = state.fuelOrders.some(
-          (o) => o !== order && o.fuelType === order.fuelType && o.state === 'UNLOADING'
-        );
-        if (arrived && !bayBusy) {
+        const arrived = advanceTruck(state, order.truck, dt) || gaveUp;
+        // Every hose runs at once: a second lorry for the same fuel backs in
+        // beside the first instead of idling behind it.
+        if (arrived) {
           order.truck.phase = 'UNLOADING';
           order.state = setOrderState(order.id, order.state, 'UNLOADING');
           order.remainingSeconds = order.liters / GAME_CONFIG.economy.tankerUnloadSpeedLps;
@@ -2654,10 +2671,17 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
           const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
           const laneX = drivewayLaneX(block.exit, 0);
           const from = order.truck.worldPosition;
+          const carrier = { worldPosition: from } as VehicleEntity;
+
+          // Back lane out by preference, front lane if the back is walled
+          // off. There is deliberately no raw straight line after these: that
+          // fallback was the lorry the player watched cut over the grass and
+          // through the buildings to the exit. With no legal way out it goes
+          // the way a walled-in car goes — it simply goes.
           const route =
             driveable(
               state,
-              { worldPosition: from } as VehicleEntity,
+              carrier,
               block,
               [
                 [from[0], 0, block.exitLaneZ],
@@ -2666,12 +2690,31 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
                 [block.roadEndX, 0, block.roadLaneZ]
               ],
               undefined,
-              order.truck.tankBuildingId ?? undefined
-            ) ?? [[laneX, 0, block.roadLaneZ], [block.roadEndX, 0, block.roadLaneZ]];
+              order.truck.tankBuildingId ?? undefined,
+              true
+            ) ??
+            driveable(
+              state,
+              carrier,
+              block,
+              [
+                [from[0], 0, block.laneZ],
+                [laneX, 0, block.laneZ],
+                [laneX, 0, block.roadLaneZ],
+                [block.roadEndX, 0, block.roadLaneZ]
+              ],
+              undefined,
+              order.truck.tankBuildingId ?? undefined,
+              true
+            );
 
-          order.truck.phase = 'LEAVING';
-          order.truck.route = route.slice(1);
-          order.truck.targetWaypoint = route[0] ?? null;
+          if (route) {
+            order.truck.phase = 'LEAVING';
+            order.truck.route = route.slice(1);
+            order.truck.targetWaypoint = route[0] ?? null;
+          } else {
+            state.fuelOrders.splice(i, 1);
+          }
         } else {
           state.fuelOrders.splice(i, 1);
         }
@@ -2682,7 +2725,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
     if (order.state === 'COMPLETED' && order.truck?.phase === 'LEAVING') {
       // Same for the way out: it does not linger on the plot forever.
       order.truck.onPlotSeconds = (order.truck.onPlotSeconds ?? 0) + dt;
-      if (advanceTruck(state, order, order.truck, dt) || order.truck.onPlotSeconds > 240) {
+      if (advanceTruck(state, order.truck, dt) || order.truck.onPlotSeconds > 240) {
         state.fuelOrders.splice(i, 1);
       }
     }

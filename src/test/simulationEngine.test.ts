@@ -1325,7 +1325,10 @@ describe('the lorry shares the forecourt', () => {
     expect(worstOverlap).toBeGreaterThan(0.9);
   });
 
-  it('keeps two lorries from berthing on top of each other', () => {
+  // Emre'nin 2026-09-02 kararı: tankerler birbirini BEKLEMEZ — hepsi aynı
+  // anda girer ve boşaltır, boşaltırken üst üste gelmeleri kabul edilir.
+  // Bu test eskiden tam tersini (bir tanker diğerini beklesin) çiviliyordu.
+  it('unloads two lorries at the same time instead of queueing them', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.player.level = 12;
@@ -1337,26 +1340,16 @@ describe('the lorry shares the forecourt', () => {
     placeFuelOrder(state, 'diesel', 800, effects);
     for (const order of state.fuelOrders) order.remainingSeconds = 0.1;
 
-    let closest = Infinity;
+    let bothHosesRan = false;
     for (let i = 0; i < 6000; i++) {
       runSimulationTick(state, 0.2, effects);
-      const trucks = state.fuelOrders.filter((o) => o.truck).map((o) => o.truck!);
-      for (let a = 0; a < trucks.length; a++) {
-        for (let b = a + 1; b < trucks.length; b++) {
-          closest = Math.min(
-            closest,
-            Math.hypot(
-              trucks[a].worldPosition[0] - trucks[b].worldPosition[0],
-              trucks[a].worldPosition[2] - trucks[b].worldPosition[2]
-            )
-          );
-        }
+      if (state.fuelOrders.filter((o) => o.state === 'UNLOADING').length === 2) {
+        bothHosesRan = true;
       }
       if (state.fuelOrders.length === 0) break;
     }
 
-    // Either they never shared the plot at all, or they stayed a lorry apart.
-    expect(closest).toBeGreaterThan(2.5);
+    expect(bothHosesRan).toBe(true);
     expect(state.tanks.gasoline.stock).toBeGreaterThan(0);
     expect(state.tanks.diesel.stock).toBeGreaterThan(0);
   });
