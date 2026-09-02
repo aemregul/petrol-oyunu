@@ -979,6 +979,24 @@ describe('simulationEngine - highway lanes and driveways', () => {
     }
   });
 
+  it('shows electric cars in through traffic before a charger is built', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.pumps = {};
+    state.buildings = {};
+
+    const appeared = advanceUntil(
+      state,
+      (s) => Object.values(s.vehicles).some((vehicle) => vehicle.archetype === 'ev'),
+      1800
+    );
+
+    expect(appeared).toBe(true);
+    const electricCar = Object.values(state.vehicles).find((vehicle) => vehicle.archetype === 'ev');
+    expect(electricCar?.state).toBe('PASSING');
+    expect(electricCar?.chargingBuildingId).toBeFalsy();
+  });
+
   it('turns drivers away as the price climbs, and back with a rush', () => {
     const state = createInitialGameState();
     const regional = state.pricing.gasoline.regionalAverage;
