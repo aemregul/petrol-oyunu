@@ -23,6 +23,13 @@ export interface BuildingModelConfig {
   /** Caps how tall a footprint-fitted model may become, in world units. */
   maxHeight?: number;
   /**
+   * Ayak izini iki eksende ayrı ayrı doldurur (oran korunmaz). Plot oranına
+   * uymayan bir model, oran koruyan sığdırmayla ortada kalıp kenarlarında
+   * "yapıya dahil" hayalet bant bırakır — kutu formlu bir model için esneme
+   * o banttan iyidir. Modele özel bir tercih; varsayılan oran korumaktır.
+   */
+  fillFootprint?: boolean;
+  /**
    * Stretches the model vertically after it has been fitted, so a building can
    * be given more presence without claiming more ground. Kit models are cut to
    * the proportions of a residential street, and a footprint fit is driven by
@@ -67,6 +74,10 @@ export const BUILDING_MODELS: Record<string, BuildingModelConfig> = {
   office: {
     url: `${COMMERCIAL}/building-k.glb`,
     fit: 'footprint',
+    // Eninin yarısı derinlikte bir model: oran koruyan sığdırma onu plotun
+    // ortasına oturtup arkasında 2 birimlik hayalet bant bırakıyordu. Kutu
+    // form esnemeyi taşıyor; ofis plotunu duvar duvara doldurur.
+    fillFootprint: true,
     maxHeight: 10,
     // The model is twice as wide as it is deep, so a square plot fits it on
     // width and leaves it short: three storeys where the plot has room for

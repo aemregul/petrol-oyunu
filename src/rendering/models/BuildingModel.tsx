@@ -140,21 +140,40 @@ export const BuildingModel: React.FC<BuildingModelProps> = ({ type, footprint, s
     const raw = new THREE.Box3().setFromObject(clone);
     const size = raw.getSize(new THREE.Vector3());
 
-    let scale: number;
+    let scaleX: number;
+    let scaleZ: number;
+    let scaleY: number;
     if (config.fit === 'height') {
-      scale = (config.targetHeight || 4) / Math.max(0.001, size.y);
+      scaleX = scaleZ = scaleY = (config.targetHeight || 4) / Math.max(0.001, size.y);
     } else {
-      // Fill the reserved plot without spilling over either edge.
       const targetWidth = footprint[0] * 2;
       const targetDepth = footprint[1] * 2;
-      scale = Math.min(targetWidth / Math.max(0.001, size.x), targetDepth / Math.max(0.001, size.z));
 
+      if (config.fillFootprint) {
+        // Ayak izi neyse bina odur: iki eksen ayrı ayrı doldurulur. Ofis gibi
+        // eninin yarısı derinlikte bir model, oran koruyan sığdırmayla plotun
+        // ortasında kalıp önünde-arkasında "yapıya dahil" hayalet bant
+        // bırakıyordu — kaldırıma sıfıra sıfır dayanamıyordu (Emre,
+        // 2026-09-03). Modele özel bir seçim: kutu formlar esnemeyi taşır,
+        // ince işçilikli olanlar oranıyla kalsın diye varsayılan değil.
+        scaleX = targetWidth / Math.max(0.001, size.x);
+        scaleZ = targetDepth / Math.max(0.001, size.z);
+      } else {
+        // Fill the reserved plot without spilling over either edge.
+        const uniform = Math.min(
+          targetWidth / Math.max(0.001, size.x),
+          targetDepth / Math.max(0.001, size.z)
+        );
+        scaleX = scaleZ = uniform;
+      }
+
+      scaleY = Math.min(scaleX, scaleZ);
       if (config.maxHeight) {
-        scale = Math.min(scale, config.maxHeight / Math.max(0.001, size.y));
+        scaleY = Math.min(scaleY, config.maxHeight / Math.max(0.001, size.y));
       }
     }
 
-    clone.scale.set(scale, scale * (config.heightScale || 1), scale);
+    clone.scale.set(scaleX, scaleY * (config.heightScale || 1), scaleZ);
     clone.updateMatrixWorld(true);
     const scaled = new THREE.Box3().setFromObject(clone);
 
