@@ -74,7 +74,7 @@ export const LightPole: React.FC = () => {
           <meshStandardMaterial
             color="#fff6d8"
             emissive="#ffe9a8"
-            emissiveIntensity={glow * 3}
+            emissiveIntensity={glow * 2}
             toneMapped={false}
           />
         </mesh>
@@ -86,8 +86,8 @@ export const LightPole: React.FC = () => {
       <LampGlow
         position={[1.15, 7.05, 0]}
         reach={5.4}
-        spread={2.2}
-        poolOpacity={0.12}
+        spread={2.8}
+        poolOpacity={0.06}
         lit={isDark}
       />
 
@@ -110,6 +110,13 @@ export const LightPole: React.FC = () => {
           left. Easing the decay carries the light out to the rim instead, which
           is the whole reason to own a lamp — so the intensity comes down to
           match, or the middle blows out again. */}
+      {/* Emre'nin 2026-09-03 notu: lamba tek noktayı yakıyordu — dibi göz
+          alıyor, iki adım ötesi karanlık kalıyordu. Yumuşatmanın üç ayağı:
+          spot daha sönük ve daha düz düşüşle yanar (decay 1.05 — merkezle
+          kenar arasındaki fark ~4 kattan ~2 kata iner), tam dibe vuran spill
+          ışığı yarıya iner, penumbra tam açılır ki havuzun kenarı çizgi gibi
+          durmasın. Toplam ışık azalmadı sayılır; sadece dipten alınıp kenara
+          dağıtıldı. */}
       {isDark && (
         <>
           <primitive object={target} position={[1.15, 0, 0]} />
@@ -117,10 +124,10 @@ export const LightPole: React.FC = () => {
             position={[1.15, 7, 0]}
             target={target}
             angle={1.12}
-            penumbra={0.9}
-            intensity={95}
+            penumbra={1}
+            intensity={48}
             distance={62}
-            decay={1.25}
+            decay={1.05}
             color="#ffe0ae"
             castShadow={quality === 'HIGH'}
             shadow-mapSize={[512, 512]}
@@ -128,9 +135,9 @@ export const LightPole: React.FC = () => {
           />
           <pointLight
             position={[1.15, 6.4, 0]}
-            intensity={34}
-            distance={34}
-            decay={1.4}
+            intensity={14}
+            distance={30}
+            decay={1.2}
             color="#ffdba6"
           />
         </>
