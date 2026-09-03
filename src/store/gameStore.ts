@@ -390,6 +390,7 @@ interface GameStore {
   upgradeRoad: () => boolean;
   upgradePump: (pumpId: string) => boolean;
   repairPump: (pumpId: string) => boolean;
+  rotatePump: (pumpId: string) => void;
   addPumpFuel: (pumpId: string, fuel: 'diesel' | 'lpg') => boolean;
   /** True while the player is choosing which island to roof. */
   fittingCanopy: boolean;
@@ -424,7 +425,8 @@ interface GameStore {
   takeLoan: (loanId: string) => boolean;
 
   // Employees & Manager
-  hirePumpAttendant: () => boolean;
+  hirePumpAttendant: (pumpId?: string) => boolean;
+  fireAttendant: (employeeId: string) => void;
   assignAttendantToPump: (employeeId: string, pumpId: string | null) => void;
   upgradeAttendant: (employeeId: string) => boolean;
   hireManager: () => boolean;
@@ -1836,6 +1838,17 @@ export const useGameStore = create<GameStore>((set, get) => {
     return true;
   },
 
+  rotatePump: (pumpId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const pump = state.pumps[pumpId];
+    if (!pump) return;
+
+    pump.rotation = (((pump.rotation || 0) + 90) % 360) as 0 | 90 | 180 | 270;
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+  },
+
   addPumpFuel: (pumpId, fuel) => {
     const { gameState } = get();
     const pump = gameState.pumps[pumpId];
@@ -2386,7 +2399,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   // EMPLOYEES
-  hirePumpAttendant: () => {
+  hirePumpAttendant: (pumpId?: string) => {
     const { gameState } = get();
     const conf = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
     if (gameState.player.cash < conf.hireCost) {
@@ -2394,6 +2407,23 @@ export const useGameStore = create<GameStore>((set, get) => {
         type: 'WARNING',
         title: 'Yetersiz Bakiye',
         message: `Pompacı işe alımı için ${conf.hireCost.toLocaleString('tr-TR')} TL gerekiyor.`
+      });
+      return false;
+    }
+
+    const targetPumpId = pumpId || Object.keys(gameState.pumps).find(
+      (pid) => !Object.values(gameState.employees).some((e) => e.assignedPumpId === pid && e.role === 'PUMP_ATTENDANT')
+    ) || Object.keys(gameState.pumps)[0] || 'pump_1';
+
+    // Zaten bu pompada birisi çalışıyorsa almaya gerek yok.
+    const alreadyAssigned = Object.values(gameState.employees).some(
+      (e) => e.assignedPumpId === targetPumpId && e.role === 'PUMP_ATTENDANT'
+    );
+    if (alreadyAssigned) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Pompacı Zaten Var',
+        message: 'Bu pompada zaten bir pompacı çalışıyor.'
       });
       return false;
     }
@@ -2417,7 +2447,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       role: 'PUMP_ATTENDANT',
       level: 1,
       wage: conf.dailyWage,
-      assignedPumpId: 'pump_1',
+      assignedPumpId: targetPumpId,
       state: 'IDLE',
       serviceCount: 0,
       currentVehicleId: null,
@@ -2425,9 +2455,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       worldPosition: [12, 0, 10]
     };
 
+    // Pompanın employeeId alanını da güncelle.
+    if (state.pumps[targetPumpId]) state.pumps[targetPumpId].employeeId = empId;
+
     sounds.playLevelUp();
     SaveManager.saveGame(state);
-    set({ gameState: state, activeModal: 'NONE' });
+    set({ gameState: state });
 
     get().addNotification({
       type: 'REWARD',
@@ -2436,6 +2469,28 @@ export const useGameStore = create<GameStore>((set, get) => {
     });
 
     return true;
+  },
+
+  fireAttendant: (employeeId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const emp = state.employees[employeeId];
+    if (!emp) return;
+
+    // Pompanın employeeId'sini temizle.
+    if (emp.assignedPumpId && state.pumps[emp.assignedPumpId]) {
+      state.pumps[emp.assignedPumpId].employeeId = null;
+    }
+
+    delete state.employees[employeeId];
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+
+    get().addNotification({
+      type: 'INFO',
+      title: 'Pompacı İşten Çıkarıldı',
+      message: `${emp.name} ile yollar ayrıldı.`
+    });
   },
 
   assignAttendantToPump: (employeeId, pumpId) => {

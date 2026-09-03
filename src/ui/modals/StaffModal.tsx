@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle } from 'lucide-react';
+import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle, Trash2 } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
 export const StaffModal: React.FC = () => {
@@ -10,6 +10,7 @@ export const StaffModal: React.FC = () => {
   const hirePumpAttendant = useGameStore((s) => s.hirePumpAttendant);
   const assignAttendantToPump = useGameStore((s) => s.assignAttendantToPump);
   const upgradeAttendant = useGameStore((s) => s.upgradeAttendant);
+  const fireAttendant = useGameStore((s) => s.fireAttendant);
   const hireManager = useGameStore((s) => s.hireManager);
   const updateManagerSettings = useGameStore((s) => s.updateManagerSettings);
 
@@ -101,7 +102,7 @@ export const StaffModal: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={hirePumpAttendant}
+                onClick={() => hirePumpAttendant()}
                 disabled={gameState.player.level < 3 || gameState.player.cash < 7500}
                 className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
                   gameState.player.level < 3 || gameState.player.cash < 7500
@@ -121,51 +122,121 @@ export const StaffModal: React.FC = () => {
                   Henüz işe alınmış pompacı bulunmuyor. İlk pompacıyı işe alarak dolumu otomatikleştirebilirsiniz.
                 </div>
               ) : (
-                attendants.map((emp) => (
-                  <div
-                    key={emp.id}
-                    className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-sm text-white">{emp.name}</span>
-                        <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/30">
-                          Seviye {emp.level}
-                        </span>
-                      </div>
-                      <div className="text-xs font-mono text-slate-400 mt-1">
-                        Maaş: {emp.wage} TL/gün • Hizmet Sayısı: {emp.serviceCount}
-                      </div>
-                    </div>
+                attendants.map((emp) => {
+                  const currentTier = GAME_CONFIG.employees.pumpAttendant.tierLevels[emp.level - 1] ?? {
+                    speedMultiplier: 0.75,
+                    actionDelaySeconds: 2.0
+                  };
+                  const nextTier = GAME_CONFIG.employees.pumpAttendant.tierLevels[emp.level];
+                  const hasEnoughServices = nextTier ? emp.serviceCount >= (nextTier.requiredServices || 0) : false;
+                  const hasEnoughCash = nextTier ? gameState.player.cash >= nextTier.hireCost : false;
 
-                    <div className="flex items-center gap-2 w-full md:w-auto">
-                      {/* Pump assignment selector */}
-                      <select
-                        value={emp.assignedPumpId || ''}
-                        onChange={(e) => assignAttendantToPump(emp.id, e.target.value || null)}
-                        className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 outline-none cursor-pointer"
-                      >
-                        <option value="">Atanmamış (Boşta)</option>
-                        {Object.values(gameState.pumps).map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.id.toUpperCase()} (Seviye {p.level})
-                          </option>
-                        ))}
-                      </select>
+                  return (
+                    <div
+                      key={emp.id}
+                      className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3"
+                    >
+                      {/* Top Row: Info + Assignment + Actions */}
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-sm text-white">{emp.name}</span>
+                            <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/30">
+                              Seviye {emp.level}
+                            </span>
+                            {emp.level === 3 && (
+                              <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                                ⭐ USTA
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span>Maaş: ₺{emp.wage}/gün</span>
+                            <span>•</span>
+                            <span>Hizmet: {emp.serviceCount}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-semibold">
+                              Dolum Hızı: %{Math.round(currentTier.speedMultiplier * 100)}
+                            </span>
+                            <span>•</span>
+                            <span className="text-sky-300 font-semibold">
+                              Tepki: {currentTier.actionDelaySeconds}s
+                            </span>
+                          </div>
+                        </div>
 
-                      {/* Upgrade Attendant */}
-                      {emp.level < 3 && (
-                        <button
-                          onClick={() => upgradeAttendant(emp.id)}
-                          className="game-btn bg-slate-800 hover:bg-slate-700 text-indigo-300 text-xs font-bold px-3 py-2 rounded-xl border border-indigo-500/30 flex items-center gap-1"
-                        >
-                          <ArrowUpCircle className="w-3.5 h-3.5" />
-                          <span>Eğit</span>
-                        </button>
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                          {/* Pump assignment selector */}
+                          <select
+                            value={emp.assignedPumpId || ''}
+                            onChange={(e) => assignAttendantToPump(emp.id, e.target.value || null)}
+                            className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 outline-none cursor-pointer"
+                          >
+                            <option value="">Atanmamış (Boşta)</option>
+                            {Object.values(gameState.pumps).map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.id.toUpperCase()} (Seviye {p.level})
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Upgrade Attendant */}
+                          {nextTier && (
+                            <button
+                              onClick={() => upgradeAttendant(emp.id)}
+                              disabled={!hasEnoughServices || !hasEnoughCash}
+                              className={`game-btn text-xs font-bold px-3 py-2 rounded-xl border flex items-center gap-1.5 whitespace-nowrap transition-all ${
+                                hasEnoughServices && hasEnoughCash
+                                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white border-indigo-400/40 shadow-lg shadow-indigo-600/30 active:scale-95'
+                                  : 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed'
+                              }`}
+                            >
+                              <ArrowUpCircle className="w-3.5 h-3.5" />
+                              <span>Eğit (₺{nextTier.hireCost.toLocaleString('tr-TR')})</span>
+                            </button>
+                          )}
+
+                          {/* Fire / Dismiss Attendant */}
+                          <button
+                            onClick={() => fireAttendant(emp.id)}
+                            title="İşten Çıkar"
+                            className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-400 hover:text-red-300 transition-all flex items-center justify-center active:scale-95"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bottom Row: Next Level Perks Preview */}
+                      {nextTier ? (
+                        <div className="pt-2.5 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-slate-900/40 px-3 py-2 rounded-xl">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-amber-400 font-bold flex items-center gap-1">
+                              <span>⚡</span> Seviye {nextTier.level} Kazanımları:
+                            </span>
+                            <span className="text-emerald-300 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                              Dolum Hızı: %{Math.round(currentTier.speedMultiplier * 100)} ➔ %{Math.round(nextTier.speedMultiplier * 100)} (+%{Math.round((nextTier.speedMultiplier - currentTier.speedMultiplier) * 100)})
+                            </span>
+                            <span className="text-sky-300 font-mono font-bold bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                              Tepki: {currentTier.actionDelaySeconds}s ➔ {nextTier.actionDelaySeconds}s (-{(currentTier.actionDelaySeconds - nextTier.actionDelaySeconds).toFixed(1)}s)
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-400">
+                            {hasEnoughServices ? (
+                              <span className="text-emerald-400 font-bold">✓ Deneyim Yeterli ({emp.serviceCount}/{nextTier.requiredServices})</span>
+                            ) : (
+                              <span>Şart: {emp.serviceCount}/{nextTier.requiredServices} Hizmet</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs text-amber-300 font-semibold">
+                          <span>🏆</span> Maksimum Usta Seviyesi: En yüksek dolum hızı (%110) ve anında reaksiyon (0.6s).
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

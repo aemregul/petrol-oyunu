@@ -9,6 +9,7 @@ class SoundEngine {
   private masterGain: GainNode | null = null;
 
   private initCtx() {
+    if (typeof window === 'undefined') return;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {

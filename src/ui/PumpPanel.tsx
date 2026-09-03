@@ -1,15 +1,9 @@
-import { TONE_BUTTON } from './gameStyle';
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { calculateRepairCost } from '../domain/formulas/economy';
-import { Fuel, X, Trash2, Umbrella } from 'lucide-react';
-
-const FUEL_TEXT: Record<string, string> = {
-  gasoline: 'text-emerald-400',
-  diesel: 'text-orange-400',
-  lpg: 'text-blue-400'
-};
+import { Fuel, X, Wrench, Umbrella } from 'lucide-react';
+import { sounds } from '../audio/soundEffects';
 
 const STATE_LABELS: Record<string, { text: string; className: string }> = {
   IDLE: { text: 'Boşta', className: 'text-emerald-400' },
@@ -19,12 +13,6 @@ const STATE_LABELS: Record<string, { text: string; className: string }> = {
   MAINTENANCE: { text: 'Bakımda', className: 'text-amber-400' }
 };
 
-/**
- * The card that opens on a pump with no customer at it: what the pump is,
- * how it is doing, and everything money can do to it — repair, the speed
- * ladder, and the per-fuel nozzle modules. Fuels are bought here pump by
- * pump; the level ladder only ever buys speed.
- */
 export const PumpPanel: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const selectedPumpId = useGameStore((s) => s.selectedPumpId);
@@ -33,9 +21,11 @@ export const PumpPanel: React.FC = () => {
   const selectPump = useGameStore((s) => s.selectPump);
   const upgradePump = useGameStore((s) => s.upgradePump);
   const repairPump = useGameStore((s) => s.repairPump);
+  const rotatePump = useGameStore((s) => s.rotatePump);
+  const relocateStructure = useGameStore((s) => s.relocateStructure);
+  const hirePumpAttendant = useGameStore((s) => s.hirePumpAttendant);
+  const fireAttendant = useGameStore((s) => s.fireAttendant);
   const addPumpFuel = useGameStore((s) => s.addPumpFuel);
-  const sellStructure = useGameStore((s) => s.sellStructure);
-  const structureValue = useGameStore((s) => s.structureValue);
   const fitCanopy = useGameStore((s) => s.fitCanopy);
   const removeCanopy = useGameStore((s) => s.removeCanopy);
 
@@ -44,133 +34,204 @@ export const PumpPanel: React.FC = () => {
 
   const pumpNo = pump.id.replace(/\D+/g, '') || '1';
   const stateInfo = STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-slate-300' };
-  const attendant = Object.values(gameState.employees).find((e) => e.assignedPumpId === pump.id);
+
+  // Check if an attendant is assigned to this specific pump
+  const attendant = Object.values(gameState.employees).find(
+    (e) => e.assignedPumpId === pump.id && e.role === 'PUMP_ATTENDANT'
+  );
+
+  const attendantConfig = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
   const upgrade = GAME_CONFIG.buildingUpgrades[upgradePathFor('pump_standard')]?.[pump.level + 1];
   const repairCost =
     pump.health < 100
       ? calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health)
       : null;
 
-  // A roof for this island, bought and sold from the island it belongs to.
-  const canopy = GAME_CONFIG.buildings.canopy;
-  const canopyLocked = gameState.player.level < canopy.unlockLevel;
+  const canAffordHire = gameState.player.cash >= attendantConfig.hireCost;
 
-  const fuelNames = pump.supportedFuels
-    .map((f) => GAME_CONFIG.fuels[f]?.shortName ?? f)
-    .join(' ve ');
+  const handleClose = () => {
+    sounds.playClick();
+    selectPump(null);
+  };
 
-  const moduleRow = (fuel: 'diesel' | 'lpg') => {
-    if (pump.supportedFuels.includes(fuel)) return null;
-    const module = GAME_CONFIG.pumpFuelModules[fuel];
-    const locked = gameState.player.level < module.minLevel;
-    const conf = GAME_CONFIG.fuels[fuel];
-    const tone = fuel === 'diesel' ? TONE_BUTTON.amber : TONE_BUTTON.blue;
+  const handleHireOrFire = () => {
+    sounds.playClick();
+    if (attendant) {
+      fireAttendant(attendant.id);
+    } else {
+      hirePumpAttendant(pump.id);
+    }
+  };
 
-    return (
-      <button
-        key={fuel}
-        onClick={() => addPumpFuel(pump.id, fuel)}
-        disabled={locked}
-        className={`w-full py-2.5 rounded-xl font-extrabold text-xs transition-all ${
-          locked
-            ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-            : `game-btn ${tone}`
-        }`}
-      >
-        {locked
-          ? `${conf.shortName} Tabancası — Seviye ${module.minLevel}`
-          : `+ ${conf.shortName} Tabancası — ₺${module.cost.toLocaleString('tr-TR')}`}
-      </button>
-    );
+  const handleUpgrade = () => {
+    sounds.playClick();
+    upgradePump(pump.id);
+  };
+
+  const handleRelocate = () => {
+    sounds.playClick();
+    relocateStructure(pump.id);
+    selectPump(null);
+  };
+
+  const handleRotate = () => {
+    sounds.playClick();
+    rotatePump(pump.id);
   };
 
   return (
-    <div className="absolute left-4 top-20 w-80 pointer-events-auto animate-fade-in">
-      <div className="game-surface !rounded-3xl overflow-hidden">
-        {/* Header */}
-        <div className="bg-red-950/70 border-b-2 border-red-500/30 px-4 py-3 flex items-center justify-between">
+    <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center sm:justify-start sm:p-6 sm:left-4">
+      <div className="w-[340px] pointer-events-auto select-none rounded-[2rem] overflow-hidden bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col">
+        {/* Header Red Banner */}
+        <div className="bg-[#d93f3f] px-5 py-3.5 flex items-center justify-between text-white shadow-md">
           <div className="flex items-center gap-2.5">
-            <div className="game-icon-badge w-8 h-8 !bg-red-500/20 border-red-400/40">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
               <Fuel className="w-4 h-4 text-white" />
             </div>
-            <span className="game-title text-red-100 text-sm">Pompa #{pumpNo}</span>
+            <span className="font-extrabold text-base tracking-tight">Pompa #{pumpNo}</span>
           </div>
           <button
-            onClick={() => selectPump(null)}
-            className="w-7 h-7 rounded-lg bg-black/25 border border-white/25 hover:bg-black/40 text-white flex items-center justify-center transition-all"
+            onClick={handleClose}
+            className="w-7 h-7 rounded-xl bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 flex flex-col gap-3 text-xs">
-          <p className="text-slate-400 leading-relaxed">
-            {fuelNames} dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin.
+        {/* Content Body */}
+        <div className="p-5 flex flex-col gap-4 text-xs">
+          {/* Subtitle description */}
+          <p className="text-slate-300 text-[11px] leading-relaxed font-medium">
+            Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.
           </p>
 
-          {/* Info rows */}
-          <div className="flex flex-col divide-y divide-slate-800 bg-slate-950/50 border border-slate-800 rounded-2xl px-3.5">
-            <div className="flex justify-between py-2">
-              <span className="text-slate-400 font-bold">Durum</span>
+          {/* Stats Rows */}
+          <div className="flex flex-col divide-y divide-white/5 text-xs">
+            <div className="flex justify-between items-center py-1.5">
+              <span className="text-slate-400 font-semibold">Durum</span>
               <span className={`font-extrabold ${stateInfo.className}`}>{stateInfo.text}</span>
             </div>
-            <div className="flex justify-between py-2">
-              <span className="text-slate-400 font-bold">Sağlık</span>
-              <span
-                className={`font-extrabold font-mono ${
-                  pump.health > 60 ? 'text-white' : pump.health > 25 ? 'text-amber-400' : 'text-red-400'
-                }`}
-              >
-                %{Math.round(pump.health)}
+
+            <div className="flex justify-between items-center py-1.5">
+              <span className="text-slate-400 font-semibold">Dolum hızı</span>
+              <span className="font-extrabold text-white font-mono">{pump.flowRateLps.toFixed(1)} L/sn</span>
+            </div>
+
+            <div className="flex justify-between items-center py-1.5">
+              <span className="text-slate-400 font-semibold">Pompacı</span>
+              <span className={`font-extrabold uppercase ${attendant ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {attendant ? 'ÇALIŞIYOR (gelir senin)' : 'YOK'}
               </span>
             </div>
-            <div className="flex justify-between py-2">
-              <span className="text-slate-400 font-bold">Dolum hızı</span>
-              <span className="font-extrabold text-white font-mono">{pump.flowRateLps} L/sn</span>
-            </div>
-            <div className="flex justify-between py-2">
-              <span className="text-slate-400 font-bold">Pompacı</span>
-              <span className={`font-extrabold ${attendant ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {attendant ? attendant.name : '—'}
+
+            <div className="flex justify-between items-center py-1.5">
+              <span className="text-slate-400 font-semibold">Yovmiye</span>
+              <span className={`font-extrabold font-mono ${attendant ? 'text-rose-300' : 'text-slate-500'}`}>
+                ₺{attendant ? attendant.wage : attendantConfig.dailyWage}/gün
               </span>
             </div>
-            {pump.supportedFuels.map((f) => (
-              <div key={f} className="flex justify-between py-2">
-                <span className={`font-bold ${FUEL_TEXT[f] ?? 'text-slate-400'}`}>
-                  {GAME_CONFIG.fuels[f]?.shortName ?? f}
-                </span>
-                <span className="font-extrabold text-white font-mono">
-                  ₺{gameState.pricing[f].playerPrice.toFixed(2)}/L
-                </span>
-              </div>
-            ))}
+
+            {/* Fuel Prices */}
+            {pump.supportedFuels.map((f) => {
+              const conf = GAME_CONFIG.fuels[f];
+              const price = gameState.pricing[f]?.playerPrice ?? 0;
+              return (
+                <div key={f} className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-300 font-semibold">{conf?.shortName ?? f}</span>
+                  <span className="font-extrabold text-white font-mono">₺{price.toFixed(0)}/L</span>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Actions */}
-          <div className="flex flex-col gap-2">
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-2.5 pt-1">
+            {/* Repair button if damaged */}
             {repairCost !== null && (
               <button
                 onClick={() => repairPump(pump.id)}
-                className={`game-btn w-full py-2.5 rounded-xl font-extrabold text-xs ${TONE_BUTTON.red}`}
+                className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
               >
-                Onar — ₺{repairCost.toLocaleString('tr-TR')}
+                <Wrench className="w-3.5 h-3.5" />
+                <span>Onar — ₺{repairCost.toLocaleString('tr-TR')}</span>
               </button>
             )}
-            {upgrade && (
+
+            {/* Pompacı Button (İşten çıkar or İşe Al) */}
+            {attendant ? (
               <button
-                onClick={() => upgradePump(pump.id)}
-                title={upgrade.effectsDescription}
-                className={`game-btn w-full py-2.5 rounded-xl font-extrabold text-xs ${TONE_BUTTON.green}`}
+                onClick={handleHireOrFire}
+                className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
               >
-                Pompa S{pump.level + 1} — ₺{upgrade.cost.toLocaleString('tr-TR')}
+                Pompacıyı İşten çıkar
+              </button>
+            ) : (
+              <button
+                onClick={handleHireOrFire}
+                disabled={!canAffordHire}
+                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
+                  canAffordHire
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
+                    : 'bg-slate-800 text-slate-500 border border-white/5 cursor-not-allowed'
+                }`}
+              >
+                Pompacı Al — ₺{attendantConfig.hireCost.toLocaleString('tr-TR')}
               </button>
             )}
-            {moduleRow('diesel')}
-            {moduleRow('lpg')}
+
+            {/* Upgrade Pump Button */}
+            {upgrade ? (
+              <button
+                onClick={handleUpgrade}
+                className="w-full py-3.5 bg-[#27a85a] hover:bg-[#20924d] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg shadow-emerald-950/40"
+              >
+                Pompa #{pump.level + 1} — ₺{upgrade.cost.toLocaleString('tr-TR')}
+              </button>
+            ) : (
+              <div className="w-full py-2.5 rounded-2xl bg-slate-800/60 border border-white/5 text-slate-500 text-center font-bold text-xs">
+                Maksimum Seviye (S{pump.level})
+              </div>
+            )}
+
+            {/* Taşı (Relocate) Button */}
+            <button
+              onClick={handleRelocate}
+              className="w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md"
+            >
+              Taşı
+            </button>
+
+            {/* Döndür (Rotate) Button */}
+            <button
+              onClick={handleRotate}
+              className="w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md"
+            >
+              Döndür
+            </button>
+
+            {/* Extra modules (if not installed yet) */}
+            {!pump.supportedFuels.includes('diesel') && (
+              <button
+                onClick={() => addPumpFuel(pump.id, 'diesel')}
+                className="w-full py-2.5 rounded-xl bg-orange-950/60 border border-orange-500/40 text-orange-300 font-bold text-xs hover:bg-orange-900/60 transition-all"
+              >
+                + Dizel Tabancası — ₺{GAME_CONFIG.pumpFuelModules.diesel.cost.toLocaleString('tr-TR')}
+              </button>
+            )}
+            {!pump.supportedFuels.includes('lpg') && (
+              <button
+                onClick={() => addPumpFuel(pump.id, 'lpg')}
+                className="w-full py-2.5 rounded-xl bg-blue-950/60 border border-blue-500/40 text-blue-300 font-bold text-xs hover:bg-blue-900/60 transition-all"
+              >
+                + LPG Tabancası — ₺{GAME_CONFIG.pumpFuelModules.lpg.cost.toLocaleString('tr-TR')}
+              </button>
+            )}
+
+            {/* Canopy Toggle */}
             {pump.hasCanopy ? (
               <button
                 onClick={() => removeCanopy(pump.id)}
-                className={`game-btn w-full py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 ${TONE_BUTTON.slate}`}
+                className="w-full py-2 rounded-xl text-slate-400 hover:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
               >
                 <Umbrella className="w-3.5 h-3.5" />
                 <span>Sundurmayı Sök</span>
@@ -178,28 +239,12 @@ export const PumpPanel: React.FC = () => {
             ) : (
               <button
                 onClick={() => fitCanopy(pump.id)}
-                disabled={canopyLocked}
-                className={`w-full py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 ${
-                  canopyLocked
-                    ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                    : `game-btn ${TONE_BUTTON.blue}`
-                }`}
+                className="w-full py-2 rounded-xl text-slate-400 hover:text-sky-300 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
               >
                 <Umbrella className="w-3.5 h-3.5" />
-                <span>
-                  {canopyLocked
-                    ? `Sundurma — Seviye ${canopy.unlockLevel}`
-                    : `+ Sundurma — ₺${canopy.price.toLocaleString('tr-TR')}`}
-                </span>
+                <span>+ Sundurma Ekle</span>
               </button>
             )}
-            <button
-              onClick={() => sellStructure(pump.id)}
-              className="game-btn w-full py-2.5 rounded-xl font-extrabold text-xs bg-slate-800 hover:bg-slate-700 text-amber-400 border-2 border-slate-700 flex items-center justify-center gap-1.5"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Sat — ₺{structureValue(pump.id).toLocaleString('tr-TR')}</span>
-            </button>
           </div>
         </div>
       </div>

@@ -21,6 +21,15 @@ interface VehicleMeshProps {
 
 export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
   const openFuelingPanel = useGameStore((s) => s.openFuelingPanelForVehicle);
+  const gameState = useGameStore((s) => s.gameState);
+
+  const targetPump = vehicle.targetPumpId ? gameState.pumps[vehicle.targetPumpId] : null;
+  const pumpHasAttendant = targetPump
+    ? Object.values(gameState.employees).some(
+        (e) => e.assignedPumpId === targetPump.id && e.role === 'PUMP_ATTENDANT'
+      )
+    : false;
+  const isAttendantServing = vehicle.assignedActor === 'EMPLOYEE' || pumpHasAttendant;
 
   // The parking offset lives in the route, so world position is used as-is.
   const posX = vehicle.worldPosition[0] * 2;
@@ -67,6 +76,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
   const isFueling = vehicle.state === 'FUELING';
   const isElectric = vehicle.archetype === 'ev';
   const serviceUnit = isElectric ? 'kWh' : 'L';
+  const unitPrice = gameState.pricing[vehicle.fuelType]?.playerPrice ?? 0;
 
   // Archetype color palettes
   const getCarColor = () => {
@@ -97,7 +107,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
       position={[posX, 0, posZ]}
       onClick={(e) => {
         e.stopPropagation();
-        if (needsService) openFuelingPanel(vehicle.id);
+        if (needsService && !isAttendantServing) openFuelingPanel(vehicle.id);
       }}
     >
       {/* Vehicle body: Kenney CC0 model, primitives kept as a fallback */}
@@ -121,29 +131,22 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         >
           <div
             className={`flex flex-col items-center transition-transform transform ${
-              needsService ? 'cursor-pointer' : 'cursor-default'
+              needsService && !isAttendantServing ? 'cursor-pointer' : 'cursor-default'
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              if (needsService) openFuelingPanel(vehicle.id);
+              if (needsService && !isAttendantServing) openFuelingPanel(vehicle.id);
             }}
           >
-            <div
-              className={`bg-slate-900/95 border-2 text-white text-xs px-2.5 py-1 rounded-xl shadow-xl flex items-center gap-1.5 backdrop-blur font-mono whitespace-nowrap ${
-                isFueling || isElectric ? 'border-sky-500' : 'border-emerald-500'
-              }`}
-            >
-              <span className={isFueling || isElectric ? 'text-sky-400' : 'text-emerald-400'}>
-                {isElectric ? '⚡' : '⛽'}
-              </span>
+            {/* Meter Badge (like beneloil.com: 18.9L • ₺170) */}
+            <div className="bg-black/90 border border-slate-700/80 text-white text-xs px-3 py-1.5 rounded-xl shadow-2xl flex items-center gap-1.5 backdrop-blur font-mono whitespace-nowrap">
               {isFueling ? (
-                <span className="font-bold">
-                  {vehicle.request.dispensedLiters.toFixed(1)} /{' '}
-                  {vehicle.request.calculatedLiters.toFixed(0)} {serviceUnit}
+                <span className="font-extrabold tracking-wide text-white">
+                  {vehicle.request.dispensedLiters.toFixed(1)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> ₺{Math.round(vehicle.request.dispensedLiters * unitPrice)}
                 </span>
               ) : (
-                <span className="font-bold">
-                  {vehicle.request.calculatedLiters.toFixed(0)} {serviceUnit}
+                <span className="font-extrabold tracking-wide text-slate-200">
+                  {vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> ₺{Math.round(vehicle.request.calculatedLiters * unitPrice)}
                 </span>
               )}
             </div>

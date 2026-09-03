@@ -7,6 +7,7 @@ import { DECAL, decal } from './decal';
 import { getPumpCanopyLayout, PumpCanopyLayout } from './pumpCanopyLayout';
 import { BayPad } from './BayPad';
 import { pumpBayOffset, pumpFacesAcrossZ } from '../domain/services/simulationEngine';
+import { PumpAttendantMesh } from './PumpAttendantMesh';
 
 interface PumpMeshProps {
   pump: PumpEntity;
@@ -128,6 +129,10 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump, neighbours }) => {
   const relocateStructure = useGameStore((s) => s.relocateStructure);
   const fittingCanopy = useGameStore((s) => s.fittingCanopy);
   const fitCanopy = useGameStore((s) => s.fitCanopy);
+  const employees = useGameStore((s) => s.gameState.employees);
+  const attendant = Object.values(employees).find(
+    (e) => e.assignedPumpId === pump.id && e.role === 'PUMP_ATTENDANT'
+  );
   const canopyLayout = getPumpCanopyLayout(pump, neighbours ?? Object.values(pumps));
 
   // While a canopy is being fitted, the islands that can take one are the
@@ -158,6 +163,17 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump, neighbours }) => {
   // boya ile davranış aynı hesaptan çıkar, ayrışamaz. Ön yüz artık yapının
   // rotasyonuna aittir: oyuncu pompayı çevirince alan da onunla döner.
   const bayOffset = pumpBayOffset(pump);
+
+  // Bay'in pompanın yerel koordinatındaki konumu:
+  const theta = (pump.rotation * Math.PI) / 180;
+  const wx = bayOffset[0] * 2;
+  const wz = bayOffset[1] * 2;
+  const localBayX = wx * Math.cos(theta) - wz * Math.sin(theta);
+  const sideSign = Math.sign(localBayX) || 1;
+
+  // Pompacı sarı dubanın önünde (z = -1.45), pompayı ve tabancaları tamamen açık bırakacak şekilde durur:
+  const attendantPos: [number, number, number] = [sideSign * 0.75, 0.30, -1.45];
+  const attendantRot: [number, number, number] = [0, (sideSign * Math.PI) / 2 + 0.1, 0];
 
   // Emre'nin 2026-09-02 isteği: alanın rengi pompanın hâlini anlatır —
   // "Arızalı" rozetiyle aynı kaynaktan: arızalıysa kırmızı, bakım
@@ -343,6 +359,15 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump, neighbours }) => {
       )}
 
       {pump.hasCanopy && <PumpCanopy layout={canopyLayout} />}
+
+      {/* Symbolic 3D Attendant standing by the dispenser island facing the car */}
+      {attendant && (
+        <PumpAttendantMesh
+          attendant={attendant}
+          position={attendantPos}
+          rotation={attendantRot}
+        />
+      )}
 
       {pump.health < 40 && (
         <Html position={[0, 3.3, 0]} center distanceFactor={25} zIndexRange={[5, 0]}>
