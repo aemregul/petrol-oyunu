@@ -342,9 +342,11 @@ describe('driveway ramps', () => {
     state.pumps = {};
 
     // Near block: the concrete starts one cell behind the plot's front
-    // boundary; the strip in front of that line is verge.
+    // boundary; the strip in front of that line is verge. (Geçerli örnek
+    // araç yolu rezervinin gerisinden: rezerv artık beton çizgisine sıfıra
+    // sıfır dayandığı için ön bandın tamamı inşaata kapalı.)
     expect(evaluatePlacement(state, 'trash_can', [10.5, 0.5], 0).valid).toBe(false);
-    expect(evaluatePlacement(state, 'trash_can', [10.5, 1.5], 0).valid).toBe(true);
+    expect(evaluatePlacement(state, 'trash_can', [10.5, 6.5], 0).valid).toBe(true);
     // A deep footprint dipping into the strip is refused; behind the reserve
     // it is not. (Ağızdan ağıza uzanan araç yolu rezervi ön bandı katı yapıya
     // kapattığı için "banket hizasında pompa" artık kategorik olarak yok —
@@ -359,7 +361,8 @@ describe('driveway ramps', () => {
     state.station.plots.ownedParcels.push('0,-1', '1,-1');
     state.station.plots.pavedParcels.push('0,-1', '1,-1');
     expect(evaluatePlacement(state, 'trash_can', [10.5, -13.5], 0).valid).toBe(false);
-    expect(evaluatePlacement(state, 'trash_can', [10.5, -14.5], 0).valid).toBe(true);
+    // Karşı blokta da geçerli örnek kendi rezervinin gerisinden.
+    expect(evaluatePlacement(state, 'trash_can', [10.5, -20.5], 0).valid).toBe(true);
 
     // The verge is still the signs' ground: the strip rule must not catch them.
     expect(evaluatePlacement(state, 'price_sign', [10, 0], 0).valid).toBe(true);

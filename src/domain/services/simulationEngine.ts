@@ -1885,6 +1885,15 @@ export interface ReserveRect extends PathRect {
   kind: 'mouth' | 'lane';
 }
 
+/**
+ * Emre'nin ölçüleri (2026-09-03): bant 2 hücre — araç 2 birim genişliğinde,
+ * bu ona yeter — ve beton çizgisiyle bant arasında 1 hücrelik pay kalır ki
+ * oyuncu oraya sokak lambası, çöp kutusu gibi küçük şeyler koyabilsin.
+ * Ağız koridorları bu payı TANIMAZ: kapının önü kapının önüdür.
+ */
+export const RESERVE_SETBACK = 1;
+export const RESERVE_DEPTH = 2;
+
 export function drivewayReserveRects(
   state: Parameters<typeof blockLayout>[0],
   side: DrivewaySide
@@ -1894,29 +1903,36 @@ export function drivewayReserveRects(
 
   const front = side === 'far' ? block.maxZ : block.minZ;
   const inward = side === 'far' ? -1 : 1;
-  const laneEdge = block.laneZ + inward * LANE_HALF_WIDTH;
+
+  // Rezerv, inşaat ızgarasının HÜCRELERİNE oturur: beton çizgisinden 1 hücre
+  // pay (lamba/dekor bandı), ardından 2 hücrelik araç bandı. Ara değerli
+  // kenarlar onu sahneden kopuk ayrı bir katman gibi gösteriyordu; ön şerit
+  // inşaat yüzünden içeri kayarsa yolu yine bağlantı sınavı
+  // (forecourtStaysOpen) korur — rezervin işi kapılar ve ön bandın kendisi.
+  const apronFront = side === 'far' ? block.maxZ : Math.max(block.minZ, FORECOURT_FRONT);
+  const laneFront = apronFront + inward * RESERVE_SETBACK;
+  const reserveBack = laneFront + inward * RESERVE_DEPTH;
 
   const mouths = [block.entry, block.exit].map((mouth) => {
     const half = mouth.width / 2;
     return {
       kind: 'mouth' as const,
-      minX: mouth.x - half,
-      maxX: mouth.x + half,
-      minZ: Math.min(front, laneEdge),
-      maxZ: Math.max(front, laneEdge)
+      minX: Math.floor(mouth.x - half),
+      maxX: Math.ceil(mouth.x + half),
+      minZ: Math.min(front, reserveBack),
+      maxZ: Math.max(front, reserveBack)
     };
   });
 
-  // İki koridorun arası: çiçekliğin gerisinden ön şeridin arka kenarına,
-  // ağızdan ağıza kesintisiz. Cebe sıkışan araca son çare olarak her zaman
-  // açık bir ön yol kalır.
-  const inner = front + inward * FRONTAGE_DEPTH;
+  // İki koridorun arası: beton çizgisinden ön şeridin arka kenarına, ağızdan
+  // ağıza kesintisiz. Cebe sıkışan araca son çare olarak her zaman açık bir
+  // ön yol kalır.
   const lane = {
     kind: 'lane' as const,
     minX: Math.min(mouths[0].minX, mouths[1].minX),
     maxX: Math.max(mouths[0].maxX, mouths[1].maxX),
-    minZ: Math.min(inner, laneEdge),
-    maxZ: Math.max(inner, laneEdge)
+    minZ: Math.min(laneFront, reserveBack),
+    maxZ: Math.max(laneFront, reserveBack)
   };
 
   return [...mouths, lane];

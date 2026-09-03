@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
 import { evaluatePlacement } from '../domain/services/placement';
-import { blockLayout, drivewayReserveRects } from '../domain/services/simulationEngine';
+import {
+  blockLayout,
+  drivewayReserveRects,
+  FORECOURT_FRONT,
+  RESERVE_DEPTH,
+  RESERVE_SETBACK
+} from '../domain/services/simulationEngine';
 import { GameState } from '../domain/types/gameState';
 
 /**
@@ -27,21 +33,39 @@ describe('the driveway reserve', () => {
     const rects = drivewayReserveRects(state, 'near');
 
     expect(rects).toHaveLength(3);
+    const reserveBack = FORECOURT_FRONT + RESERVE_SETBACK + RESERVE_DEPTH;
     for (const [i, mouth] of [block.entry, block.exit].entries()) {
       expect(rects[i].kind).toBe('mouth');
-      expect(rects[i].minX).toBeCloseTo(mouth.x - mouth.width / 2);
-      expect(rects[i].maxX).toBeCloseTo(mouth.x + mouth.width / 2);
+      // Kenarlar hücre çizgilerine oturur ve ağzı daraltmadan kapsar —
+      // rezerv, inşaat ızgarasından kopuk ayrı bir katman gibi durmaz.
+      expect(rects[i].minX).toBeLessThanOrEqual(mouth.x - mouth.width / 2);
+      expect(rects[i].maxX).toBeGreaterThanOrEqual(mouth.x + mouth.width / 2);
+      expect(Number.isInteger(rects[i].minX)).toBe(true);
+      expect(Number.isInteger(rects[i].maxX)).toBe(true);
       expect(rects[i].minZ).toBe(block.minZ);
-      expect(rects[i].maxZ).toBeGreaterThan(block.laneZ);
+      expect(rects[i].maxZ).toBe(reserveBack);
     }
 
-    // Bağlantı şeridi ağızdan ağıza uzanır ve ön şeridi içine alır.
+    // Bağlantı bandı 2 hücredir (araç 2 birim, ona yeter) ve beton çizgisiyle
+    // arasında 1 hücrelik pay bırakır — oyuncu oraya sokak lambası, çöp
+    // kutusu koyabilsin (Emre, 2026-09-03). Ağızlar bu payı tanımaz.
     const lane = rects[2];
     expect(lane.kind).toBe('lane');
     expect(lane.minX).toBeCloseTo(rects[0].minX);
     expect(lane.maxX).toBeCloseTo(rects[1].maxX);
-    expect(lane.minZ).toBeLessThan(block.laneZ);
-    expect(lane.maxZ).toBeGreaterThan(block.laneZ);
+    expect(lane.minZ).toBe(FORECOURT_FRONT + RESERVE_SETBACK);
+    expect(lane.maxZ).toBe(reserveBack);
+  });
+
+  it('leaves the lamp band: small props fit between the planting and the strip', () => {
+    const state = openPlot();
+    // Bandın var oluş sebebi: beton çizgisiyle rezerv arasındaki 1 hücreye
+    // sokak lambası koyulabilmeli…
+    expect(evaluatePlacement(state, 'light_pole', [8.5, 1.5], 0).valid).toBe(true);
+    // …ama kapı boğazında o pay yoktur: kapının önü kapının önüdür.
+    const inMouth = evaluatePlacement(state, 'light_pole', [3.5, 1.5], 0);
+    expect(inMouth.valid).toBe(false);
+    expect(inMouth.reason).toMatch(/rezerv/i);
   });
 
   it('refuses a solid building on the entry corridor', () => {
@@ -65,13 +89,13 @@ describe('the driveway reserve', () => {
     // Başlangıç pompasının kendisiyle çakışmasın: saha boş.
     state.pumps = {};
 
-    // Varsayılan yerleşim: yola dönük pompa, duruş alanı z 4.6..6 ile şeride
-    // değiyor — bu, önalanın olağan hali ve serbest kalmak zorunda.
+    // Varsayılan yerleşim: yola dönük pompa. Duruş alanı rezervin hemen
+    // arkasında — önalanın olağan hali ve serbest kalmak zorunda.
     expect(evaluatePlacement(state, 'pump_standard', [8.5, 7], 90).valid).toBe(true);
 
     // Ağız koridoruna sarkan duruş alanı ise kapıda park eden araç demek:
     // ayak izi tamamen rezerv dışında olsa bile red.
-    const throat = evaluatePlacement(state, 'pump_standard', [13, 7], 90);
+    const throat = evaluatePlacement(state, 'pump_standard', [13, 5.5], 90);
     expect(throat.valid).toBe(false);
     expect(throat.reason).toMatch(/rezerv/i);
   });
