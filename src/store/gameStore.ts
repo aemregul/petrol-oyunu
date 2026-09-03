@@ -61,6 +61,7 @@ import {
   accountBackendReady,
   describeAuthError,
   registerWithEmail,
+  resetPassword,
   signInAsGuest,
   signInWithEmail,
   signInWithGoogle,
@@ -300,6 +301,11 @@ interface GameStore {
   account: AccountProfile | null;
   accountReady: boolean;
   accountBusy: boolean;
+  /** Firebase ilk kez "kim var kim yok" dedikten sonra true: karşılama
+   *  kapısı ancak o zaman karar verir, yoksa oturumlu oyuncuya da bir an
+   *  giriş ekranı parlardı. */
+  accountResolved: boolean;
+  sendPasswordReset: (email: string) => Promise<void>;
   signInGoogle: () => Promise<void>;
   /** register true ise yeni hesap açar; false ise giriş yapar. */
   signInEmail: (email: string, password: string, register: boolean) => Promise<boolean>;
@@ -623,6 +629,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   account: null,
   accountReady: accountBackendReady(),
   accountBusy: false,
+  accountResolved: !accountBackendReady(),
   selectedVehicleId: null,
   selectedPumpId: null,
   selectedBuildingId: null,
@@ -2043,6 +2050,19 @@ export const useGameStore = create<GameStore>((set, get) => {
       get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
     } finally {
       set({ accountBusy: false });
+    }
+  },
+
+  sendPasswordReset: async (email) => {
+    try {
+      await resetPassword(email);
+      get().addNotification({
+        type: 'INFO',
+        title: 'E-posta Gönderildi',
+        message: 'Şifre sıfırlama bağlantısı e-posta adresine gönderildi.'
+      });
+    } catch (error) {
+      get().addNotification({ type: 'WARNING', title: 'Gönderilemedi', message: describeAuthError(error) });
     }
   },
 

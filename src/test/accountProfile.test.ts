@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { accountBackendReady, profileFrom } from '../services/account';
+import { backendReadyFrom, profileFrom } from '../services/account';
 
 /**
  * Hesap katmanı (Emre, 2026-09-03): Google / e-posta / misafir girişi.
@@ -8,9 +8,13 @@ import { accountBackendReady, profileFrom } from '../services/account';
  * oyun, yapılandırmasız ortamda girişsiz ama sapasağlam çalışmalıdır.
  */
 describe('the account layer', () => {
-  it('is politely off without Firebase keys, so the game runs locally', () => {
-    // Test ortamında VITE_FIREBASE_* yok; giriş kapalı, oyun yerelde yaşar.
-    expect(accountBackendReady()).toBe(false);
+  it('is politely off unless every Firebase key is present', () => {
+    // Anahtarsız ya da yarım yapılandırma = kapalı sistem; oyun yerelde yaşar.
+    expect(backendReadyFrom({})).toBe(false);
+    expect(backendReadyFrom({ apiKey: 'x', authDomain: 'y', projectId: 'z' })).toBe(false);
+    expect(
+      backendReadyFrom({ apiKey: 'x', authDomain: 'y', projectId: 'z', appId: 'w' })
+    ).toBe(true);
   });
 
   it('maps Firebase users to honest profiles', () => {

@@ -7,6 +7,7 @@ import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
 import { watchAccount } from './services/account';
+import { WelcomeGate } from './ui/WelcomeGate';
 import { ElectricVehicleShowcase, ModelShowcase } from './rendering/ModelShowcase';
 import { BuildingShowcase } from './rendering/BuildingShowcase';
 
@@ -19,7 +20,10 @@ export const App: React.FC = () => {
   // Oturum, oyunun değil tarayıcının ömrünü yaşar: Firebase kim olduğumuzu
   // söyledikçe store'a işlenir. Yapılandırma yoksa watchAccount tek seferlik
   // null der ve bir daha ses çıkarmaz — oyun yerel kayıtla oynanır.
-  useEffect(() => watchAccount((profile) => useGameStore.setState({ account: profile })), []);
+  useEffect(
+    () => watchAccount((profile) => useGameStore.setState({ account: profile, accountResolved: true })),
+    []
+  );
   const setCameraZoom = useGameStore((s) => s.setCameraZoom);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const buildMode = useGameStore((s) => s.buildMode);
@@ -123,6 +127,7 @@ export const App: React.FC = () => {
       <StationScene />
       <HUD />
       <ModalContainer />
+      <WelcomeGate />
       <NotificationToast />
       <PerformanceOverlay />
     </div>

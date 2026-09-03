@@ -1,24 +1,15 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import {
-  X,
-  UserRound,
-  LogOut,
-  Mail,
-  KeyRound,
-  Pencil,
-  Check,
-  CloudOff
-} from 'lucide-react';
+import { X, UserRound, LogOut, Pencil, Check, CloudOff } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
 /**
- * Hesabım: oyuncunun profili — kim olduğu, istasyonunun adı ve ömürlük
- * istatistikleri. Giriş yoksa aynı pencere giriş ekranıdır: Google, e-posta
- * ya da misafir. Firebase anahtarları verilmemişse giriş kibarca kapalıdır ve
- * oyun yerel kayıtla oynanmaya devam eder — pencere bunu açıkça söyler.
+ * Hesabım: yalnız profil — kim olduğun, istasyonun adı, ömürlük istatistikler
+ * ve Çıkış Yap. Giriş düğmeleri BURADA DEĞİL: kimlik, oyun açılırken karşılama
+ * kapısında (WelcomeGate) seçilir; çıkış yapınca kapı yeniden belirir
+ * (Emre'nin istediği beneloil akışı, 2026-09-03).
  *
- * İstasyon adı burada da değiştirilir; tabelalar station.name'i reaktif
+ * İstasyon adı burada değiştirilir; tabelalar station.name'i reaktif
  * okuduğundan değişiklik sahaya anında yansır.
  */
 const PROVIDER_LABEL = { google: 'Google', email: 'E-posta', guest: 'Misafir' } as const;
@@ -38,10 +29,6 @@ export const AccountModal: React.FC = () => {
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const account = useGameStore((s) => s.account);
   const accountReady = useGameStore((s) => s.accountReady);
-  const accountBusy = useGameStore((s) => s.accountBusy);
-  const signInGoogle = useGameStore((s) => s.signInGoogle);
-  const signInEmail = useGameStore((s) => s.signInEmail);
-  const signInGuest = useGameStore((s) => s.signInGuest);
   const signOutAccount = useGameStore((s) => s.signOutAccount);
   const renameStation = useGameStore((s) => s.renameStation);
   const gameState = useGameStore((s) => s.gameState);
@@ -52,7 +39,6 @@ export const AccountModal: React.FC = () => {
   const dailyDone = daily.filter((m) => m.completed).length;
   const dailyTotal = daily.length;
 
-  const [emailForm, setEmailForm] = useState<{ email: string; password: string; register: boolean } | null>(null);
   const [editingName, setEditingName] = useState<string | null>(null);
 
   const handleClose = () => {
@@ -158,80 +144,6 @@ export const AccountModal: React.FC = () => {
                   Google/e-posta girişi için <code className="text-sky-400">.env</code> dosyasına Firebase anahtarları
                   eklenmeli (<code className="text-sky-400">.env.example</code>'a bakın).
                 </p>
-              </div>
-            )}
-
-            {accountReady && !account && (
-              <div className="flex flex-col gap-2">
-                <button
-                  disabled={accountBusy}
-                  onClick={signInGoogle}
-                  className="game-btn rounded-xl px-4 py-2.5 text-xs font-extrabold bg-white text-slate-900 border-2 border-slate-300 flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <span className="font-black text-sm">G</span>
-                  <span>Google ile Giriş Yap</span>
-                </button>
-
-                {emailForm === null ? (
-                  <button
-                    disabled={accountBusy}
-                    onClick={() => setEmailForm({ email: '', password: '', register: false })}
-                    className="game-btn rounded-xl px-4 py-2.5 text-xs font-extrabold bg-slate-800 border-2 border-slate-600 text-slate-200 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <Mail className="w-4 h-4" />
-                    <span>E-posta ile Devam Et</span>
-                  </button>
-                ) : (
-                  <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2">
-                      <Mail className="w-3.5 h-3.5 text-slate-500" />
-                      <input
-                        type="email"
-                        placeholder="E-posta"
-                        value={emailForm.email}
-                        onChange={(e) => setEmailForm({ ...emailForm, email: e.target.value })}
-                        className="bg-transparent outline-none text-xs text-white flex-1"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2">
-                      <KeyRound className="w-3.5 h-3.5 text-slate-500" />
-                      <input
-                        type="password"
-                        placeholder="Şifre"
-                        value={emailForm.password}
-                        onChange={(e) => setEmailForm({ ...emailForm, password: e.target.value })}
-                        className="bg-transparent outline-none text-xs text-white flex-1"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        disabled={accountBusy}
-                        onClick={async () => {
-                          if (await signInEmail(emailForm.email, emailForm.password, emailForm.register)) {
-                            setEmailForm(null);
-                          }
-                        }}
-                        className="game-btn flex-1 rounded-xl px-3 py-2 text-xs font-extrabold bg-sky-600/30 border-2 border-sky-500/40 text-sky-300 disabled:opacity-50"
-                      >
-                        {emailForm.register ? 'Hesap Aç' : 'Giriş Yap'}
-                      </button>
-                      <button
-                        onClick={() => setEmailForm({ ...emailForm, register: !emailForm.register })}
-                        className="text-[11px] text-slate-400 hover:text-slate-200 px-2"
-                      >
-                        {emailForm.register ? 'Zaten hesabım var' : 'Yeni hesap aç'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  disabled={accountBusy}
-                  onClick={signInGuest}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
-                >
-                  Misafir olarak devam et
-                </button>
               </div>
             )}
 

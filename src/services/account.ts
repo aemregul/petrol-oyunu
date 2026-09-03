@@ -19,6 +19,7 @@ import {
   signInAnonymously,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   type Auth,
@@ -44,9 +45,21 @@ const config = {
   appId: env.VITE_FIREBASE_APP_ID
 };
 
-/** Giriş sistemi ancak Firebase anahtarları verilmişse vardır. */
+/**
+ * Giriş sistemi ancak DÖRT anahtar da verilmişse vardır — yarımı, hiç
+ * verilmemişi gibi kapalıdır. Saf hali test edilebilsin diye ayrık.
+ */
+export function backendReadyFrom(keys: {
+  apiKey?: string;
+  authDomain?: string;
+  projectId?: string;
+  appId?: string;
+}): boolean {
+  return Boolean(keys.apiKey && keys.authDomain && keys.projectId && keys.appId);
+}
+
 export function accountBackendReady(): boolean {
-  return Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
+  return backendReadyFrom(config);
 }
 
 let app: FirebaseApp | null = null;
@@ -118,6 +131,10 @@ export async function signInAsGuest(): Promise<void> {
 
 export async function signOut(): Promise<void> {
   await firebaseSignOut(auth());
+}
+
+export async function resetPassword(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth(), email);
 }
 
 /** Firebase'in İngilizce hata kodları oyuncuya Türkçe anlatılır. */
