@@ -68,7 +68,12 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
   };
 
   const color = FUEL_COLORS[fuelType];
-  const fillPct = unlocked ? Math.round((tank.stock / tank.capacity) * 100) : 0;
+  const fillPct = unlocked
+    ? full
+      ? 100
+      : Math.min(100, Math.round((tank.stock / tank.capacity) * 100))
+    : 0;
+
   const diffLiters = unlocked ? clampedLiters : 0;
 
   if (!unlocked) return null;
