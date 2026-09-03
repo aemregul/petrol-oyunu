@@ -11,6 +11,18 @@ import {
 } from '../domain/services/land';
 import { lampsAreLit } from './LightPole';
 import { LampGlow } from './LampGlow';
+import { GameState } from '../domain/types/gameState';
+
+/**
+ * What the scatter and the highway columns are laid out around. The player's
+ * station by default; a staged scene (the welcome screen) supplies its own
+ * plot and decides for itself whether the lamps are burning.
+ */
+export interface SceneryScene {
+  plots: GameState['station']['plots'];
+  roadLevel: number;
+  lit: boolean;
+}
 
 const S = 2;
 const roadZ = LAYOUT.roadZ * S;
@@ -84,13 +96,15 @@ interface Placement {
  * instanced meshes and casts no shadows: scenery is set dressing, and drawing
  * it per-object cost more frame time than the whole station put together.
  */
-export const SceneryProps: React.FC = () => {
-  const plots = useGameStore((s) => s.gameState.station.plots);
-  const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+export const SceneryProps: React.FC<{ scene?: SceneryScene }> = ({ scene }) => {
+  const storePlots = useGameStore((s) => s.gameState.station.plots);
+  const storeRoadLevel = useGameStore((s) => s.gameState.station.roadLevel);
   const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
   const weather = useGameStore((s) => s.gameState.dayState.weather);
 
-  const isDark = lampsAreLit(gameTime, weather);
+  const plots = scene?.plots ?? storePlots;
+  const roadLevel = scene?.roadLevel ?? storeRoadLevel;
+  const isDark = scene?.lit ?? lampsAreLit(gameTime, weather);
 
   const layout = useMemo(() => getLayout({ station: { plots } }), [plots]);
   const roadHalfWidth = layout.roadHalfWidth * S;

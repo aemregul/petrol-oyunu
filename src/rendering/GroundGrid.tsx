@@ -21,9 +21,24 @@ import {
   isOwned,
   pavedFrontage
 } from '../domain/services/land';
+import { BuildingEntity, GameState, PumpEntity } from '../domain/types/gameState';
 
 /** Grid units to world units; every mesh below shares this scale. */
 const S = 2;
+
+/**
+ * Everything the ground reads to draw itself. Normally it is the player's
+ * station straight from the store; a staged scene (the welcome screen) hands
+ * in its own so it never depends on whatever save happens to be loaded.
+ */
+export interface GroundScene {
+  plots: GameState['station']['plots'];
+  roadLevel: number;
+  buildings: Record<string, BuildingEntity>;
+  pumps: Record<string, PumpEntity>;
+  weather: GameState['dayState']['weather'];
+  cleanliness: number;
+}
 
 const roadZ = LAYOUT.roadZ * S;
 const roadHalfWidth = LAYOUT.roadHalfWidth * S;
@@ -615,14 +630,23 @@ const ParcelFence: React.FC<{ col: number; row: number }> = ({ col, row }) => {
  * The apron is deliberately unmarked. Parking bays and lanes are things the
  * player builds, so painting them here would clash with their own layout.
  */
-export const GroundGrid: React.FC = () => {
-  const plots = useGameStore((s) => s.gameState.station.plots);
-  const buildMode = useGameStore((s) => s.buildMode.active);
-  const weather = useGameStore((s) => s.gameState.dayState.weather);
-  const cleanliness = useGameStore((s) => s.gameState.station.cleanliness);
-  const roadLevel = useGameStore((s) => s.gameState.station.roadLevel);
-  const buildings = useGameStore((s) => s.gameState.buildings);
-  const pumps = useGameStore((s) => s.gameState.pumps);
+export const GroundGrid: React.FC<{ scene?: GroundScene }> = ({ scene }) => {
+  const storePlots = useGameStore((s) => s.gameState.station.plots);
+  const storeBuildMode = useGameStore((s) => s.buildMode.active);
+  const storeWeather = useGameStore((s) => s.gameState.dayState.weather);
+  const storeCleanliness = useGameStore((s) => s.gameState.station.cleanliness);
+  const storeRoadLevel = useGameStore((s) => s.gameState.station.roadLevel);
+  const storeBuildings = useGameStore((s) => s.gameState.buildings);
+  const storePumps = useGameStore((s) => s.gameState.pumps);
+
+  const plots = scene?.plots ?? storePlots;
+  const weather = scene?.weather ?? storeWeather;
+  const cleanliness = scene?.cleanliness ?? storeCleanliness;
+  const roadLevel = scene?.roadLevel ?? storeRoadLevel;
+  const buildings = scene?.buildings ?? storeBuildings;
+  const pumps = scene?.pumps ?? storePumps;
+  // Nobody builds on a staged scene, so its reserve is never painted.
+  const buildMode = scene ? false : storeBuildMode;
 
   const isDualCarriageway = roadLevel >= 2;
 

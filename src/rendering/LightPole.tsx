@@ -28,12 +28,15 @@ export function lampsAreLit(
  * real light onto the apron once the sun is low — the whole point of paying
  * for one.
  */
-export const LightPole: React.FC = () => {
+export const LightPole: React.FC<{
+  /** Photocell override: a scene lit independently of the game clock. */
+  lit?: boolean;
+}> = ({ lit }) => {
   const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
   const weather = useGameStore((s) => s.gameState.dayState.weather);
   const quality = useGameStore((s) => s.gameState.settings.graphicsQuality);
 
-  const isDark = lampsAreLit(gameTime, weather);
+  const isDark = lit ?? lampsAreLit(gameTime, weather);
 
   // The spot needs something in the scene graph to aim at; a bare Object3D
   // parented beside it keeps the aim in the pole's own space, so a rotated

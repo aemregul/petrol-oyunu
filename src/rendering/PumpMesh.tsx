@@ -10,6 +10,11 @@ import { pumpBayOffset, pumpFacesAcrossZ } from '../domain/services/simulationEn
 
 interface PumpMeshProps {
   pump: PumpEntity;
+  /**
+   * The islands this one may share a canopy with. Defaults to the player's
+   * pumps; a staged scene passes its own so the roof never joins a phantom.
+   */
+  neighbours?: readonly PumpEntity[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -115,7 +120,7 @@ const PumpCanopy: React.FC<{ layout: PumpCanopyLayout }> = ({ layout }) => {
   );
 };
 
-export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
+export const PumpMesh: React.FC<PumpMeshProps> = ({ pump, neighbours }) => {
   const pumps = useGameStore((s) => s.gameState.pumps);
   const selectPump = useGameStore((s) => s.selectPump);
   const editMode = useGameStore((s) => s.editMode);
@@ -123,7 +128,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump }) => {
   const relocateStructure = useGameStore((s) => s.relocateStructure);
   const fittingCanopy = useGameStore((s) => s.fittingCanopy);
   const fitCanopy = useGameStore((s) => s.fitCanopy);
-  const canopyLayout = getPumpCanopyLayout(pump, Object.values(pumps));
+  const canopyLayout = getPumpCanopyLayout(pump, neighbours ?? Object.values(pumps));
 
   // While a canopy is being fitted, the islands that can take one are the
   // only thing on the forecourt worth clicking.

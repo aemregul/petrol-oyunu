@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+const [,, out, w, h, waitMs] = process.argv;
+const b = await chromium.launch({ args: ['--use-gl=angle','--use-angle=metal','--enable-unsafe-swiftshader'] });
+const p = await b.newPage({ viewport: { width: +w, height: +h }, deviceScaleFactor: 1 });
+p.on('pageerror', e => console.log('PAGEERROR', e.message));
+p.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 200)); });
+await p.goto('http://127.0.0.1:5199/', { waitUntil: 'networkidle' });
+await p.waitForTimeout(+(waitMs ?? 9000));
+await p.screenshot({ path: out });
+console.log('ok', out);
+await b.close();

@@ -315,7 +315,20 @@
       "Bash(pkill -f \"vite --port 5199\")",
       "Bash(sips -Z 1900 gate_final.png --out gate_final_s.png)",
       "Bash(node ./_shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/gate14.png)",
-      "Bash(sips -Z 1900 gate14.png --out gate14s.png)"
+      "Bash(sips -Z 1900 gate14.png --out gate14s.png)",
+      "Bash(awk '/^export const GAME_CONFIG/{on=1} on && /^    [a-z_]+: \\\\{/{name=$1} on && /size: \\\\[/{print name, $0}' src/config/gameConfig.ts)",
+      "Bash(node ./_shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/v1_1200x830.png 1200 830 9000)",
+      "Bash(sips -c 300 220 --cropOffset 360 400 /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/crop_totem.png)",
+      "Bash(sips -Z 900 /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/crop_totem.png)",
+      "Bash(sips -c 300 220 --cropOffset 360 400 /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/crop_totem36.png)",
+      "Bash(sips -Z 900 /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/crop_totem36.png)",
+      "Bash(node ./_shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/v2_1470_t35.png 1470 956 35000)",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(echo \"VITEST_EXIT=$?\")",
+      "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/frame_audit.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/aspect_sweep.mjs)",
+      "Bash(npx --prefix /Users/emre/petrol-oyunu vite-node -c ./probe.vite.config.mjs --options.server.fs.strict=false ./probe.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp"
