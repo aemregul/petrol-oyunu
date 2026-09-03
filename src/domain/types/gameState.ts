@@ -218,6 +218,8 @@ export interface FuelOrderEntity {
   remainingSeconds: number;
   state: OrderState;
   transactionId: string;
+  /** Hangi tedarikçiyle verildi — Alım Defteri kaydı için. */
+  supplierId: string;
   /**
    * The lorry itself, once it turns off the highway. Absent while the order
    * is still with the supplier — and on old saves, where deliveries were a
@@ -417,8 +419,27 @@ export interface GameNotification {
  */
 export type NotificationDraft = Omit<GameNotification, 'id' | 'timestamp' | 'count' | 'read'>;
 
+/**
+ * Alım Defteri'ndeki tek bir yakıt ikmali kaydı.
+ * transactionLog'dan ayrı tutulur çünkü litre/tedarikçi bilgisi
+ * description string'inden parse etmek kırılgan.
+ */
+export interface FuelPurchaseRecord {
+  id: string;
+  /** Oyun günü (dayState.currentDay). */
+  day: number;
+  fuelType: FuelType;
+  liters: number;
+  unitCost: number;     // TL/L — o anki tedarikçi fiyatıyla
+  totalCost: number;    // liters * unitCost + deliveryFee
+  /** Hangi tedarikçiyle sipariş verildi. */
+  supplierId: string;
+  /** Unix ms — teslimat tamamlandığı an. */
+  deliveredAt: number;
+}
+
 export interface GameState {
-  schemaVersion: 5;
+  schemaVersion: 6;
   saveId: string;
   createdAt: number;
   updatedAt: number;
@@ -451,6 +472,8 @@ export interface GameState {
   employees: Record<string, EmployeeEntity>;
   buildings: Record<string, BuildingEntity>;
   fuelOrders: FuelOrderEntity[];
+  /** Alım Defteri: tamamlanan her teslimatın özeti, en yenisi sona eklenir. */
+  fuelPurchaseHistory: FuelPurchaseRecord[];
   loans: LoanEntity[];
   missions: MissionEntity[];
   activeEvents: ActiveGameEvent[];

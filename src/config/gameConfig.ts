@@ -21,6 +21,21 @@ export interface FuelConfig {
   unlockLevel: number;
 }
 
+export type SupplierType = 'toptan_depo' | 'standart' | 'hizli_lojistik';
+
+export interface SupplierConfig {
+  id: SupplierType;
+  name: string;
+  /** Label altı küçük etiket: "%−8 · yavaş" gibi. */
+  tag: string;
+  /** Piyasa fiyatı çarpanı: 0.92 = %8 indirim, 1.07 = %7 zam. */
+  priceMultiplier: number;
+  /** Teslimat süresi çarpanı: 0.5 = yarı sürede, 2.2 = çok yavaş. */
+  speedMultiplier: number;
+  /** Seçiliyken gösterilen dinamik açıklama satırı. */
+  description: string;
+}
+
 export interface BuildingCatalogItem {
   type: string;
   name: string;
@@ -156,6 +171,7 @@ export interface GameConfig {
     overdraftLimit: number; // -5000 TL
     defaultAutonomyBudgetReserve: number; // 8000 TL
   };
+  suppliers: SupplierConfig[];
   /** What it takes to turn the single lane into a dual carriageway. */
   ev: {
     acPricePerKwh: number;
@@ -957,6 +973,32 @@ export const GAME_CONFIG: GameConfig = {
     overdraftLimit: -5000,
     defaultAutonomyBudgetReserve: 8000
   },
+  suppliers: [
+    {
+      id: 'toptan_depo',
+      name: 'Toptancı Depo',
+      tag: '%-8 · yavaş',
+      priceMultiplier: 0.92,
+      speedMultiplier: 2.2,
+      description: 'En ucuz litre fiyatı ama tanker geç gelir — stoğunu erken planla.'
+    },
+    {
+      id: 'standart',
+      name: 'Standart Dağıtım',
+      tag: 'piyasa · normal',
+      priceMultiplier: 1.00,
+      speedMultiplier: 1.0,
+      description: 'Piyasa fiyatı, normal teslimat süresi.'
+    },
+    {
+      id: 'hizli_lojistik',
+      name: 'Hızlı Lojistik',
+      tag: '+%7 · hızlı',
+      priceMultiplier: 1.07,
+      speedMultiplier: 0.5,
+      description: 'Pahalı ama tanker yarı sürede kapıda — tank kurutmadan doldurur.'
+    }
+  ] as const,
   /**
    * Charging tariffs, in TL per kWh. Fixed for now: electricity is not yet a
    * stocked commodity like the liquid fuels, so there is nothing for the

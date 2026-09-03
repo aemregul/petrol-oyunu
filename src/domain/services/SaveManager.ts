@@ -83,8 +83,22 @@ export class SaveManager {
       return defaultState;
     }
 
-    // The plot rework changed the size and meaning of the station grid, so
-    // older saves cannot be carried forward and start fresh instead.
+    // Schema v5 → v6: fuelPurchaseHistory ve FuelOrderEntity.supplierId eklendi.
+    // Bu değişimler additive: eski kayıt sil silme yapılmadan taşınır.
+    if (rawState.schemaVersion === 5) {
+      rawState.schemaVersion = 6;
+      rawState.fuelPurchaseHistory = rawState.fuelPurchaseHistory ?? [];
+      // Yoldaki sipaريşlerin tedarikçisi bilinmiyor — standart kabul edilir.
+      if (Array.isArray(rawState.fuelOrders)) {
+        rawState.fuelOrders = rawState.fuelOrders.map((o: any) => ({
+          ...o,
+          supplierId: o.supplierId ?? 'standart'
+        }));
+      }
+      console.info('[SaveManager] Kayıt v5→v6 migration tamamlandı.');
+    }
+
+    // Desteklenmeyen schema (ne 5 ne 6) — sıfırla.
     if (rawState.schemaVersion !== defaultState.schemaVersion) {
       console.warn('[SaveManager] Eski kayıt sürümü bulundu, oyun sıfırdan başlatılıyor.');
       return defaultState;
@@ -106,6 +120,7 @@ export class SaveManager {
       employees: rawState.employees || {},
       buildings: rawState.buildings ?? defaultState.buildings,
       fuelOrders: rawState.fuelOrders || [],
+      fuelPurchaseHistory: rawState.fuelPurchaseHistory || [],
       loans: rawState.loans || [],
       missions: this.migrateMissions(rawState.missions, defaultState.missions),
       activeEvents: rawState.activeEvents || [],

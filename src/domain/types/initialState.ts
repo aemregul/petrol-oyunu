@@ -6,7 +6,7 @@ export function createInitialGameState(): GameState {
   const now = Date.now();
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     saveId: 'save_' + Math.random().toString(36).substring(2, 9),
     createdAt: now,
     updatedAt: now,
@@ -167,6 +167,7 @@ export function createInitialGameState(): GameState {
       }
     },
     fuelOrders: [],
+    fuelPurchaseHistory: [],
     loans: [],
     missions: GAME_CONFIG.tutorialTasks.map((task) => ({
       id: 'mission_' + task.id,
