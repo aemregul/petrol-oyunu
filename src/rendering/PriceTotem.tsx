@@ -7,6 +7,12 @@ import { FuelType } from '../domain/types/gameState';
 
 interface PriceTotemProps {
   level: number;
+  /**
+   * Tabelaya yazılacak ad. Verilmezse istasyonun kendi adı yazar — karşılama
+   * ekranı gibi oyuncunun kaydından bağımsız durması gereken yerler bunu
+   * geçersiz kılar.
+   */
+  nameOverride?: string;
 }
 
 /**
@@ -57,11 +63,12 @@ function fitText(
  * The face is drawn to a canvas and used as a texture, so the digits sit on the
  * sign itself rather than floating in front of it as an overlay.
  */
-export const PriceTotem: React.FC<PriceTotemProps> = ({ level }) => {
+export const PriceTotem: React.FC<PriceTotemProps> = ({ level, nameOverride }) => {
   const pricing = useGameStore((s) => s.gameState.pricing);
   const tanks = useGameStore((s) => s.gameState.tanks);
   const buildings = useGameStore((s) => s.gameState.buildings);
-  const stationName = useGameStore((s) => s.gameState.station.name);
+  const ownName = useGameStore((s) => s.gameState.station.name);
+  const stationName = nameOverride ?? ownName;
   const isOpen = useGameStore((s) => s.gameState.station.open);
   const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
 

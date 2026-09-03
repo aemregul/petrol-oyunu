@@ -1,19 +1,18 @@
 import React, { useState } from 'react';
 import { Fuel, Mail, KeyRound, Stamp } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
+import { WelcomeScene } from '../rendering/WelcomeScene';
 
 /**
- * Karşılama kapısı: gece otoyolu fonunda bir İSTASYON İŞLETME RUHSATI.
+ * Karşılama kapısı: gece, oyunun kendi 3B istasyonunun önünde duran bir
+ * İSTASYON İŞLETME RUHSATI. Kimlik seçmek ruhsatını alıp vardiyaya
+ * başlamaktır — misafir geçici ruhsatla üç saniyede pompadadır.
  *
- * Kimlik seçmek, ruhsatını alıp vardiyaya başlamaktır — misafir geçici
- * ruhsatla üç saniyede pompadadır, hesabı olan ruhsatını e-posta ya da
- * Google ile yeniler. Rakip beneloil'in düz kırmızı kartından uzak durmak
- * tasarım hedefi; ama asıl kural AZLIK: krem belge tek kahraman, sahne
- * onu çevreleyen üç öğeden fazlası değil (yol + trafik + istasyon).
- *
- * Bir kez fazlasını denedim ve kalabalık oldu (Emre, 2026-09-03: "çok
- * karmaşık, çok özensiz"). Buraya yeni bir öğe eklemek isteyen önce
- * birini çıkarsın.
+ * Arka planı elle çizmeyi iki kez denedim; ikisi de tuttu tutmadı (Emre,
+ * 2026-09-03: "çok karmaşık, çok özensiz" ve "Paint ile çizilmiş gibi").
+ * Dersi: bu oyunun zaten bir görsel dili var — istasyonu ÇİZMEK yerine
+ * oyunun kendi modellerini oynat. Sahne artık WelcomeScene'de, gerçek
+ * PumpMesh/BuildingMesh/VehicleMesh ile. Buraya elle çizim geri gelmesin.
  *
  * Kapı kapatılamaz: kimlik seçilmeden oyuna dokunulmaz — profil ekranında
  * bu yüzden giriş düğmesi yoktur, orada yalnız profil ve çıkış yaşar.
@@ -60,123 +59,17 @@ const LaneDivider: React.FC<{ label?: string }> = ({ label }) => (
   </div>
 );
 
-/** Yandan görünen araç: gövde, kabin, tekerlek, far ve stop lambası. */
-const Car: React.FC<{ color: string; glass?: string }> = ({ color, glass = '#12233d' }) => (
-  <svg viewBox="0 0 148 48" className="w-full h-auto" aria-hidden>
-    {/* Far huzmesi */}
-    <ellipse cx="146" cy="31" rx="30" ry="6" fill="#ffe9b0" opacity="0.22" />
-    {/* Gövde */}
-    <path d="M10 33 L12 22 H34 L46 11 H88 L104 22 H126 L130 33 Z" fill={color} />
-    <rect x="10" y="30" width="120" height="7" rx="3.5" fill={color} />
-    {/* Cam */}
-    <path d="M48 14 H68 V22 H41 Z" fill={glass} />
-    <path d="M72 14 H85 L96 22 H72 Z" fill={glass} />
-    {/* Gövde altı gölge çizgisi */}
-    <rect x="12" y="34" width="116" height="2.5" rx="1.25" fill="#000" opacity="0.22" />
-    {/* Lambalar */}
-    <rect x="124" y="24" width="6" height="4" rx="2" fill="#fff3cf" />
-    <rect x="10" y="24" width="5" height="4" rx="2" fill="#f0685a" />
-    {/* Tekerlekler */}
-    {[38, 102].map((cx) => (
-      <g key={cx}>
-        <circle cx={cx} cy={37} r="8.5" fill="#0f1520" />
-        <circle cx={cx} cy={37} r="3.4" fill="#5b6675" />
-      </g>
-    ))}
-  </svg>
-);
-
 /**
- * Yol kenarındaki istasyon: kanopi altında pompadan yakıt alan bir araç ve
- * yanında oyunun fiyat totemi. Belgeye rakip olmasın diye küçük, solda ve
- * yalnız geniş ekranda.
+ * Kapı açık mı? App bunu, kapı açıkken oyun sahnesini boşuna çizmemek için
+ * de sorar — iki WebGL bağlamı aynı anda çalışmasın.
  */
-const RoadsideStation: React.FC = () => (
-  <div className="relative w-[268px] h-[172px]" aria-hidden>
-    {/* Fiyat totemi */}
-    <div className="absolute left-0 bottom-0 w-[64px]">
-      <div className="rounded-md overflow-hidden border border-slate-700 shadow-xl">
-        <div className="bg-red-700 py-1 text-center text-[7px] font-black leading-tight text-white tracking-wider">
-          PROJECT
-          <br />
-          HIGHWAY
-        </div>
-        {[
-          { label: 'BNZ', value: '44.90', chip: 'bg-emerald-600' },
-          { label: 'DZL', value: '43.50', chip: 'bg-orange-500' },
-          { label: 'LPG', value: '24.90', chip: 'bg-sky-600' }
-        ].map((row) => (
-          <div key={row.label} className="flex items-center gap-1 bg-slate-950 px-1 py-[3px]">
-            <span className={`${row.chip} rounded-sm px-1 text-[6px] font-black text-white`}>{row.label}</span>
-            <span className="font-mono text-[9px] font-bold text-amber-100">{row.value}</span>
-          </div>
-        ))}
-        <div
-          className="bg-emerald-700 py-0.5 text-center text-[7px] font-black tracking-[0.3em] text-white"
-          style={{ animation: 'gate-pulse 2.6s ease-in-out infinite' }}
-        >
-          AÇIK
-        </div>
-      </div>
-      <div className="mx-auto w-2 h-8 bg-slate-700" />
-    </div>
-
-    {/* Kanopi: saçak + altına düşen ışık + iki direk */}
-    <div className="absolute left-[84px] right-0 top-0">
-      <div className="h-3 rounded-sm bg-slate-700 border-b-2 border-sky-500/80" />
-      <div
-        className="h-9"
-        style={{
-          background: 'linear-gradient(180deg, rgba(224,242,254,0.22), transparent)',
-          animation: 'gate-flicker 8s linear infinite'
-        }}
-      />
-      <div className="absolute top-3 left-3 w-1.5 h-[128px] bg-slate-700" />
-      <div className="absolute top-3 right-5 w-1.5 h-[128px] bg-slate-700" />
-    </div>
-
-    {/* Pompa: gövde + yanan sayaç ekranı */}
-    <div className="absolute left-[104px] bottom-[6px] w-8">
-      <div className="rounded-t-md border border-red-950 bg-red-800 px-1.5 pt-1.5 pb-2 shadow-lg">
-        <div
-          className="flex h-3.5 items-center justify-center rounded-sm bg-emerald-300 font-mono text-[6px] font-black text-emerald-950"
-          style={{ animation: 'gate-pulse 1.8s ease-in-out infinite' }}
-        >
-          22.4L
-        </div>
-        <div className="mt-1 h-1 rounded-sm bg-red-950/60" />
-        <div className="mt-0.5 h-1 rounded-sm bg-red-950/60" />
-      </div>
-      <div className="mx-auto h-3 w-6 rounded-sm bg-slate-800" />
-    </div>
-
-    {/* Hortum: pompadan aracın deposuna, ucunda tabanca */}
-    <svg className="absolute left-[126px] bottom-[26px] w-[74px] h-[52px]" viewBox="0 0 74 52" aria-hidden>
-      <path d="M4 6 C 0 26, 20 40, 44 32" stroke="#1e293b" strokeWidth="3.5" fill="none" strokeLinecap="round" />
-      <rect x="42" y="28" width="10" height="6" rx="2" fill="#0f172a" />
-    </svg>
-
-    {/* Damlayan yakıt */}
-    {[0, 0.9].map((delay) => (
-      <div
-        key={delay}
-        className="absolute left-[196px] bottom-[34px] h-1.5 w-[3px] rounded-full bg-amber-300"
-        style={{ animation: `gate-drip 1.8s ease-in ${delay}s infinite` }}
-      />
-    ))}
-
-    {/* Yakıt alan araç + litre rozeti */}
-    <div className="absolute left-[150px] bottom-0 w-[112px]">
-      <Car color="#3f7f9e" />
-      <div
-        className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-emerald-500/60 bg-slate-900/95 px-2 py-0.5 font-mono text-[9px] font-bold text-emerald-300"
-        style={{ animation: 'gate-pulse 1.8s ease-in-out infinite' }}
-      >
-        22 L
-      </div>
-    </div>
-  </div>
-);
+export function gateIsOpen(state: {
+  accountReady: boolean;
+  accountResolved: boolean;
+  account: unknown | null;
+}): boolean {
+  return state.accountReady && state.accountResolved && !state.account;
+}
 
 /** Kâğıt üstündeki alan: belge doldurur gibi. */
 const FIELD =
@@ -202,7 +95,7 @@ export const WelcomeGate: React.FC = () => {
   const [passwordAgain, setPasswordAgain] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  if (!accountReady || !accountResolved || account) return null;
+  if (!gateIsOpen({ accountReady, accountResolved, account })) return null;
 
   const submitRegister = () => {
     if (!email.trim()) return setFormError('E-posta adresinizi yazın.');
@@ -215,78 +108,39 @@ export const WelcomeGate: React.FC = () => {
   return (
     <div className="fixed inset-0 z-[60] overflow-hidden select-none">
       <style>{`
-        @keyframes gate-right { from { transform: translateX(-20vw) } to { transform: translateX(120vw) } }
-        @keyframes gate-left { from { transform: translateX(120vw) scaleX(-1) } to { transform: translateX(-20vw) scaleX(-1) } }
-        @keyframes gate-pulse { 0%,100% { opacity: 0.6 } 50% { opacity: 1 } }
-        @keyframes gate-flicker { 0%,93%,97%,100% { opacity: 0.9 } 95% { opacity: 0.5 } }
-        @keyframes gate-drip { 0% { transform: translateY(0); opacity: 0 } 20% { opacity: 1 } 100% { transform: translateY(12px); opacity: 0 } }
         @keyframes gate-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
-        @media (prefers-reduced-motion: reduce) {
-          .gate-scene * { animation: none !important }
-        }
       `}</style>
 
-      {/* ---------- Sahne: gece + yol + trafik + istasyon ---------- */}
-      <div className="gate-scene absolute inset-0 pointer-events-none" aria-hidden>
-        {/* Gökyüzü ve ufuktaki şehir ışığı */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#080d1c] via-[#101c39] to-[#182741]" />
-        <div className="absolute inset-x-0 bottom-[24%] h-28 bg-gradient-to-t from-amber-200/10 to-transparent" />
+      {/* ---------- Sahne: oyunun kendi 3B istasyonu, gece ---------- */}
+      <WelcomeScene />
 
-        {/* Yol bandı */}
-        <div className="absolute inset-x-0 bottom-0 h-[24%] bg-[#171b21]">
-          <div className="absolute inset-x-0 top-2 h-[3px] bg-slate-200/35" />
-          <div className="absolute inset-x-0 bottom-3 h-[3px] bg-slate-200/35" />
-          <div
-            className="absolute inset-x-0 top-1/2 h-[5px] -translate-y-1/2 opacity-80"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(90deg, #d8a91b 0 44px, transparent 44px 84px)'
-            }}
-          />
-
-          {/* Sağa akan trafik */}
-          {[
-            { d: 11, delay: 0, color: '#d97a3c', w: 'w-32' },
-            { d: 14, delay: 5.5, color: '#4a7fb8', w: 'w-28' },
-            { d: 9.5, delay: 9, color: '#4f9d68', w: 'w-[136px]' }
-          ].map((car, i) => (
-            <div
-              key={`r${i}`}
-              className={`absolute bottom-[9%] ${car.w}`}
-              style={{ animation: `gate-right ${car.d}s linear ${car.delay}s infinite` }}
-            >
-              <Car color={car.color} />
-            </div>
-          ))}
-
-          {/* Sola akan trafik */}
-          {[
-            { d: 12.5, delay: 2.5, color: '#b0574a', w: 'w-28' },
-            { d: 15, delay: 8, color: '#7a6bb0', w: 'w-24' }
-          ].map((car, i) => (
-            <div
-              key={`l${i}`}
-              className={`absolute top-[7%] ${car.w}`}
-              style={{ animation: `gate-left ${car.d}s linear ${car.delay}s infinite` }}
-            >
-              <Car color={car.color} />
-            </div>
-          ))}
-        </div>
-
-        {/* İstasyon: yolun hemen üstünde, solda; belgeye asla değmez */}
-        <div className="absolute bottom-[24%] left-[5%] hidden xl:block">
-          <RoadsideStation />
-        </div>
-      </div>
+      {/* Belgenin okunurluğu için sahneyi hafifçe karart ve gözü merkeze
+          topla — sahne dekordur, okunacak yüzey belgedir. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: 'radial-gradient(120% 95% at 50% 45%, rgba(4,7,15,0.10) 34%, rgba(4,7,15,0.58) 100%)' }}
+        aria-hidden
+      />
 
       {/* ---------- Marka + belge: tek kolon, üst üste binme yok ---------- */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 p-4">
+      {/* Belge dar ekranda ortada, geniş ekranda sağda durur: ortada dururken
+          istasyonun tam da görülmesi gereken yerini örtüyordu (Emre,
+          2026-09-03: "hiçbir şey belli olmuyor"). */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 p-4 lg:items-end lg:pr-[7%]">
         <div className="flex flex-col items-center gap-1 text-center">
-          <div className="flex items-center gap-2.5">
+          <div
+            className="flex items-center gap-2.5"
+            style={{ filter: 'drop-shadow(0 2px 10px rgba(2,6,14,0.95))' }}
+          >
             <Fuel className="h-6 w-6 text-emerald-400" />
             <h1 className="text-2xl sm:text-3xl font-black tracking-[0.12em] text-white">PROJECT HIGHWAY</h1>
           </div>
-          <p className="text-[13px] font-bold text-sky-300/90">Bir pompayla başlar her imparatorluk.</p>
+          <p
+            className="text-[13px] font-bold text-sky-300"
+            style={{ filter: 'drop-shadow(0 2px 8px rgba(2,6,14,0.95))' }}
+          >
+            Bir pompayla başlar her imparatorluk.
+          </p>
         </div>
 
         {/* İşletme ruhsatı */}
@@ -296,19 +150,19 @@ export const WelcomeGate: React.FC = () => {
         >
           <div className="relative m-3 rounded-xl border-2 border-dashed border-stone-400/60 p-5">
             {/* Belge başlığı: ortalı mühür, ad ve belge numarası */}
-            <div className="flex flex-col items-center gap-1 text-center">
+            <div className="flex flex-col items-center gap-1 px-6 text-center">
               <Stamp className="h-5 w-5 text-red-700/80" />
-              <div className="text-[15px] font-black uppercase tracking-[0.16em] text-stone-900">
+              <div className="text-[13px] font-black uppercase leading-tight tracking-[0.12em] text-stone-900">
                 İstasyon İşletme Ruhsatı
               </div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">
+              <div className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-stone-500">
                 Karayolu İdaresi · Belge No. PH-2026
               </div>
             </div>
 
             {/* Köşe mührü: belgenin üstüne eğik basılmış */}
             <div
-              className="pointer-events-none absolute right-5 top-5 flex h-16 w-16 -rotate-12 items-center justify-center rounded-full border-[3px] border-red-700/30 text-red-700/40"
+              className="pointer-events-none absolute right-1 top-1 flex h-14 w-14 -rotate-12 items-center justify-center rounded-full border-[3px] border-red-700/25 text-red-700/35"
               aria-hidden
             >
               <div className="text-center leading-tight">

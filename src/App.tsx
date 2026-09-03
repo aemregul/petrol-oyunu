@@ -7,7 +7,7 @@ import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
 import { watchAccount } from './services/account';
-import { WelcomeGate } from './ui/WelcomeGate';
+import { WelcomeGate, gateIsOpen } from './ui/WelcomeGate';
 import { ElectricVehicleShowcase, ModelShowcase } from './rendering/ModelShowcase';
 import { BuildingShowcase } from './rendering/BuildingShowcase';
 
@@ -16,6 +16,9 @@ const PAN_STEP_PX = 60;
 
 export const App: React.FC = () => {
   const rotateCamera = useGameStore((s) => s.rotateCamera);
+  const gateOpen = useGameStore((s) =>
+    gateIsOpen({ accountReady: s.accountReady, accountResolved: s.accountResolved, account: s.account })
+  );
 
   // Oturum, oyunun değil tarayıcının ömrünü yaşar: Firebase kim olduğumuzu
   // söyledikçe store'a işlenir. Yapılandırma yoksa watchAccount tek seferlik
@@ -124,9 +127,15 @@ export const App: React.FC = () => {
   return (
     <div className="w-screen h-screen overflow-hidden bg-slate-950 text-slate-100 flex flex-col relative select-none font-sans">
       <SimulationLoop />
-      <StationScene />
-      <HUD />
-      <ModalContainer />
+      {/* Kapı açıkken oyun sahnesini ve HUD'ı hiç çizmeyiz: kapının kendi 3B
+          sahnesi var, ikisi birden iki WebGL bağlamı demek olurdu. */}
+      {!gateOpen && (
+        <>
+          <StationScene />
+          <HUD />
+          <ModalContainer />
+        </>
+      )}
       <WelcomeGate />
       <NotificationToast />
       <PerformanceOverlay />

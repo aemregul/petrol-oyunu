@@ -245,10 +245,10 @@ const SIGNAGE: Record<
   { text: string; height?: number; color: string; textColor: string }
 > = {
   office: { text: 'YÖNETİM OFİSİ', color: '#0f172a', textColor: '#ffffff' },
-  mini_market: { text: 'MİNİ MARKET', color: '#d97706', textColor: '#ffffff' },
+  mini_market: { text: 'A-BİM', color: '#d0021b', textColor: '#ffffff' },
   toilet: { text: 'WC 🚻', color: '#0f172a', textColor: '#ffffff' },
   restaurant: { text: 'RESTORAN', height: 7.4, color: '#dc2626', textColor: '#ffffff' },
-  cafe: { text: 'KAHVE', color: '#b45309', textColor: '#ffffff' },
+  cafe: { text: 'STARBAKS', color: '#0b6b45', textColor: '#ffffff' },
   rest_complex: { text: 'DİNLENME TESİSİ', height: 8.2, color: '#0284c7', textColor: '#ffffff' },
   car_wash: { text: 'OTO YIKAMA', height: 3.5, color: '#0284c7', textColor: '#ffffff' },
   oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, color: '#d97706', textColor: '#ffffff' },
