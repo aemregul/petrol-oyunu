@@ -1,14 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { X, Building2, TrendingUp, Sparkles, Award, BarChart3 } from 'lucide-react';
+import { X, Building2, TrendingUp, Sparkles, Award, BarChart3, Pencil, Check } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
 export const OfficeModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const cleanStation = useGameStore((s) => s.cleanStation);
+  const renameStation = useGameStore((s) => s.renameStation);
 
   const { player, station, tanks } = gameState;
+
+  // İstasyonun adı markadır: burada değişir, fiyat totemi ve pilon tabelası
+  // aynı isimden beslendiği için saha kendiliğinden güncellenir.
+  const [editingName, setEditingName] = useState<string | null>(null);
+
+  const commitName = () => {
+    if (editingName !== null && renameStation(editingName)) setEditingName(null);
+  };
 
   const handleClose = () => {
     sounds.playClick();
@@ -26,7 +35,46 @@ export const OfficeModal: React.FC = () => {
             </div>
             <div>
               <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">İstasyon Yönetimi</div>
-              <div className="text-base font-extrabold text-white">{station.name}</div>
+              {editingName === null ? (
+                <div className="flex items-center gap-2">
+                  <div className="text-base font-extrabold text-white">{station.name}</div>
+                  <button
+                    onClick={() => setEditingName(station.name)}
+                    title="İstasyon adını değiştir — tabelalar da güncellenir"
+                    className="text-slate-400 hover:text-sky-400 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    autoFocus
+                    value={editingName}
+                    maxLength={24}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitName();
+                      if (e.key === 'Escape') setEditingName(null);
+                    }}
+                    className="bg-slate-950/80 border border-sky-500/50 rounded-lg px-2 py-0.5 text-base font-extrabold text-white w-48 outline-none focus:border-sky-400"
+                  />
+                  <button
+                    onClick={commitName}
+                    title="Kaydet"
+                    className="game-btn w-7 h-7 rounded-lg bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 flex items-center justify-center"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setEditingName(null)}
+                    title="Vazgeç"
+                    className="game-btn w-7 h-7 rounded-lg bg-slate-700/60 border border-slate-600 text-slate-300 flex items-center justify-center"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <button

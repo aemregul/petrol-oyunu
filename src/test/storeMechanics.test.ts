@@ -259,3 +259,23 @@ describe('the manager', () => {
     expect(useGameStore.getState().gameState.station.managerId).toBe('manager_1');
   });
 });
+
+describe('renaming the station', () => {
+  // Emre'nin isteği (2026-09-03): istasyonun adı profilden değişir ve
+  // tabelalar kendiliğinden güncellenir. Tabelalar (fiyat totemi, pilon)
+  // adı station.name'den reaktif okur — bu yüzden çivilenecek şey adın tek
+  // kaynaktan değiştiği ve saçma girdilerin tabelaya ulaşamadığıdır.
+  it('renames through the store and keeps signage source-of-truth in one place', () => {
+    expect(useGameStore.getState().renameStation('  Gül   Petrol  ')).toBe(true);
+    // Kırpılmış ve tek boşluklu: tabelada "Gül Petrol" yazar.
+    expect(useGameStore.getState().gameState.station.name).toBe('Gül Petrol');
+  });
+
+  it('refuses names that no sign could carry', () => {
+    const before = useGameStore.getState().gameState.station.name;
+    expect(useGameStore.getState().renameStation(' ')).toBe(false);
+    expect(useGameStore.getState().renameStation('A')).toBe(false);
+    expect(useGameStore.getState().renameStation('X'.repeat(25))).toBe(false);
+    expect(useGameStore.getState().gameState.station.name).toBe(before);
+  });
+});

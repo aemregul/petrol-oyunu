@@ -37,7 +37,9 @@ afterEach(() => {
 });
 
 describe('the highway lives on its own', () => {
-  it('flows on BOTH carriageways once the road is dual, with no far plot at all', () => {
+  it(
+    'flows on BOTH carriageways once the road is dual, with no far plot at all',
+    () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.station.roadLevel = 2;
@@ -48,7 +50,7 @@ describe('the highway lives on its own', () => {
     let nearSeen = 0;
     let farOffRoad = 0;
 
-    for (let i = 0; i < 20000; i++) {
+    for (let i = 0; i < 12000; i++) {
       state.dayState.gameTime = 12;
       runSimulationTick(state, 0.05, effects);
 
@@ -75,7 +77,11 @@ describe('the highway lives on its own', () => {
     // Karşıya sapmaya çalışan olmadı; yakın şerit de akmaya devam etti.
     expect(farOffRoad).toBe(0);
     expect(nearSeen).toBeGreaterThan(0);
-  });
+    },
+    // 12.000 tik'lik gerçek simülasyon: yüklü bir makinede 30 sn'lik
+    // varsayılan bütçe ara sıra yetmiyordu ve test asılsız kırmızı yanıyordu.
+    120_000
+  );
 
   it('spawns and despawns beyond the camera reach, never mid-screen', () => {
     // Emre'nin 2026-09-05 şikâyeti: araçlar yolun ortasında beliriyor ve

@@ -10,6 +10,7 @@ import { OfficeModal } from './modals/OfficeModal';
 import { SettingsModal } from './modals/SettingsModal';
 import { MissionsModal } from './modals/MissionsModal';
 import { NotificationsModal } from './modals/NotificationsModal';
+import { AccountModal } from './modals/AccountModal';
 
 export const ModalContainer: React.FC = () => {
   const activeModal = useGameStore((s) => s.activeModal);
@@ -35,6 +36,8 @@ export const ModalContainer: React.FC = () => {
       return <MissionsModal />;
     case 'NOTIFICATIONS':
       return <NotificationsModal />;
+    case 'ACCOUNT':
+      return <AccountModal />;
     default:
       return null;
   }

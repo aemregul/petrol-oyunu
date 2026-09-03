@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Award, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Umbrella, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Award, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -600,6 +600,16 @@ export const HUD: React.FC = () => {
 
           {/* Toasts leave on their own, so the bell is where anything missed
               is still findable. The badge counts what has not been looked at. */}
+          <button
+            onClick={() => setActiveModal('ACCOUNT')}
+            className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
+              activeModal === 'ACCOUNT' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
+            }`}
+            title="Hesabım"
+          >
+            <UserRound className="w-4 h-4" />
+          </button>
+
           <button
             onClick={() => setActiveModal('NOTIFICATIONS')}
             className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${

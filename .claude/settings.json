@@ -280,7 +280,10 @@
       "Bash(node .pad.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f2135941-31d6-4105-b7f9-76d743de4f29/scratchpad)",
       "Bash(node .rot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f2135941-31d6-4105-b7f9-76d743de4f29/scratchpad)",
       "Bash(node .status.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/f2135941-31d6-4105-b7f9-76d743de4f29/scratchpad)",
-      "Bash(echo \"tsc exit: $?\")"
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(npm install *)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"build exit: $?\")"
     ],
     "additionalDirectories": [
       "/private/tmp"

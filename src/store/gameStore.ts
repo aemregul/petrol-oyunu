@@ -57,6 +57,16 @@ import {
   isOwned
 } from '../domain/services/land';
 import { sounds } from '../audio/soundEffects';
+import {
+  accountBackendReady,
+  describeAuthError,
+  registerWithEmail,
+  signInAsGuest,
+  signInWithEmail,
+  signInWithGoogle,
+  signOut as accountSignOut,
+  type AccountProfile
+} from '../services/account';
 import { zoomToFit, CAMERA_VIEWS } from '../rendering/cameraFrame';
 
 const SOUND_PLAYERS: Record<SoundCue, () => void> = {
@@ -237,7 +247,8 @@ export type ActiveModalType =
   | 'SETTINGS'
   | 'OFFICE'
   | 'MISSIONS'
-  | 'NOTIFICATIONS';
+  | 'NOTIFICATIONS'
+  | 'ACCOUNT';
 
 export interface PerformanceMetrics {
   fps: number;
@@ -281,6 +292,19 @@ export interface BuildModeState {
 interface GameStore {
   gameState: GameState;
   activeModal: ActiveModalType;
+  /**
+   * Oturum: Firebase'ten gelen profil, yoksa null. Yapılandırma verilmemişse
+   * (accountReady false) giriş ekranı kibarca kapalıdır; oyun yerel kayıtla
+   * bugünkü gibi oynanır.
+   */
+  account: AccountProfile | null;
+  accountReady: boolean;
+  accountBusy: boolean;
+  signInGoogle: () => Promise<void>;
+  /** register true ise yeni hesap açar; false ise giriş yapar. */
+  signInEmail: (email: string, password: string, register: boolean) => Promise<boolean>;
+  signInGuest: () => Promise<void>;
+  signOutAccount: () => Promise<void>;
   selectedVehicleId: string | null;
   selectedPumpId: string | null;
   selectedBuildingId: string | null;
@@ -370,6 +394,12 @@ interface GameStore {
   cleanVehicleWindows: (vehicleId: string) => void;
   dismissCustomer: (vehicleId: string) => void;
   cleanStation: () => boolean;
+  /**
+   * İstasyonun adını değiştirir. Ad tek yerde yaşar (station.name); fiyat
+   * totemi ve pilon tabelası onu reaktif okuduğundan tabelalar kendiliğinden
+   * güncellenir — profil ekranındaki değişiklik sahaya anında yansır.
+   */
+  renameStation: (name: string) => boolean;
   /** Development aid: unlocks every level-gated feature for testing. */
   devUnlockEverything: () => void;
 
@@ -590,6 +620,9 @@ export const useGameStore = create<GameStore>((set, get) => {
   return {
   gameState: revived.state,
   activeModal: revived.modal,
+  account: null,
+  accountReady: accountBackendReady(),
+  accountBusy: false,
   selectedVehicleId: null,
   selectedPumpId: null,
   selectedBuildingId: null,
@@ -1975,6 +2008,78 @@ export const useGameStore = create<GameStore>((set, get) => {
     dismissVehicle(state, vehicle);
     SaveManager.saveGame(state);
     set({ gameState: state, selectedVehicleId: null, activeModal: 'NONE' });
+  },
+
+  signInGoogle: async () => {
+    set({ accountBusy: true });
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
+    } finally {
+      set({ accountBusy: false });
+    }
+  },
+
+  signInEmail: async (email, password, register) => {
+    set({ accountBusy: true });
+    try {
+      if (register) await registerWithEmail(email, password);
+      else await signInWithEmail(email, password);
+      return true;
+    } catch (error) {
+      get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
+      return false;
+    } finally {
+      set({ accountBusy: false });
+    }
+  },
+
+  signInGuest: async () => {
+    set({ accountBusy: true });
+    try {
+      await signInAsGuest();
+    } catch (error) {
+      get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
+    } finally {
+      set({ accountBusy: false });
+    }
+  },
+
+  signOutAccount: async () => {
+    try {
+      await accountSignOut();
+      get().addNotification({ type: 'INFO', title: 'Çıkış Yapıldı', message: 'Oyun yerel kayıtla devam ediyor.' });
+    } catch (error) {
+      get().addNotification({ type: 'WARNING', title: 'Çıkış Başarısız', message: describeAuthError(error) });
+    }
+  },
+
+  renameStation: (name) => {
+    // Tabelaya sığmayan ya da bomboş bir ad tabela değildir.
+    const trimmed = name.trim().replace(/\s+/g, ' ');
+    if (trimmed.length < 2 || trimmed.length > 24) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Geçersiz İsim',
+        message: 'İstasyon adı 2 ile 24 karakter arasında olmalı.'
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    if (state.station.name === trimmed) return true;
+    state.station.name = trimmed;
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'İstasyon Adı Değişti',
+      message: `Tabelalar güncellendi: ${trimmed}`
+    });
+    return true;
   },
 
   cleanStation: () => {
