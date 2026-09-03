@@ -1,220 +1,314 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { FuelType } from '../../domain/types/gameState';
-import { GAME_CONFIG } from '../../config/gameConfig';
-import { X, Fuel, Truck, Clock, AlertCircle, Trash2 } from 'lucide-react';
+import { GAME_CONFIG, SupplierType } from '../../config/gameConfig';
+import { X, Truck, Calendar } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { isFuelDealOn, FUEL_DEAL_DISCOUNT } from '../../domain/services/simulationEngine';
 
-export const FuelOrderModal: React.FC = () => {
-  const gameState = useGameStore((s) => s.gameState);
-  const setActiveModal = useGameStore((s) => s.setActiveModal);
-  const orderFuel = useGameStore((s) => s.orderFuel);
-  const cancelFuelOrder = useGameStore((s) => s.cancelFuelOrder);
+const FUEL_ORDER_STEP = 200;
 
-  const [selectedFuel, setSelectedFuel] = useState<FuelType>('gasoline');
-  const [orderLiters, setOrderLiters] = useState<number>(500);
+const FUEL_COLORS: Record<FuelType, string> = {
+  gasoline: '#22c55e',
+  diesel:   '#f97316',
+  lpg:      '#3b82f6'
+};
 
-  const tank = gameState.tanks[selectedFuel];
-  const fuelConf = GAME_CONFIG.fuels[selectedFuel];
-  const pricing = gameState.pricing[selectedFuel];
+const FUEL_LABEL: Record<FuelType, string> = {
+  gasoline: 'Benzin',
+  diesel:   'Dizel (Mazot)',
+  lpg:      'LPG'
+};
 
-  const freeCapacity = tank ? Math.max(0, tank.capacity - tank.stock) : 0;
-  const maxOrder = Math.max(500, Math.floor(freeCapacity / 100) * 100);
-  const clampedOrderLiters = Math.min(maxOrder, Math.max(500, orderLiters));
+// ─── Yakıt satırı ────────────────────────────────────────────────────────────
 
-  // The supplier's daily window, if it happens to be open right now.
-  const dealOn = isFuelDealOn(gameState);
-  const listedCost = pricing ? pricing.todayWholesaleCost : fuelConf.baseWholesale;
-  const unitCost = dealOn
-    ? Number((listedCost * (1 - FUEL_DEAL_DISCOUNT)).toFixed(2))
-    : listedCost;
-  const deliveryFee = fuelConf.deliveryFee;
-  const totalCost = clampedOrderLiters * unitCost + deliveryFee;
+interface FuelRowProps {
+  fuelType: FuelType;
+  supplierId: string;
+  dealOn: boolean;
+}
 
-  const inFlightOrders = gameState.fuelOrders.filter(
-    (o) => o.fuelType === selectedFuel && o.state !== 'COMPLETED'
-  );
+const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
+  const gameState    = useGameStore((s) => s.gameState);
+  const orderFuel    = useGameStore((s) => s.orderFuel);
+
+  const tank    = gameState.tanks[fuelType];
+  const conf    = GAME_CONFIG.fuels[fuelType];
+  const pricing = gameState.pricing[fuelType];
+
+  const unlocked    = tank && tank.capacity > 0;
+  const free        = unlocked ? Math.max(0, tank.capacity - tank.stock) : 0;
+  const full        = free < conf.orderMinLiters;
+
+  const supplier    = GAME_CONFIG.suppliers.find((s) => s.id === supplierId)
+    ?? GAME_CONFIG.suppliers[1];
+
+  const baseUnitCost = dealOn
+    ? Number(((pricing?.todayWholesaleCost ?? conf.baseWholesale) * (1 - FUEL_DEAL_DISCOUNT)).toFixed(2))
+    : (pricing?.todayWholesaleCost ?? conf.baseWholesale);
+  const unitCost = Number((baseUnitCost * supplier.priceMultiplier).toFixed(2));
+
+  const maxLiters   = Math.max(conf.orderMinLiters, Math.floor(free / FUEL_ORDER_STEP) * FUEL_ORDER_STEP);
+  const [liters, setLiters]   = useState<number>(Math.min(conf.orderMinLiters, maxLiters));
+  const clampedLiters         = Math.min(maxLiters, Math.max(conf.orderMinLiters, liters));
+  const totalCost             = clampedLiters * unitCost + conf.deliveryFee;
+  const canAfford             = gameState.player.cash >= totalCost;
+
+  const step = (delta: number) => {
+    setLiters((prev) => Math.min(maxLiters, Math.max(conf.orderMinLiters, prev + delta)));
+  };
+
+  const handleMax = () => setLiters(maxLiters);
 
   const handleOrder = () => {
-    const success = orderFuel(selectedFuel, clampedOrderLiters);
-    if (success) {
-      setOrderLiters(500);
-    }
+    if (full || !canAfford || !unlocked) return;
+    sounds.playClick();
+    orderFuel(fuelType, clampedLiters, supplierId);
+    // Modal kapanmaz, satır stok değeri güncellenir.
   };
 
-  const handleClose = () => {
-    sounds.playClick();
-    setActiveModal('NONE');
-  };
+  const color = FUEL_COLORS[fuelType];
+  const fillPct = unlocked ? Math.round((tank.stock / tank.capacity) * 100) : 0;
+  const diffLiters = unlocked ? clampedLiters : 0;
+
+  if (!unlocked) return null;
+
+  return (
+    <div
+      className="rounded-2xl border border-slate-700/60 bg-slate-800/50 p-4 flex items-center gap-3"
+      style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+    >
+      {/* Yakıt ikonu */}
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-black text-xs"
+        style={{ background: `${color}22`, border: `1.5px solid ${color}55` }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill={color}>
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>
+        </svg>
+      </div>
+
+      {/* İsim + stok */}
+      <div className="flex-1 min-w-0">
+        <div className="font-bold text-white text-sm">{FUEL_LABEL[fuelType]}</div>
+        {full ? (
+          <div className="text-xs text-slate-400">Tank dolu</div>
+        ) : (
+          <div className="text-xs text-slate-400">
+            {tank.stock.toFixed(0)} / {tank.capacity} L
+            <span className="ml-1.5 text-emerald-400 font-medium">
+              +{diffLiters} L · alış {unitCost.toFixed(1)} TL/L
+            </span>
+          </div>
+        )}
+        {/* Bar */}
+        <div className="mt-1.5 w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${fillPct}%`, background: color }}
+          />
+        </div>
+      </div>
+
+      {/* Kontroller */}
+      {full ? (
+        <div className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 bg-slate-700/60 border border-slate-600/40 select-none">
+          Dolu
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => step(-FUEL_ORDER_STEP)}
+            disabled={clampedLiters <= conf.orderMinLiters}
+            className="w-8 h-8 rounded-xl bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm transition-all"
+          >
+            −
+          </button>
+          <input
+            type="number"
+            min={conf.orderMinLiters}
+            max={maxLiters}
+            step={FUEL_ORDER_STEP}
+            value={clampedLiters}
+            onChange={(e) => setLiters(Number(e.target.value))}
+            className="w-14 text-center bg-slate-900 border border-slate-600 rounded-xl text-white text-sm font-mono py-1 focus:outline-none focus:border-slate-400"
+          />
+          <button
+            onClick={() => step(FUEL_ORDER_STEP)}
+            disabled={clampedLiters >= maxLiters}
+            className="w-8 h-8 rounded-xl bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm transition-all"
+          >
+            +
+          </button>
+          <button
+            onClick={handleMax}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-700 border border-slate-600 text-slate-300 hover:bg-slate-600 text-xs font-bold transition-all"
+          >
+            MAX
+          </button>
+          {/* Sipariş butonu */}
+          <button
+            onClick={handleOrder}
+            disabled={!canAfford}
+            className={`px-4 py-2 rounded-xl text-sm font-extrabold transition-all shadow-lg ${
+              !canAfford
+                ? 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600'
+                : 'text-white hover:scale-[1.03]'
+            }`}
+            style={canAfford ? { background: color, boxShadow: `0 4px 20px ${color}55` } : {}}
+          >
+            ₺{totalCost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Ana modal ───────────────────────────────────────────────────────────────
+
+export const FuelOrderModal: React.FC = () => {
+  const gameState      = useGameStore((s) => s.gameState);
+  const setActiveModal = useGameStore((s) => s.setActiveModal);
+
+  const [supplierId, setSupplierId] = useState<SupplierType>('standart');
+
+  const dealOn     = isFuelDealOn(gameState);
+  const supplier   = GAME_CONFIG.suppliers.find((s) => s.id === supplierId)!;
+  const FUELS: FuelType[] = ['gasoline', 'diesel', 'lpg'];
+
+  // Alım Defteri
+  const history = [...(gameState.fuelPurchaseHistory ?? [])].reverse().slice(0, 30);
+
+  // Son 7 gün gider toplamı
+  const today = gameState.dayState.currentDay;
+  const last7Cost = gameState.fuelPurchaseHistory
+    .filter((r) => r.day >= today - 6)
+    .reduce((sum, r) => sum + r.totalCost, 0);
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden text-slate-100 flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
+      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-xl shadow-2xl text-slate-100 flex flex-col max-h-[90vh]">
+
+        {/* Başlık */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-sky-500/20 border border-sky-500/30 text-sky-400 flex items-center justify-center">
-              <Truck className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Truck className="w-4 h-4" />
             </div>
-            <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">Lojistik & İkmal</div>
-              <div className="text-base font-extrabold text-white">Akaryakıt Tankeri Siparişi</div>
-            </div>
+            <span className="font-extrabold text-base text-white">Yakıt Siparişi</span>
           </div>
           <button
-            onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            onClick={() => { sounds.playClick(); setActiveModal('NONE'); }}
+            className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Fuel Selection Tabs */}
-        <div className="flex border-b border-slate-800 p-2 gap-2 bg-slate-950/40">
-          {(['gasoline', 'diesel', 'lpg'] as FuelType[]).map((fType) => {
-            const conf = GAME_CONFIG.fuels[fType];
-            const t = gameState.tanks[fType];
-            const isUnlocked = t && t.capacity > 0;
-            const isSelected = selectedFuel === fType;
+        {/* Kaydırılabilir gövde */}
+        <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-5">
 
-            return (
-              <button
-                key={fType}
-                onClick={() => {
-                  if (isUnlocked) {
-                    sounds.playClick();
-                    setSelectedFuel(fType);
-                  }
-                }}
-                disabled={!isUnlocked}
-                className={`flex-1 py-3 px-4 rounded-2xl font-bold text-xs flex flex-col items-center gap-1 transition-all ${
-                  !isUnlocked
-                    ? 'opacity-40 bg-slate-900 text-slate-500 cursor-not-allowed'
-                    : isSelected
-                    ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/30'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <Fuel className="w-3.5 h-3.5" />
-                  <span>{conf.shortName}</span>
-                </div>
-                <div className="text-[10px] font-mono opacity-80">
-                  {isUnlocked ? `${t.stock.toFixed(0)} / ${t.capacity} L` : `Kilitli (Seviye ${conf.unlockLevel})`}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Body Content */}
-        <div className="p-6 flex flex-col gap-5">
-          {/* Tank Level Gauge */}
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4">
-            <div className="flex justify-between items-center text-xs font-bold text-slate-300 mb-2">
-              <span>{fuelConf.name} Tank Doluluğu</span>
-              <span className="font-mono text-emerald-400">
-                {tank.stock.toFixed(0)} L ({Math.round((tank.stock / tank.capacity) * 100)}%)
-              </span>
-            </div>
-            <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700 mb-3">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-sky-400 transition-all duration-300"
-                style={{ width: `${Math.min(100, (tank.stock / tank.capacity) * 100)}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-              <span>Boş Kapasite: {freeCapacity.toFixed(0)} L</span>
-              <span>Ağırlıklı Maliyet: {tank.averageCost.toFixed(2)} TL/L</span>
-            </div>
+          {/* Yakıt satırları */}
+          <div className="flex flex-col gap-3">
+            {FUELS.map((ft) => (
+              <FuelRow key={ft} fuelType={ft} supplierId={supplierId} dealOn={dealOn} />
+            ))}
           </div>
 
-          {/* Order Liter Stepper & Slider */}
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-300 uppercase">Sipariş Miktarı</span>
-              <span className="text-xl font-extrabold text-sky-400 font-mono">
-                {clampedOrderLiters.toLocaleString('tr-TR')} Litre
-              </span>
+          {/* Tedarikçi seçimi */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+              <Truck className="w-3.5 h-3.5" />
+              Tedarikçi
             </div>
-
-            <input
-              type="range"
-              min={500}
-              max={maxOrder}
-              step={100}
-              value={clampedOrderLiters}
-              onChange={(e) => setOrderLiters(Number(e.target.value))}
-              disabled={maxOrder <= 500 && freeCapacity < 500}
-              className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
-            />
-
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/80 text-xs font-mono">
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-sans">Birim Alış Fiyatı</span>
-                <span className={`font-bold ${dealOn ? 'text-emerald-400' : 'text-white'}`}>
-                  {unitCost.toFixed(2)} TL/L
-                </span>
-                {dealOn && (
-                  <span className="text-slate-500 line-through ml-1.5">
-                    {listedCost.toFixed(2)}
-                  </span>
-                )}
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-sans">Tanker Nakliye Bedeli</span>
-                <span className="font-bold text-white">{deliveryFee} TL</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Active In-flight Orders */}
-          {inFlightOrders.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <div className="text-xs font-bold text-slate-400 uppercase">Yoldaki Tankerler</div>
-              {inFlightOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex justify-between items-center"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Clock className="w-4 h-4 text-amber-400 animate-spin" />
-                    <div>
-                      <div className="text-xs font-bold text-white font-mono">
-                        {order.liters} L {order.fuelType.toUpperCase()}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        Kalan Süre: {Math.max(0, Math.ceil(order.remainingSeconds))} sn
-                      </div>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-3 gap-2">
+              {GAME_CONFIG.suppliers.map((s) => {
+                const active = s.id === supplierId;
+                return (
                   <button
-                    onClick={() => cancelFuelOrder(order.id)}
-                    className="p-1.5 rounded-lg bg-red-900/30 hover:bg-red-800/50 text-red-400 hover:text-red-200 text-xs flex items-center gap-1 transition-all"
-                    title="İptal Et (%85 İade)"
+                    key={s.id}
+                    onClick={() => { sounds.playClick(); setSupplierId(s.id as SupplierType); }}
+                    className={`rounded-2xl py-3 px-3 flex flex-col items-center gap-1 transition-all font-bold text-sm ${
+                      active
+                        ? 'text-white shadow-lg'
+                        : 'bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700'
+                    }`}
+                    style={active ? {
+                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                      boxShadow: '0 4px 20px #ef444455'
+                    } : {}}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>İptal</span>
+                    <span className="text-center leading-tight">{s.name}</span>
+                    <span className={`text-xs font-normal ${active ? 'text-red-200' : 'text-slate-400'}`}>
+                      {s.tag}
+                    </span>
                   </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          )}
 
-          {/* Action Button */}
-          <button
-            onClick={handleOrder}
-            disabled={freeCapacity < 500 || gameState.player.cash < totalCost}
-            className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all shadow-xl flex items-center justify-center gap-2 ${
-              freeCapacity < 500 || gameState.player.cash < totalCost
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-slate-950 shadow-sky-500/30 hover:scale-[1.01]'
-            }`}
-          >
-            <Truck className="w-4 h-4" />
-            <span>Siparişi Onayla (₺{totalCost.toLocaleString('tr-TR')})</span>
-          </button>
+            {/* Dinamik açıklama */}
+            <div className="text-sm text-slate-300 leading-snug">
+              {supplier.description}
+            </div>
+            <div className="text-xs text-slate-500 leading-relaxed border-t border-dashed border-slate-700 pt-3">
+              Litreyi elle yazabilir, –/+ ile {FUEL_ORDER_STEP}L adımlayabilir ya da MAX ile depoyu fulleyebilirsin.
+              Her yakıtın tankeri ayrı gelir ve boşaltır.
+            </div>
+          </div>
+
+          {/* Alım Defteri */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+              <Calendar className="w-3.5 h-3.5" />
+              Alım Defteri
+            </div>
+
+            {history.length === 0 ? (
+              <div className="text-center text-slate-500 text-xs py-6">
+                Henüz tamamlanan teslimat yok.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {history.map((rec) => {
+                  const color = FUEL_COLORS[rec.fuelType];
+                  const label = FUEL_LABEL[rec.fuelType];
+                  return (
+                    <div
+                      key={rec.id}
+                      className="flex items-center gap-3 py-1.5 px-3 rounded-xl hover:bg-slate-800/60 text-xs transition-all"
+                    >
+                      <span className="text-slate-500 font-mono w-12 shrink-0">
+                        Gün {rec.day}
+                      </span>
+                      <span className="font-bold w-20 shrink-0" style={{ color }}>
+                        {label}
+                      </span>
+                      <span className="text-slate-300 font-mono w-14 text-right shrink-0">
+                        {rec.liters.toLocaleString('tr-TR')}L
+                      </span>
+                      <span className="text-slate-200 font-mono flex-1 text-right">
+                        ₺{rec.totalCost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+                      </span>
+                      <span className="text-slate-400 font-mono w-14 text-right shrink-0">
+                        ₺{rec.unitCost.toFixed(1)}/L
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Son 7 gün özeti */}
+            <div className="text-right text-xs text-slate-400 border-t border-slate-800 pt-2 font-mono">
+              Son 7 gün yakıt gideri:{' '}
+              <span className="text-slate-200 font-bold">
+                ₺{last7Cost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

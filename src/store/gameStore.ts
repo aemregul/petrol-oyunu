@@ -416,7 +416,7 @@ interface GameStore {
   completeVehicleFueling: (vehicleId: string) => void;
 
   // Logistics / Orders
-  orderFuel: (fuelType: FuelType, liters: number) => boolean;
+  orderFuel: (fuelType: FuelType, liters: number, supplierId?: string) => boolean;
   cancelFuelOrder: (orderId: string) => void;
 
   // Economy / Pricing
@@ -2268,11 +2268,11 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   // LOGISTICS / ORDERS
-  orderFuel: (fuelType, liters) => {
+  orderFuel: (fuelType, liters, supplierId = 'standart') => {
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     const effects = createEffects();
 
-    const placed = placeFuelOrder(state, fuelType, liters, effects);
+    const placed = placeFuelOrder(state, fuelType, liters, effects, supplierId);
     flushEffects(state, effects);
 
     if (placed) SaveManager.saveGame(state);

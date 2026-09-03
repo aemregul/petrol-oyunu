@@ -3484,6 +3484,18 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
         order.state = setOrderState(order.id, order.state, 'COMPLETED');
         playCue(effects, 'cash');
 
+        // Alım Defteri: teslimat tamamlandı, kayıt düş.
+        state.fuelPurchaseHistory.push({
+          id: 'fpr_' + Math.random().toString(36).substring(2, 9),
+          day: state.dayState.currentDay,
+          fuelType: order.fuelType,
+          liters: order.liters,
+          unitCost: order.unitCost,
+          totalCost: order.totalCost,
+          supplierId: order.supplierId,
+          deliveredAt: Date.now()
+        });
+
         // Only the surprise is worth a toast: litres that came all this way
         // and would not fit. A clean delivery just ticks over in the corner.
         if (res.refundedLiters > 0) {
@@ -5201,7 +5213,8 @@ export function placeFuelOrder(
   state: GameState,
   fuelType: FuelType,
   liters: number,
-  effects: SimEffects
+  effects: SimEffects,
+  supplierId: string = 'standart'
 ): boolean {
   const conf = GAME_CONFIG.fuels[fuelType];
   const tank = state.tanks[fuelType];
@@ -5222,24 +5235,30 @@ export function placeFuelOrder(
     return false;
   }
 
-  const unitCost = wholesaleNow(state, fuelType);
+  // Tedarikçi çarpanları: bilinmeyen id gelirse standart kabul edilir.
+  const supplier = GAME_CONFIG.suppliers.find((s) => s.id === supplierId)
+    ?? GAME_CONFIG.suppliers.find((s) => s.id === 'standart')!;
+
+  const baseUnitCost = wholesaleNow(state, fuelType);
+  const unitCost = Number((baseUnitCost * supplier.priceMultiplier).toFixed(2));
   const totalCost = liters * unitCost + conf.deliveryFee;
 
   const tx = TransactionService.executeCashTransaction(state, {
     type: 'FUEL_ORDER',
     amount: -totalCost,
-    description: `${liters} L ${conf.name} tanker siparişi`
+    description: `${liters} L ${conf.name} tanker siparişi (${supplier.name})`
   });
   if (!tx.success) {
     notify(effects, 'WARNING', 'Yetersiz Bakiye', tx.error || 'Sipariş tutarı kasayı aşıyor.');
     return false;
   }
 
-  const duration = Math.floor(
+  const baseDuration = Math.floor(
     GAME_CONFIG.economy.tankerSpeedSecondsMin +
       Math.random() *
         (GAME_CONFIG.economy.tankerSpeedSecondsMax - GAME_CONFIG.economy.tankerSpeedSecondsMin)
   );
+  const duration = Math.round(baseDuration * supplier.speedMultiplier);
 
   state.fuelOrders.push({
     id: 'order_' + Math.random().toString(36).substring(2, 8),
@@ -5251,7 +5270,8 @@ export function placeFuelOrder(
     totalDurationSeconds: duration,
     remainingSeconds: duration,
     state: 'TRAVELLING',
-    transactionId: tx.transactionId
+    transactionId: tx.transactionId,
+    supplierId: supplier.id
   });
 
   trackMissionMetric(state, 'ORDERS_PLACED', 1, effects);
