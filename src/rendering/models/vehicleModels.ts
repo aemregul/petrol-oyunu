@@ -1,39 +1,98 @@
 /**
- * Maps each customer archetype onto a Kenney Car Kit model (CC0).
+ * Two CC0 vehicle packs share the road.
  *
- * The kit ships one material per model driven by a shared colour-atlas
- * texture, so bodies are recoloured by tinting that material rather than by
- * assigning a flat colour. Wheels are separate named nodes, which is what
- * lets them spin.
+ * RgsDev Free Low Poly Vehicles Pack (FBX).
+ * Source: https://opengameart.org/content/free-low-poly-vehicles-pack
+ * License: CC0 1.0 — the original license text is kept beside the assets.
+ *
+ * Kenney Car Kit (GLB). The kit ships one material per model driven by a
+ * shared colour-atlas texture, so bodies are recoloured by tinting that
+ * material rather than by assigning a flat colour. Wheels are separate named
+ * nodes, which is what lets them spin.
  */
 
-import { VehicleArchetype } from '../../domain/types/gameState';
+import { VehicleArchetype, VehicleModelVariant } from '../../domain/types/gameState';
 
 export interface VehicleModelConfig {
-  /** Path under public/. */
   url: string;
-  /** Uniform scale to bring the kit's ~2.5 unit body up to our road scale. */
-  scale: number;
-  /** Multiplied over the atlas texture; null keeps the kit's own livery. */
-  tint: string | null;
+  /** Which loader reads the file; the packs are not interchangeable. */
+  format: 'fbx' | 'glb';
+  /** Desired nose-to-tail size in Three.js scene units. */
+  targetLength: number;
+  /** Asset-specific correction when the source wheel diameter is undersized. */
+  wheelScale?: number;
+  /** Pushes wheels out from underneath an overly wide source body. */
+  wheelTrackScale?: number;
+  /** Multiplied over the Kenney atlas texture; absent keeps the kit's livery. */
+  tint?: string;
 }
 
-const MODEL_BASE = '/models/vehicles';
+const RGSDEV_BASE = '/models/vehicles/rgsdev';
+const KENNEY_BASE = '/models/vehicles';
 
-export const VEHICLE_MODELS: Record<VehicleArchetype, VehicleModelConfig> = {
-  // Every model keeps the kit's own livery. Blue is the single exception,
-  // used only to separate the two green models that would otherwise be hard
-  // to tell apart on the forecourt.
-  commuter: { url: `${MODEL_BASE}/sedan.glb`, scale: 1.45, tint: null },
-  family: { url: `${MODEL_BASE}/suv.glb`, scale: 1.45, tint: null },
-  taxi: { url: `${MODEL_BASE}/taxi.glb`, scale: 1.45, tint: null },
-  courier: { url: `${MODEL_BASE}/van.glb`, scale: 1.4, tint: null },
-  commercial: { url: `${MODEL_BASE}/delivery.glb`, scale: 1.45, tint: null },
-  truck: { url: `${MODEL_BASE}/truck.glb`, scale: 1.6, tint: '#3b82f6' },
-  luxury: { url: `${MODEL_BASE}/suv-luxury.glb`, scale: 1.45, tint: null },
-  // Electric cars get a distinct silhouette and a cool white body so they
-  // never read as one of the combustion archetypes.
-  ev: { url: `${MODEL_BASE}/hatchback-sports.glb`, scale: 1.45, tint: '#e8f4ff' }
+function rgsdev(file: string, targetLength: number): VehicleModelConfig {
+  return { url: `${RGSDEV_BASE}/${file}.fbx`, format: 'fbx', targetLength };
+}
+
+function kenney(file: string, targetLength: number, tint?: string): VehicleModelConfig {
+  return { url: `${KENNEY_BASE}/${file}.glb`, format: 'glb', targetLength, tint };
+}
+
+export const VEHICLE_MODELS: Record<VehicleModelVariant, VehicleModelConfig> = {
+  sedan: rgsdev('sedan', 3.7),
+  hatchback: rgsdev('hatchback', 3.55),
+  suv: rgsdev('suv', 3.7),
+  taxi: rgsdev('taxi', 3.7),
+  van: rgsdev('van', 4.15),
+  pickup: rgsdev('pickup', 3.8),
+  truck: rgsdev('truck', 5.4),
+  'truck-with-trailer': rgsdev('truck-with-trailer', 10),
+  sports: rgsdev('sports', 3.9),
+  roadster: rgsdev('roadster', 3.9),
+  muscle: rgsdev('muscle', 4.15),
+  'muscle-2': rgsdev('muscle-2', 4.15),
+  limousine: rgsdev('limousine', 7),
+  'police-sedan': rgsdev('police-sedan', 3.75),
+  'police-suv': rgsdev('police-suv', 3.7),
+  'police-sports': rgsdev('police-sports', 3.9),
+  'police-muscle': rgsdev('police-muscle', 4.15),
+  ambulance: rgsdev('ambulance', 5.4),
+  firetruck: {
+    ...rgsdev('firetruck', 7.4),
+    wheelScale: 1.4,
+    wheelTrackScale: 1.2
+  },
+  bus: rgsdev('bus', 9.4),
+  'monster-truck': rgsdev('monster-truck', 4.25),
+
+  // The Kenney sizes match what the kit's old uniform scale produced, so the
+  // cars the player already knows do not shrink or grow on the merge. Blue on
+  // the truck is the one tint kept: it separates it from the green delivery.
+  'kenney-sedan': kenney('sedan', 3.6),
+  'kenney-suv': kenney('suv', 3.7),
+  'kenney-taxi': kenney('taxi', 3.6),
+  'kenney-van': kenney('van', 3.9),
+  'kenney-delivery': kenney('delivery', 4.0),
+  'kenney-truck': kenney('truck', 5.1, '#3b82f6'),
+  'kenney-suv-luxury': kenney('suv-luxury', 3.8),
+  'kenney-sedan-sports': kenney('sedan-sports', 3.7),
+  'kenney-hatchback-sports': kenney('hatchback-sports', 3.5)
 };
 
-export const VEHICLE_MODEL_URLS = Object.values(VEHICLE_MODELS).map((m) => m.url);
+export const DEFAULT_VEHICLE_MODEL: Record<VehicleArchetype, VehicleModelVariant> = {
+  commuter: 'sedan',
+  family: 'suv',
+  taxi: 'taxi',
+  courier: 'hatchback',
+  commercial: 'van',
+  truck: 'truck',
+  luxury: 'sports',
+  ev: 'hatchback',
+  police: 'police-sedan',
+  ambulance: 'ambulance',
+  firetruck: 'firetruck',
+  bus: 'bus',
+  monster: 'monster-truck'
+};
+
+export const VEHICLE_MODEL_URLS = Object.values(VEHICLE_MODELS).map((model) => model.url);

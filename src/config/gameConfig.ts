@@ -1,4 +1,4 @@
-import { MissionMetric } from '../domain/types/gameState';
+import { MissionMetric, VehicleArchetype, VehicleModelVariant } from '../domain/types/gameState';
 
 /**
  * Project Highway - Master Versioned Game Configuration (v1.0.0)
@@ -69,9 +69,9 @@ export interface BuildingUpgradeConfig {
 }
 
 export interface CustomerTypeConfig {
-  type: 'commuter' | 'family' | 'taxi' | 'courier' | 'commercial' | 'truck' | 'luxury' | 'ev';
+  type: VehicleArchetype;
   name: string;
-  vehicleModel: string;
+  vehicleModels: VehicleModelVariant[];
   minDemand: number;
   maxDemand: number;
   basePatienceSeconds: number;
@@ -83,6 +83,12 @@ export interface CustomerTypeConfig {
   specialBehavior: string;
   /** Needs a charging unit rather than a fuel pump. */
   requiresCharger?: boolean;
+  /** Relative frequency among vehicles that continue along the highway. */
+  roadTrafficWeight?: number;
+  /** Relative frequency among drivers who actually turn into the station. */
+  stationStopWeight?: number;
+  /** Large and emergency vehicles do not all cruise at the same pace. */
+  roadSpeedMultiplier?: number;
 }
 
 export interface EmployeeConfig {
@@ -726,7 +732,7 @@ export const GAME_CONFIG: GameConfig = {
     commuter: {
       type: 'commuter',
       name: 'İşe Giden',
-      vehicleModel: 'sedan_standard',
+      vehicleModels: ['sedan', 'hatchback', 'kenney-sedan', 'kenney-hatchback-sports'],
       minDemand: 18,
       maxDemand: 35,
       basePatienceSeconds: 36,
@@ -735,12 +741,13 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.18,
       marketAvgBasket: 110,
       tipChanceModifier: 1.0,
-      specialBehavior: 'Hızlı hizmet bekler.'
+      specialBehavior: 'Hızlı hizmet bekler.',
+      roadTrafficWeight: 1.5
     },
     family: {
       type: 'family',
       name: 'Aile',
-      vehicleModel: 'suv_standard',
+      vehicleModels: ['suv', 'kenney-suv'],
       minDemand: 25,
       maxDemand: 50,
       basePatienceSeconds: 48,
@@ -749,12 +756,13 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.42,
       marketAvgBasket: 180,
       tipChanceModifier: 1.0,
-      specialBehavior: 'Markete ve tuvalete girme olasılığı yüksektir.'
+      specialBehavior: 'Markete ve tuvalete girme olasılığı yüksektir.',
+      roadTrafficWeight: 1.1
     },
     taxi: {
       type: 'taxi',
       name: 'Taksi',
-      vehicleModel: 'sedan_taxi',
+      vehicleModels: ['taxi', 'kenney-taxi'],
       minDemand: 15,
       maxDemand: 40,
       basePatienceSeconds: 26,
@@ -763,12 +771,14 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.10,
       marketAvgBasket: 90,
       tipChanceModifier: 0.8,
-      specialBehavior: 'Kısa kuyruk arar, sabırsızdır.'
+      specialBehavior: 'Kısa kuyruk arar, sabırsızdır.',
+      roadTrafficWeight: 0.75,
+      stationStopWeight: 1.2
     },
     courier: {
       type: 'courier',
       name: 'Kurye / Motosiklet',
-      vehicleModel: 'courier_van',
+      vehicleModels: ['hatchback', 'kenney-van'],
       minDemand: 8,
       maxDemand: 28,
       basePatienceSeconds: 22,
@@ -777,12 +787,13 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.08,
       marketAvgBasket: 80,
       tipChanceModifier: 1.2,
-      specialBehavior: 'Hızlı hizmette ekstra hız bonusu bahşişi bırakır.'
+      specialBehavior: 'Hızlı hizmette ekstra hız bonusu bahşişi bırakır.',
+      roadTrafficWeight: 0.85
     },
     commercial: {
       type: 'commercial',
       name: 'Ticari Van / Minibüs',
-      vehicleModel: 'van_cargo',
+      vehicleModels: ['van', 'pickup', 'kenney-delivery'],
       minDemand: 35,
       maxDemand: 75,
       basePatienceSeconds: 44,
@@ -791,12 +802,13 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.22,
       marketAvgBasket: 150,
       tipChanceModifier: 1.0,
-      specialBehavior: 'Dizel ağırlıklıdır, yüksek hacimli yakıt alır.'
+      specialBehavior: 'Dizel ağırlıklıdır, yüksek hacimli yakıt alır.',
+      roadTrafficWeight: 0.9
     },
     truck: {
       type: 'truck',
       name: 'Ağır Kamyon',
-      vehicleModel: 'truck_heavy',
+      vehicleModels: ['truck', 'truck-with-trailer', 'kenney-truck'],
       minDemand: 80,
       maxDemand: 180,
       basePatienceSeconds: 60,
@@ -805,12 +817,15 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.35,
       marketAvgBasket: 200,
       tipChanceModifier: 1.1,
-      specialBehavior: 'Büyük dolum yapar, sabrı uzundur.'
+      specialBehavior: 'Büyük dolum yapar, sabrı uzundur.',
+      roadTrafficWeight: 0.65,
+      stationStopWeight: 0.65,
+      roadSpeedMultiplier: 0.78
     },
     ev: {
       type: 'ev',
       name: 'Elektrikli Araç',
-      vehicleModel: 'hatchback_ev',
+      vehicleModels: ['hatchback'],
       minDemand: 20,
       maxDemand: 55,
       basePatienceSeconds: 52,
@@ -820,12 +835,21 @@ export const GAME_CONFIG: GameConfig = {
       marketAvgBasket: 190,
       tipChanceModifier: 1.3,
       specialBehavior: 'Şarj süresi uzundur; beklerken tesisleri kullanır.',
-      requiresCharger: true
+      requiresCharger: true,
+      roadTrafficWeight: 1.15
     },
     luxury: {
       type: 'luxury',
       name: 'Lüks / Spor',
-      vehicleModel: 'sport_luxury',
+      vehicleModels: [
+        'sports',
+        'roadster',
+        'muscle',
+        'muscle-2',
+        'limousine',
+        'kenney-suv-luxury',
+        'kenney-sedan-sports'
+      ],
       minDemand: 30,
       maxDemand: 60,
       basePatienceSeconds: 30,
@@ -834,7 +858,93 @@ export const GAME_CONFIG: GameConfig = {
       marketBaseProbability: 0.25,
       marketAvgBasket: 220,
       tipChanceModifier: 2.2,
-      specialBehavior: 'Temiz sahada ve yüksek puanda yüklü bahşiş verir.'
+      specialBehavior: 'Temiz sahada ve yüksek puanda yüklü bahşiş verir.',
+      roadTrafficWeight: 0.75
+    },
+    police: {
+      type: 'police',
+      name: 'Polis Aracı',
+      vehicleModels: ['police-sedan', 'police-suv', 'police-sports', 'police-muscle'],
+      minDemand: 35,
+      maxDemand: 65,
+      basePatienceSeconds: 24,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'gasoline',
+      marketBaseProbability: 0.05,
+      marketAvgBasket: 100,
+      tipChanceModifier: 1.1,
+      specialBehavior: 'Trafikte sık devriye gezer, istasyona nadiren uğrar.',
+      roadTrafficWeight: 1,
+      stationStopWeight: 0.12,
+      roadSpeedMultiplier: 1.05
+    },
+    ambulance: {
+      type: 'ambulance',
+      name: 'Ambulans',
+      vehicleModels: ['ambulance'],
+      minDemand: 45,
+      maxDemand: 85,
+      basePatienceSeconds: 20,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'diesel',
+      marketBaseProbability: 0.03,
+      marketAvgBasket: 90,
+      tipChanceModifier: 1.0,
+      specialBehavior: 'Trafikte görünür ancak acil görevi nedeniyle çok nadir durur.',
+      roadTrafficWeight: 0.8,
+      stationStopWeight: 0.08,
+      roadSpeedMultiplier: 1.08
+    },
+    firetruck: {
+      type: 'firetruck',
+      name: 'İtfaiye Aracı',
+      vehicleModels: ['firetruck'],
+      minDemand: 90,
+      maxDemand: 170,
+      basePatienceSeconds: 42,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'diesel',
+      marketBaseProbability: 0.08,
+      marketAvgBasket: 140,
+      tipChanceModifier: 1.1,
+      specialBehavior: 'Büyük deposu vardır; trafikte görünür, yakıt için seyrek uğrar.',
+      roadTrafficWeight: 0.8,
+      stationStopWeight: 0.1,
+      roadSpeedMultiplier: 0.82
+    },
+    bus: {
+      type: 'bus',
+      name: 'Otobüs',
+      vehicleModels: ['bus'],
+      minDemand: 85,
+      maxDemand: 150,
+      basePatienceSeconds: 58,
+      priceSensitivity: 'MEDIUM',
+      preferredFuel: 'diesel',
+      marketBaseProbability: 0.35,
+      marketAvgBasket: 280,
+      tipChanceModifier: 1.0,
+      specialBehavior: 'Büyük depo doldurur; yolcular tesiste daha fazla harcama yapar.',
+      roadTrafficWeight: 1,
+      stationStopWeight: 0.25,
+      roadSpeedMultiplier: 0.72
+    },
+    monster: {
+      type: 'monster',
+      name: 'Arazi / Monster Truck',
+      vehicleModels: ['monster-truck'],
+      minDemand: 55,
+      maxDemand: 100,
+      basePatienceSeconds: 30,
+      priceSensitivity: 'LOW',
+      preferredFuel: 'gasoline',
+      marketBaseProbability: 0.12,
+      marketAvgBasket: 180,
+      tipChanceModifier: 1.5,
+      specialBehavior: 'Yüksek tüketimli gösterişli araçtır ve istasyona seyrek uğrar.',
+      roadTrafficWeight: 0.6,
+      stationStopWeight: 0.12,
+      roadSpeedMultiplier: 0.8
     }
   },
   employees: {

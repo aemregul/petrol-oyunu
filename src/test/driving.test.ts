@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
-import { createEffects, runSimulationTick } from '../domain/services/simulationEngine';
+import {
+  createEffects,
+  runSimulationTick,
+  vehicleBodyHalfExtents
+} from '../domain/services/simulationEngine';
 import { evaluatePlacement, getFootprint } from '../domain/services/placement';
 import { blockLayout, LAYOUT } from '../domain/services/simulationEngine';
 import { GAME_CONFIG } from '../config/gameConfig';
@@ -57,14 +61,20 @@ function legHits(
 }
 
 /** The four corners of a car standing at this spot on this heading. */
-function corners(x: number, z: number, heading: number): Array<[number, number]> {
+function corners(
+  x: number,
+  z: number,
+  heading: number,
+  halfLength = HALF_LENGTH,
+  halfWidth = HALF_WIDTH
+): Array<[number, number]> {
   // Heading is atan2(dx, dz), so forward is (sin, cos).
   const ahead = Math.sin(heading);
   const across = Math.cos(heading);
   const out: Array<[number, number]> = [];
 
-  for (const along of [-HALF_LENGTH, HALF_LENGTH]) {
-    for (const side of [-HALF_WIDTH, HALF_WIDTH]) {
+  for (const along of [-halfLength, halfLength]) {
+    for (const side of [-halfWidth, halfWidth]) {
       out.push([x + ahead * along + across * side, z + across * along - ahead * side]);
     }
   }
@@ -127,7 +137,8 @@ function trespasses(state: GameState, seconds: number): { hits: string[]; arrive
     for (const vehicle of Object.values(state.vehicles)) {
       if (vehicle.state === 'AT_PUMP') arrived = true;
       const [x, , z] = vehicle.worldPosition;
-      const body = corners(x, z, vehicle.heading);
+      const bodySize = vehicleBodyHalfExtents(vehicle);
+      const body = corners(x, z, vehicle.heading, bodySize.length, bodySize.width);
 
       // The whole line the car has been told to drive, not just where it is.
       const legs: Array<[[number, number], [number, number]]> = [];
@@ -280,7 +291,8 @@ describe('vehicles and buildings', () => {
           if (building.position[1] >= 0) continue;
           if (FLAT.includes(building.type) || SERVICE.includes(building.type)) continue;
           const f = getFootprint(building.position, building.size, building.rotation);
-          const hit = corners(x, z, vehicle.heading).some(
+          const bodySize = vehicleBodyHalfExtents(vehicle);
+          const hit = corners(x, z, vehicle.heading, bodySize.length, bodySize.width).some(
             ([cx, cz]) => cx > f.minX && cx < f.maxX && cz > f.minZ && cz < f.maxZ
           );
           if (hit) inBuildings.push(`${building.type} <- ${vehicle.state}`);

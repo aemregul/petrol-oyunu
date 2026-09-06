@@ -1,53 +1,56 @@
 import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { useGLTF, Html, PerspectiveCamera } from '@react-three/drei';
-import * as THREE from 'three';
+import { Html, PerspectiveCamera } from '@react-three/drei';
+import {
+  PumpEntity,
+  VehicleArchetype,
+  VehicleModelVariant
+} from '../domain/types/gameState';
+import {
+  PUMP_BAY_OFFSET,
+  vehicleBodyHalfExtents
+} from '../domain/services/simulationEngine';
 import { ElectricVehicleModel } from './models/ElectricVehicleModel';
+import { VehicleModel } from './models/VehicleModel';
+import { PumpMesh } from './PumpMesh';
 
 /**
  * A side-by-side lineup of candidate models, opened with ?showcase=1.
  * Development aid for choosing art assets, not part of the game itself.
  */
 
-const CANDIDATES = [
-  { file: 'sedan', label: 'sedan → İşe Giden' },
-  { file: 'suv', label: 'suv → Aile' },
-  { file: 'taxi', label: 'taxi → Taksi' },
-  { file: 'van', label: 'van → Kurye' },
-  { file: 'delivery', label: 'delivery → Ticari' },
-  { file: 'truck', label: 'truck → Kamyon' },
-  { file: 'suv-luxury', label: 'suv-luxury → Lüks' },
-  { file: 'sedan-sports', label: 'sedan-sports' },
-  { file: 'hatchback-sports', label: 'hatchback-sports → Elektrikli' }
+const CANDIDATES: Array<{ model: VehicleModelVariant; label: string }> = [
+  { model: 'sedan', label: 'Sedan' },
+  { model: 'hatchback', label: 'Hatchback' },
+  { model: 'suv', label: 'SUV' },
+  { model: 'taxi', label: 'Taksi' },
+  { model: 'van', label: 'Van' },
+  { model: 'pickup', label: 'Pickup' },
+  { model: 'truck', label: 'Kamyon' },
+  { model: 'truck-with-trailer', label: 'Dorseli Tır' },
+  { model: 'sports', label: 'Spor' },
+  { model: 'roadster', label: 'Roadster' },
+  { model: 'muscle', label: 'Muscle' },
+  { model: 'muscle-2', label: 'Muscle II' },
+  { model: 'limousine', label: 'Limuzin' },
+  { model: 'police-sedan', label: 'Polis Sedan' },
+  { model: 'police-suv', label: 'Polis SUV' },
+  { model: 'police-sports', label: 'Polis Spor' },
+  { model: 'police-muscle', label: 'Polis Muscle' },
+  { model: 'ambulance', label: 'Ambulans' },
+  { model: 'firetruck', label: 'İtfaiye' },
+  { model: 'bus', label: 'Otobüs' },
+  { model: 'monster-truck', label: 'Monster Truck' },
+  { model: 'kenney-sedan', label: 'Kenney Sedan' },
+  { model: 'kenney-suv', label: 'Kenney SUV' },
+  { model: 'kenney-taxi', label: 'Kenney Taksi' },
+  { model: 'kenney-van', label: 'Kenney Van' },
+  { model: 'kenney-delivery', label: 'Kenney Kargo' },
+  { model: 'kenney-truck', label: 'Kenney Kamyon' },
+  { model: 'kenney-suv-luxury', label: 'Kenney Lüks SUV' },
+  { model: 'kenney-sedan-sports', label: 'Kenney Spor Sedan' },
+  { model: 'kenney-hatchback-sports', label: 'Kenney Spor Hatchback' }
 ];
-
-const TINTS: Array<{ name: string; color: string | null }> = [
-  { name: 'Orijinal', color: null },
-  { name: 'Kırmızı', color: '#ef4444' },
-  { name: 'Mavi', color: '#3b82f6' },
-  { name: 'Beyaz', color: '#f8fafc' }
-];
-
-const ShowcaseModel: React.FC<{ file: string; tint: string | null }> = ({ file, tint }) => {
-  const { scene } = useGLTF(`/models/vehicles/${file}.glb`);
-
-  const model = React.useMemo(() => {
-    const clone = scene.clone(true);
-    clone.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const material = (child.material as THREE.MeshStandardMaterial).clone();
-      if (tint && !child.name.startsWith('wheel')) {
-        material.color = new THREE.Color(tint);
-      }
-      material.roughness = 0.55;
-      child.material = material;
-      child.castShadow = true;
-    });
-    return clone;
-  }, [scene, tint]);
-
-  return <primitive object={model} />;
-};
 
 export const ModelShowcase: React.FC = () => (
   <div className="w-screen h-screen bg-slate-900">
@@ -55,7 +58,7 @@ export const ModelShowcase: React.FC = () => (
       <PerspectiveCamera
         makeDefault
         fov={38}
-        position={[0, 24, 34]}
+        position={[0, 36, 44]}
         onUpdate={(c) => c.lookAt(0, 0, 0)}
       />
       <ambientLight intensity={0.8} />
@@ -63,36 +66,35 @@ export const ModelShowcase: React.FC = () => (
       <hemisphereLight groundColor="#334155" intensity={0.5} />
       <color attach="background" args={['#1e293b']} />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.32, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
         <planeGeometry args={[80, 80]} />
         <meshStandardMaterial color="#39424f" roughness={0.8} />
       </mesh>
 
       <Suspense fallback={null}>
-        {CANDIDATES.map((candidate, col) =>
-          TINTS.map((tint, row) => (
+        {CANDIDATES.map((candidate, index) => {
+          const col = index % 7;
+          const row = Math.floor(index / 7);
+          return (
             <group
-              key={`${candidate.file}-${tint.name}`}
-              position={[col * 3.6 - 14.4, 0, row * 3.6 - 5.4]}
+              key={candidate.model}
+              position={[col * 4.6 - 13.8, 0, row * 5.4 - 10.8]}
+              rotation={[0, -0.28, 0]}
             >
-              <ShowcaseModel file={candidate.file} tint={tint.color} />
-              {row === 0 && (
-                <Html position={[0, 1.6, -2.6]} center distanceFactor={30}>
-                  <div className="text-[12px] font-bold text-white whitespace-nowrap bg-slate-950/85 px-2 py-1 rounded">
-                    {candidate.label}
-                  </div>
-                </Html>
-              )}
-              {col === 0 && (
-                <Html position={[-3.4, 1.0, 0]} center distanceFactor={30}>
-                  <div className="text-[12px] font-bold text-sky-300 whitespace-nowrap bg-slate-950/85 px-2 py-1 rounded">
-                    {tint.name}
-                  </div>
-                </Html>
-              )}
+              <VehicleModel
+                archetype="commuter"
+                vehicleId={`showcase_${index}`}
+                modelVariant={candidate.model}
+                speed={0}
+              />
+              <Html position={[0, 3.2, 0]} center distanceFactor={30}>
+                <div className="text-[12px] font-bold text-white whitespace-nowrap bg-slate-950/85 px-2 py-1 rounded">
+                  {candidate.label}
+                </div>
+              </Html>
             </group>
-          ))
-        )}
+          );
+        })}
       </Suspense>
     </Canvas>
   </div>
@@ -134,6 +136,94 @@ export const ElectricVehicleShowcase: React.FC = () => (
           </div>
         </Html>
       </group>
+    </Canvas>
+  </div>
+);
+
+interface DockingCandidate {
+  model: VehicleModelVariant;
+  archetype: VehicleArchetype;
+  label: string;
+}
+
+const DOCKING_CANDIDATES: DockingCandidate[] = [
+  { model: 'monster-truck', archetype: 'monster', label: 'Monster Truck' },
+  { model: 'firetruck', archetype: 'firetruck', label: 'İtfaiye' },
+  { model: 'limousine', archetype: 'luxury', label: 'Limuzin' },
+  { model: 'truck-with-trailer', archetype: 'truck', label: 'Dorseli Tır' },
+  { model: 'ambulance', archetype: 'ambulance', label: 'Ambulans' }
+];
+
+function showcasePump(id: string): PumpEntity {
+  return {
+    id,
+    level: 3,
+    position: [0, 0],
+    rotation: 0,
+    supportedFuels: ['gasoline', 'diesel', 'lpg'],
+    state: 'FUELING',
+    health: 100,
+    employeeId: null,
+    currentVehicleId: `vehicle_${id}`,
+    flowRateLps: 13,
+    hasCanopy: false
+  };
+}
+
+/**
+ * Large vehicles parked at the exact lateral offset used by the simulation.
+ * Open with ?showcase=docking to review rare customers without waiting for
+ * random traffic to send each one into the station.
+ */
+export const PumpDockingShowcase: React.FC = () => (
+  <div className="w-screen h-screen bg-slate-900">
+    <Canvas shadows dpr={[1, 2]}>
+      <PerspectiveCamera
+        makeDefault
+        fov={37}
+        position={[25, 28, 37]}
+        onUpdate={(camera) => camera.lookAt(0, 0, 2)}
+      />
+      <ambientLight intensity={0.85} />
+      <directionalLight position={[14, 24, 18]} intensity={2.2} castShadow />
+      <hemisphereLight groundColor="#27313d" intensity={0.55} />
+      <color attach="background" args={['#182230']} />
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 2]} receiveShadow>
+        <planeGeometry args={[55, 42]} />
+        <meshStandardMaterial color="#59616a" roughness={0.9} />
+      </mesh>
+
+      <Suspense fallback={null}>
+        {DOCKING_CANDIDATES.map((candidate, index) => {
+          const topRow = index < 3;
+          const cellX = topRow ? (index - 1) * 15 : (index - 3.5) * 15;
+          const cellZ = topRow ? -6 : 10;
+          const body = vehicleBodyHalfExtents(candidate);
+          const extraClearance = Math.max(0, body.width - 0.43);
+          const vehicleX = (PUMP_BAY_OFFSET + extraClearance) * 2;
+          const pump = showcasePump(`docking_pump_${index}`);
+
+          return (
+            <group key={candidate.model} position={[cellX, 0, cellZ]}>
+              <PumpMesh pump={pump} />
+              <group position={[vehicleX, 0, 0]}>
+                <VehicleModel
+                  archetype={candidate.archetype}
+                  vehicleId={`docking_vehicle_${index}`}
+                  modelVariant={candidate.model}
+                  speed={0}
+                />
+              </group>
+              <Html position={[vehicleX, 4.6, 0]} center distanceFactor={32}>
+                <div className="rounded-lg border border-slate-600 bg-slate-950/90 px-3 py-1.5 text-[13px] font-bold text-white whitespace-nowrap">
+                  {candidate.label}
+                </div>
+              </Html>
+            </group>
+          );
+        })}
+      </Suspense>
     </Canvas>
   </div>
 );

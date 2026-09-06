@@ -1015,6 +1015,39 @@ const FOLLOW_CORRIDOR = 1.2;
 const CAR_CLEARANCE = 1.4;
 
 /**
+ * Half-extents in simulation grid units. Rendering doubles grid coordinates,
+ * so a regular 0.9-long car becomes roughly 3.6 scene units nose to tail.
+ */
+export function vehicleBodyHalfExtents(
+  vehicle: Pick<VehicleEntity, 'archetype' | 'modelVariant'>
+): { length: number; width: number } {
+  switch (vehicle.modelVariant) {
+    case 'truck-with-trailer':
+      return { length: 2.15, width: 0.55 };
+    case 'bus':
+      return { length: 2.05, width: 0.55 };
+    case 'firetruck':
+      return { length: 1.9, width: 0.62 };
+    case 'limousine':
+      return { length: 1.85, width: 0.5 };
+    case 'ambulance':
+      return { length: 1.38, width: 0.55 };
+    case 'van':
+      return { length: 1.12, width: 0.48 };
+    case 'truck':
+      return { length: 1.12, width: 0.52 };
+    case 'monster-truck':
+      return { length: 1.05, width: 0.68 };
+    default:
+      if (vehicle.archetype === 'truck') return { length: 1.12, width: 0.52 };
+      if (vehicle.archetype === 'bus') return { length: 2.05, width: 0.55 };
+      if (vehicle.archetype === 'ambulance') return { length: 1.38, width: 0.55 };
+      if (vehicle.archetype === 'firetruck') return { length: 1.9, width: 0.62 };
+      return { length: 0.9, width: 0.43 };
+  }
+}
+
+/**
  * The gap in the traffic a driver waits for before joining a carriageway.
  *
  * Deliberately modest. Traffic on the road gives way to a car that has already
@@ -1176,7 +1209,8 @@ function followThrottle(
   // highway pace needs proportionally more room to shed that speed, and a gap
   // that is ample on the forecourt is nothing at all out on the road.
   const pace = highwayPace(vehicle, block);
-  const wanted = FOLLOW_DISTANCE * pace;
+  const ownBody = vehicleBodyHalfExtents(vehicle);
+  const wanted = (FOLLOW_DISTANCE + Math.max(0, ownBody.length - 0.9)) * pace;
 
   // Joining a lane is a different problem from following it: the car that
   // matters is coming along the lane, not sitting in front. A driver pulling
@@ -1266,7 +1300,10 @@ function followThrottle(
     const gap = other.id.startsWith('truck_')
       ? truckBodyAhead(vehicle, other, dir)
       : distanceAhead(vehicle, other, dir);
-    if (gap === null || gap >= nearest) continue;
+    if (gap === null) continue;
+    const otherBody = vehicleBodyHalfExtents(other);
+    const bodyAdjustedGap = gap - Math.max(0, otherBody.length - 0.9);
+    if (bodyAdjustedGap >= nearest) continue;
 
     // Two cars nose to nose would both give way and neither would ever move
     // again. One of them has to have right of way, and the id decides so that
@@ -1278,7 +1315,7 @@ function followThrottle(
     // Whoever gives way holds back by a full car rather than creeping up to
     // the other's bumper, so it is not left sitting across the path of the car
     // it just waved through.
-    nearest = mutual ? gap - CAR_CLEARANCE : gap;
+    nearest = mutual ? bodyAdjustedGap - CAR_CLEARANCE : bodyAdjustedGap;
   }
 
   if (nearest === Infinity) return { throttle: 1, gap: Infinity };
@@ -1300,6 +1337,7 @@ const SOLID_SHRINK = -0.15;
 
 function bodyInSolid(
   state: GameState,
+  vehicle: VehicleEntity,
   side: DrivewaySide,
   x: number,
   z: number,
@@ -1331,10 +1369,11 @@ function bodyInSolid(
   rects.push(...pumpRects(state, side, undefined, SOLID_SHRINK));
   if (rects.length === 0) return false;
 
+  const body = vehicleBodyHalfExtents(vehicle);
   const ahead = Math.sin(heading);
   const across = Math.cos(heading);
-  for (const along of [-0.9, 0, 0.9]) {
-    for (const beam of [-0.43, 0.43]) {
+  for (const along of [-body.length, 0, body.length]) {
+    for (const beam of [-body.width, body.width]) {
       const cx = x + ahead * along + across * beam;
       const cz = z + across * along - ahead * beam;
       if (inRects(rects, cx, cz)) return true;
@@ -1380,7 +1419,7 @@ function driveInTraffic(
   // dışarı çıkabilir.
   const before: [number, number, number] = [...vehicle.worldPosition];
   const headingBefore = vehicle.heading;
-  const wasInside = bodyInSolid(state, block.side, before[0], before[2], headingBefore);
+  const wasInside = bodyInSolid(state, vehicle, block.side, before[0], before[2], headingBefore);
 
   const arrived = driveToward(
     vehicle,
@@ -1391,6 +1430,7 @@ function driveInTraffic(
     !wasInside &&
     bodyInSolid(
       state,
+      vehicle,
       block.side,
       vehicle.worldPosition[0],
       vehicle.worldPosition[2],
@@ -1523,6 +1563,7 @@ function rerouteAroundSolid(
  */
 function routeBodyClear(
   state: GameState,
+  vehicle: VehicleEntity,
   side: DrivewaySide,
   from: [number, number, number],
   route: Array<[number, number, number]>
@@ -1541,7 +1582,7 @@ function routeBodyClear(
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         if (travelled + length * t < 1) continue;
-        if (bodyInSolid(state, side, px + dx * t, pz + dz * t, heading)) return false;
+        if (bodyInSolid(state, vehicle, side, px + dx * t, pz + dz * t, heading)) return false;
       }
     }
     travelled += length;
@@ -2175,7 +2216,7 @@ function pumpRoute(
   pump: PumpEntity
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
-  const bay = pumpBay(block, pump);
+  const bay = pumpBay(block, pump, vehicle);
   const approach = approachBay(state, vehicle, block, bay, bayApproachDir(pump), pump.id);
   if (approach) return approach;
 
@@ -2320,7 +2361,7 @@ function exitRoute(
   const inwardHere = block.side === 'far' ? -1 : 1;
   for (const pump of Object.values(state.pumps)) {
     if (pumpSide(pump) !== block.side) continue;
-    const bay = pumpBay(block, pump);
+    const bay = pumpBay(block, pump, from);
     if (
       Math.hypot(from.worldPosition[0] - bay[0], from.worldPosition[2] - bay[2]) >= 1
     ) {
@@ -2350,7 +2391,11 @@ function exitRoute(
     const clear =
       legIsClear(walls, [from.worldPosition[0], from.worldPosition[2]], [rollOut[0], rollOut[2]]) &&
       legIsClear(walls, [rollOut[0], rollOut[2]], [ontoLane[0], ontoLane[2]]) &&
-      legIsClear(walls, [ontoLane[0], ontoLane[2]], [laneX, block.laneZ]);
+      legIsClear(walls, [ontoLane[0], ontoLane[2]], [laneX, block.laneZ]) &&
+      // The last leg is the driveway itself. Buildings can be placed near a
+      // mouth on old saves, so the fast bay-exit route must prove that leg is
+      // open too instead of assuming the kerb opening is empty.
+      legIsClear(walls, [laneX, block.laneZ], [laneX, block.roadLaneZ]);
     if (clear) {
       return [
         rollOut,
@@ -4146,9 +4191,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const stops = wayIn && servable.length > 0 && Math.random() < stopChance(state, side);
   const archetypes = stops
     ? servable
-    : (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter(
-        (a) => !GAME_CONFIG.customerTypes[a].requiresCharger
-      );
+    : (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]);
   if (archetypes.length === 0) return;
 
   const facilities = blockFacilities(state, side);
@@ -4164,12 +4207,16 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
       ? sellableFuels.reduce((sum, f) => sum + fuelPriceIndex(state, f), 0) / sellableFuels.length
       : 1;
   const archetype = pickWeighted(archetypes, (a) => {
-    const preferred = GAME_CONFIG.customerTypes[a].preferredFuel;
+    const customer = GAME_CONFIG.customerTypes[a];
+    const preferred = customer.preferredFuel;
     const index =
       preferred !== 'any' && sellableFuels.includes(preferred as FuelType)
         ? fuelPriceIndex(state, preferred as FuelType)
         : meanIndex;
-    return archetypeAppetite(GAME_CONFIG.customerTypes[a].priceSensitivity, index);
+    const presence = stops
+      ? customer.stationStopWeight ?? 1
+      : customer.roadTrafficWeight ?? 1;
+    return archetypeAppetite(customer.priceSensitivity, index) * presence;
   });
   const conf = GAME_CONFIG.customerTypes[archetype];
   const fuelType: FuelType =
@@ -4180,15 +4227,10 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const demand = Math.round(conf.minDemand + Math.random() * (conf.maxDemand - conf.minDemand));
   const tankCapacity = Math.round(demand * (1.25 + Math.random() * 0.35));
   const id = 'veh_' + Math.random().toString(36).substring(2, 8);
-
-  // The highway belongs to the whole town, not only to this station's
-  // customers. One car in roughly five is shown as an EV while driving past,
-  // even before the player owns a charger. Deriving it from the already-made
-  // id adds no random roll, so traffic timing and routing remain untouched.
   let idHash = 0;
   for (const char of id) idHash = (idHash * 31 + char.charCodeAt(0)) | 0;
-  const throughTrafficArchetype: VehicleArchetype =
-    !stops && Math.abs(idHash) % 5 === 0 ? 'ev' : archetype;
+  const modelVariants = conf.vehicleModels;
+  const modelVariant = modelVariants[Math.abs(idHash) % modelVariants.length];
 
   // Whether this driver wants the tank filled or names a sum is read off the
   // same id hash, for the same reason: no extra random roll. A charger has no
@@ -4198,7 +4240,8 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
 
   state.vehicles[id] = {
     id,
-    archetype: throughTrafficArchetype,
+    archetype,
+    modelVariant,
     fuelType,
     tankCapacity,
     currentFuel: Math.max(0, tankCapacity - demand),
@@ -4216,7 +4259,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     route: [],
     // The far carriageway runs the other way, so its cars face the other way.
     heading: block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2,
-    speed: 0.85 + Math.random() * 0.3,
+    speed: (0.85 + Math.random() * 0.3) * (conf.roadSpeedMultiplier ?? 1),
     routeProgress: 0,
     waitingTimeSeconds: 0,
     shoppingIntent: false
@@ -4326,9 +4369,23 @@ function clampBayToApron(
 }
 
 /** The spot alongside an island where a car actually stands to be served. */
-function pumpBay(block: BlockLayout, pump: PumpEntity): [number, number, number] {
+function pumpBay(
+  block: BlockLayout,
+  pump: PumpEntity,
+  vehicle: Pick<VehicleEntity, 'archetype' | 'modelVariant'>
+): [number, number, number] {
   const [dx, dz] = pumpBayOffset(pump);
-  return clampBayToApron(block, [pump.position[0] + dx, 0, pump.position[1] + dz]);
+  // PUMP_BAY_OFFSET was measured for a regular car. A monster truck is much
+  // wider, so using the same centre point puts its inner tyre into the pump
+  // island and the solid-body guard correctly refuses every final step. Move
+  // only the oversized body further out; ordinary cars keep their exact pose.
+  const extra = Math.max(0, vehicleBodyHalfExtents(vehicle).width - 0.43);
+  const length = Math.max(0.001, Math.hypot(dx, dz));
+  return clampBayToApron(block, [
+    pump.position[0] + dx + (dx / length) * extra,
+    0,
+    pump.position[1] + dz + (dz / length) * extra
+  ]);
 }
 
 function reservePumpFor(
