@@ -2771,6 +2771,48 @@ export function generateDailyMissions(state: GameState): void {
 /* Fueling                                                             */
 /* ------------------------------------------------------------------ */
 
+/** Cash requests come in steps of this many lira: ₺1.500, never ₺1.527,60. */
+export const REQUEST_LIRA_STEP = 50;
+
+/** Roughly this share of drivers want the tank filled; the rest name a sum. */
+export const FULL_TANK_SHARE = 0.35;
+
+/**
+ * What a driver asks for at the window: either "fill it up" or a round sum of
+ * money. Never a figure with kuruş on the end — nobody pulls in and asks for
+ * ₺1.527,60 of petrol. The sum is rounded down so the fuel it buys fits in the
+ * space the tank has, and never below one step, so a driver with a nearly full
+ * tank still asks for something worth stopping for.
+ */
+export function driverRequest(
+  demandLiters: number,
+  unitPrice: number,
+  wantsFull: boolean
+): VehicleEntity['request'] {
+  if (wantsFull || unitPrice <= 0) {
+    return {
+      mode: 'FULL',
+      targetValue: demandLiters,
+      calculatedLiters: demandLiters,
+      calculatedPrice: Number((demandLiters * unitPrice).toFixed(2)),
+      dispensedLiters: 0,
+      isFinished: false
+    };
+  }
+  const lira = Math.max(
+    REQUEST_LIRA_STEP,
+    Math.floor((demandLiters * unitPrice) / REQUEST_LIRA_STEP) * REQUEST_LIRA_STEP
+  );
+  return {
+    mode: 'MONEY',
+    targetValue: lira,
+    calculatedLiters: lira / unitPrice,
+    calculatedPrice: lira,
+    dispensedLiters: 0,
+    isFinished: false
+  };
+}
+
 export function beginFueling(
   state: GameState,
   vehicle: VehicleEntity,
@@ -2801,14 +2843,19 @@ export function beginFueling(
     return false;
   }
 
+  // The reservation reports itself to two decimals, and ₺250 of petrol at
+  // ₺44,90 is 5.5679 L — rounded, the pump would charge ₺250,09. A named sum
+  // is owed exactly, so when the tank covered it the litres are the sum's own.
+  const liters =
+    reservation.reservedLiters >= litersNeeded - 0.01 ? litersNeeded : reservation.reservedLiters;
   vehicle.request = {
     mode,
     targetValue,
-    calculatedLiters: reservation.reservedLiters,
-    calculatedPrice: Number((reservation.reservedLiters * unitPrice).toFixed(2)),
+    calculatedLiters: liters,
+    calculatedPrice: mode === 'MONEY' && liters === litersNeeded ? targetValue : Number((liters * unitPrice).toFixed(2)),
     dispensedLiters: 0,
     isFinished: false,
-    reservedLiters: reservation.reservedLiters
+    reservedLiters: liters
   };
   vehicle.assignedActor = actor;
 
@@ -4143,20 +4190,19 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const throughTrafficArchetype: VehicleArchetype =
     !stops && Math.abs(idHash) % 5 === 0 ? 'ev' : archetype;
 
+  // Whether this driver wants the tank filled or names a sum is read off the
+  // same id hash, for the same reason: no extra random roll. A charger has no
+  // sum to name — a battery is charged to full.
+  const wantsFull =
+    !!conf.requiresCharger || Math.abs(idHash) % 100 < FULL_TANK_SHARE * 100;
+
   state.vehicles[id] = {
     id,
     archetype: throughTrafficArchetype,
     fuelType,
     tankCapacity,
     currentFuel: Math.max(0, tankCapacity - demand),
-    request: {
-      mode: 'FULL',
-      targetValue: demand,
-      calculatedLiters: demand,
-      calculatedPrice: Number((demand * state.pricing[fuelType].playerPrice).toFixed(2)),
-      dispensedLiters: 0,
-      isFinished: false
-    },
+    request: driverRequest(demand, state.pricing[fuelType].playerPrice, wantsFull),
     // Somewhere to wait, a coffee, a toilet: a driver puts up with a queue
     // for longer at a station that gives them something to do.
     patience: conf.basePatienceSeconds * (1 + facilities.patience),
@@ -4998,13 +5044,15 @@ function tickEmployees(state: GameState, dt: number, effects: SimEffects): void 
       }
 
       // Attendants take a moment to greet the driver and pick the nozzle up.
+      // Then they pour what was asked for: a named sum is a named sum, not an
+      // invitation to fill the tank.
       employee.actionTimerSeconds -= dt;
       if (employee.actionTimerSeconds <= 0) {
         const started = beginFueling(
           state,
           vehicle,
-          'FULL',
-          vehicle.request.calculatedLiters,
+          vehicle.request.mode,
+          vehicle.request.targetValue,
           'EMPLOYEE',
           effects
         );

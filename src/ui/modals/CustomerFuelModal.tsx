@@ -42,10 +42,18 @@ function plateFor(id: string): string {
   return `${String(city).padStart(2, '0')} ${letters} ${num}`;
 }
 
+/** The sum the driver named, ready to sit in the amount box; empty for FULL. */
+function requestedText(vehicle: { request: { mode: string; targetValue: number } } | null): string {
+  return vehicle && vehicle.request.mode === 'MONEY' ? String(vehicle.request.targetValue) : '';
+}
+
 /**
- * The fuelling window: pick the customer's nozzle, give an amount or FULLE,
- * watch the meter run, hand over. The nozzle has to match what they asked
- * for — a station that pours petrol into a diesel engine does not get paid.
+ * The fuelling window: pick the customer's nozzle, then BAŞLAT for the sum
+ * they named or FULLE if they asked for a full tank, watch the meter run,
+ * hand over. The nozzle has to match what they asked for — a station that
+ * pours petrol into a diesel engine does not get paid. The driver's sum is
+ * already in the box when the window opens; FULLE is only live for a driver
+ * who actually asked for it.
  */
 export const CustomerFuelModal: React.FC = () => {
   const selectedVehicleId = useGameStore((s) => s.selectedVehicleId);
@@ -60,8 +68,15 @@ export const CustomerFuelModal: React.FC = () => {
   const vehicle = selectedVehicleId ? gameState.vehicles[selectedVehicleId] : null;
 
   const [chosenFuel, setChosenFuel] = useState<FuelType | null>(null);
-  const [amountText, setAmountText] = useState('');
+  const [amountText, setAmountText] = useState(() => requestedText(vehicle));
   const runIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // A different car at the window means a different request in the box.
+  useEffect(() => {
+    setAmountText(requestedText(vehicle));
+    setChosenFuel(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle?.id]);
 
   const isFueling = vehicle?.state === 'FUELING';
   const isFinished = !!vehicle && (vehicle.request.isFinished || vehicle.state === 'PAYMENT');
@@ -84,8 +99,10 @@ export const CustomerFuelModal: React.FC = () => {
 
   const pricing = gameState.pricing[vehicle.fuelType];
   const unitPrice = pricing.playerPrice;
+  const wantsFull = vehicle.request.mode === 'FULL';
   const demandLiters = vehicle.request.calculatedLiters || vehicle.request.targetValue || 30;
-  const requestPrice = Math.round(demandLiters * unitPrice);
+  // Whole lira, always: the sum the driver named, or a full tank's worth.
+  const requestPrice = wantsFull ? Math.round(demandLiters * unitPrice) : vehicle.request.targetValue;
   const dispensed = vehicle.request.dispensedLiters || 0;
   const runningTotal = dispensed * unitPrice;
   const conf = GAME_CONFIG.customerTypes[vehicle.archetype];
@@ -95,6 +112,8 @@ export const CustomerFuelModal: React.FC = () => {
   const nozzles = pump?.supportedFuels ?? FUEL_ORDER;
   const rightFuelChosen = chosenFuel === vehicle.fuelType;
   const amount = parseInt(amountText, 10);
+  const canStart = rightFuelChosen && amount > 0;
+  const canFill = rightFuelChosen && wantsFull;
 
   const start = (mode: 'MONEY' | 'FULL', value: number) => {
     if (!rightFuelChosen) return;
@@ -103,18 +122,22 @@ export const CustomerFuelModal: React.FC = () => {
   };
 
   const hint = !chosenFuel
-    ? 'Tabanca seç; tutar gir ya da FULLE'
+    ? wantsFull
+      ? 'Tabanca seç, sonra FULLE'
+      : 'Tabanca seç, sonra BAŞLAT'
     : !rightFuelChosen
       ? `Müşteri ${fuelConf.shortName} istiyor — doğru tabancayı seç`
       : isFueling
         ? 'Yakıt akıyor...'
         : isFinished
           ? 'Dolum tamam — teslim et'
-          : 'Tutar gir ya da bir tuşa bas';
+          : wantsFull
+            ? 'Müşteri depo istiyor — FULLE'
+            : `Müşteri ₺${requestPrice.toLocaleString('tr-TR')} istiyor — BAŞLAT`;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl text-slate-100 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 flex items-center justify-center md:justify-start p-4 md:pl-20 z-50 animate-fade-in select-none pointer-events-none">
+      <div className="pointer-events-auto bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl text-slate-100 flex flex-col overflow-hidden">
         {/* Header: who is at the pump */}
         <div className="px-5 pt-4 flex items-start justify-between">
           <div>
@@ -133,10 +156,16 @@ export const CustomerFuelModal: React.FC = () => {
               >
                 {fuelConf.shortName}
               </span>
-              <span className="text-lg font-black text-white font-mono">
-                ₺{requestPrice.toLocaleString('tr-TR')}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">{demandLiters.toFixed(1)} L</span>
+              {wantsFull ? (
+                <>
+                  <span className="text-lg font-black text-white font-mono tracking-wide">FULL DEPO</span>
+                  <span className="text-xs text-slate-400 font-mono">{Math.round(demandLiters)} L</span>
+                </>
+              ) : (
+                <span className="text-lg font-black text-white font-mono">
+                  ₺{requestPrice.toLocaleString('tr-TR')}
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -182,16 +211,22 @@ export const CustomerFuelModal: React.FC = () => {
           {/* Amount presets */}
           {!isFueling && !isFinished && (
             <>
+              {/* Presets put a sum in the box; BAŞLAT is what opens the tap. */}
               <div className="grid grid-cols-4 gap-1.5">
                 {PRESETS.map((v) => (
                   <button
                     key={v}
                     disabled={!rightFuelChosen}
-                    onClick={() => start('MONEY', v)}
+                    onClick={() => {
+                      sounds.playClick();
+                      setAmountText(String(v));
+                    }}
                     className={`py-2 rounded-lg font-bold text-[11px] font-mono transition-all ${
-                      rightFuelChosen
-                        ? 'bg-slate-950 hover:bg-slate-800 text-white border border-slate-700'
-                        : 'bg-slate-950/50 text-slate-600 border border-slate-800 cursor-not-allowed'
+                      !rightFuelChosen
+                        ? 'bg-slate-950/50 text-slate-600 border border-slate-800 cursor-not-allowed'
+                        : amount === v
+                          ? 'bg-slate-700 text-white border border-slate-400'
+                          : 'bg-slate-950 hover:bg-slate-800 text-white border border-slate-700'
                     }`}
                   >
                     ₺{v.toLocaleString('tr-TR')}
@@ -199,21 +234,22 @@ export const CustomerFuelModal: React.FC = () => {
                 ))}
               </div>
 
-              {/* Custom amount + start / full */}
+              {/* The sum + start / full */}
               <div className="flex gap-1.5">
                 <input
                   type="number"
                   min={10}
+                  step={1}
                   value={amountText}
-                  onChange={(e) => setAmountText(e.target.value)}
+                  onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ''))}
                   placeholder="₺ tutar gir"
                   className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-500"
                 />
                 <button
-                  disabled={!rightFuelChosen || !(amount > 0)}
+                  disabled={!canStart}
                   onClick={() => start('MONEY', amount)}
                   className={`px-4 rounded-xl font-black text-xs transition-all ${
-                    rightFuelChosen && amount > 0
+                    canStart
                       ? 'game-btn bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 border-2 border-emerald-300/60 text-white shadow-lg'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   }`}
@@ -221,10 +257,11 @@ export const CustomerFuelModal: React.FC = () => {
                   BAŞLAT
                 </button>
                 <button
-                  disabled={!rightFuelChosen}
+                  disabled={!canFill}
+                  title={wantsFull ? undefined : 'Bu müşteri depo istemiyor'}
                   onClick={() => start('FULL', demandLiters)}
                   className={`px-4 rounded-xl font-black text-xs transition-all ${
-                    rightFuelChosen
+                    canFill
                       ? 'game-btn bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 border-2 border-red-300/60 text-white shadow-lg'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   }`}

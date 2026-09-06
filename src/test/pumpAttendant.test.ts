@@ -140,4 +140,68 @@ describe('Pump Attendant (Pompacı) System', () => {
     // Cash earned from fuel sale automatically!
     expect(state.player.cash).toBeGreaterThan(initialCash);
   });
+
+  it('pours the sum the driver named instead of filling the tank', () => {
+    const { hirePumpAttendant } = useGameStore.getState();
+    hirePumpAttendant('pump_1');
+
+    const state = useGameStore.getState().gameState;
+    const pump = state.pumps['pump_1'];
+    const unitPrice = state.pricing.gasoline.playerPrice;
+
+    // Depoda 40 L boşluk var ama sürücü ₺250'lik istiyor.
+    const vehicleId = 'veh_money';
+    const vehicle: VehicleEntity = {
+      id: vehicleId,
+      archetype: 'family',
+      fuelType: 'gasoline',
+      tankCapacity: 50,
+      currentFuel: 10,
+      request: {
+        mode: 'MONEY',
+        targetValue: 250,
+        calculatedLiters: 250 / unitPrice,
+        calculatedPrice: 250,
+        dispensedLiters: 0,
+        isFinished: false
+      },
+      patience: 100,
+      maxPatience: 100,
+      satisfaction: 100,
+      state: 'AT_PUMP',
+      targetPumpId: 'pump_1',
+      assignedActor: null,
+      worldPosition: [pump.position[0] * 2, 0, pump.position[1] * 2],
+      targetWaypoint: null,
+      route: [],
+      routeProgress: 0,
+      speed: 0,
+      heading: 0,
+      waitingTimeSeconds: 0,
+      shoppingIntent: false
+    };
+    pump.currentVehicleId = vehicleId;
+    state.vehicles[vehicleId] = vehicle;
+
+    const effects = createEffects();
+    const initialCash = state.player.cash;
+    for (let i = 0; i < 60; i++) {
+      runSimulationTick(state, 0.5, effects);
+      if (vehicle.request.isFinished) break;
+    }
+
+    expect(vehicle.request.isFinished).toBe(true);
+    expect(vehicle.request.mode).toBe('MONEY');
+    // Tam ₺250'lik yakıt — depoyu fullemez.
+    expect(vehicle.request.dispensedLiters * unitPrice).toBeCloseTo(250, 2);
+    expect(vehicle.request.dispensedLiters).toBeLessThan(40);
+
+    for (let i = 0; i < 10; i++) {
+      runSimulationTick(state, 0.5, effects);
+      if (state.player.cash > initialCash) break;
+    }
+    // Kasaya ₺250 girer (üstüne bahşiş gelebilir); depo parası girmez.
+    expect(state.player.cash - initialCash).toBeGreaterThanOrEqual(250);
+    expect(state.player.cash - initialCash).toBeLessThan(250 + 100);
+  });
 });

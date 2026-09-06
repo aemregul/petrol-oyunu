@@ -146,7 +146,9 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
                 </span>
               ) : (
                 <span className="font-extrabold tracking-wide text-slate-200">
-                  {vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> ₺{Math.round(vehicle.request.calculatedLiters * unitPrice)}
+                  {vehicle.request.mode === 'MONEY'
+                    ? `₺${vehicle.request.targetValue.toLocaleString('tr-TR')}`
+                    : <>{vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> FULL</>}
                 </span>
               )}
             </div>

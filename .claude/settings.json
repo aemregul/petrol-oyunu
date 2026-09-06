@@ -328,7 +328,11 @@
       "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/frame_audit.mjs)",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c7648a55-86a6-4017-aed6-78cb274e15ff/scratchpad/aspect_sweep.mjs)",
-      "Bash(npx --prefix /Users/emre/petrol-oyunu vite-node -c ./probe.vite.config.mjs --options.server.fs.strict=false ./probe.ts)"
+      "Bash(npx --prefix /Users/emre/petrol-oyunu vite-node -c ./probe.vite.config.mjs --options.server.fs.strict=false ./probe.ts)",
+      "Bash(echo \"tsc exit=$?\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(NODE_PATH=/Users/emre/petrol-oyunu/node_modules node panel_shot.mjs panel)",
+      "Bash(node panel_shot.mjs panel)"
     ],
     "additionalDirectories": [
       "/private/tmp"
