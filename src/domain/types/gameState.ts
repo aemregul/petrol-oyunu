@@ -460,6 +460,13 @@ export interface GameNotification {
    * three things — it shows as a single "×3" toast.
    */
   count: number;
+  /**
+   * How long the toast should stay readable, in ms, when longer than usual.
+   * An event's explanation ("refinery hike: wholesale is 8% dearer today") is
+   * the only place the player learns what the card in the corner means, so
+   * it must not vanish with the four-second "customer lost" pills.
+   */
+  holdMs?: number;
 }
 
 /**

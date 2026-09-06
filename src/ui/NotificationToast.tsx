@@ -89,15 +89,25 @@ export const NotificationToast: React.FC = () => {
         .map((notif) => ({ notif, leaving: false }));
       return [...arriving, ...carried];
     });
-    for (const n of fresh) scheduleExit(n.id, TOAST_MS);
+    // An event's explanation asks for longer than the ordinary pill gets.
+    for (const n of fresh) scheduleExit(n.id, n.holdMs ?? TOAST_MS);
   }, [notifications, scheduleExit]);
 
   // A burst can put more on screen than the corner has room for. The oldest
-  // gives way at once rather than waiting out its own clock.
+  // gives way at once rather than waiting out its own clock. Ordinary pills go
+  // first: a held explanation is only pushed out by another explanation, so a
+  // run of "customer lost" pills cannot bury it before anyone has read it —
+  // while the stack still never climbs into the clean-station button.
   useEffect(() => {
     const standing = live.filter((t) => !t.leaving);
-    if (standing.length <= MAX_VISIBLE) return;
-    for (const t of standing.slice(MAX_VISIBLE)) scheduleExit(t.notif.id, 0);
+    const excess = standing.length - MAX_VISIBLE;
+    if (excess <= 0) return;
+    // `live` is newest first; reversing puts the oldest of each kind first.
+    const victims = [
+      ...standing.filter((t) => !t.notif.holdMs).reverse(),
+      ...standing.filter((t) => t.notif.holdMs).reverse()
+    ].slice(0, excess);
+    for (const t of victims) scheduleExit(t.notif.id, 0);
   }, [live, scheduleExit]);
 
   if (live.length === 0) return null;

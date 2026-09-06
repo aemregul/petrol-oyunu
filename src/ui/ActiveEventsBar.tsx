@@ -2,7 +2,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { ActiveGameEvent } from '../domain/types/gameState';
 import { FUEL_DEAL_DISCOUNT } from '../domain/services/simulationEngine';
-import { TONE_GLASS, TONE_TEXT, PILL_BODY, type Tone } from './gameStyle';
+import { TONE_GLASS, TONE_TEXT, type Tone } from './gameStyle';
 import {
   TrendingUp,
   TrendingDown,
@@ -46,45 +46,44 @@ const CATEGORY_TONES: Record<ActiveGameEvent['category'], Tone> = {
   OPPORTUNITY: 'green'
 };
 
-/** Shows what is currently affecting the station and how long it has left. */
 /**
- * A window that runs on the player's clock rather than the forecourt's, with
- * the seconds ticking down. Both of these last a minute of real time and are
- * the two moments in a day worth dropping everything for, so they are shown
- * the same way and read as a countdown rather than a badge.
+ * One line per thing affecting the station: an icon, a short name, the time
+ * it has left, and a thin bar draining underneath. No explanation here — that
+ * arrives as a long-lived toast in the opposite corner the moment the event
+ * starts, and lives on in the bell. The cards used to carry a sentence each
+ * and ate a third of a laptop screen (Emre, 2026-09-06).
  */
-const LiveWindow: React.FC<{
+const EventChip: React.FC<{
   title: string;
-  detail: string;
-  secondsLeft: number;
-  total: number;
+  timeLabel: string;
+  ratio: number;
   tone: Tone;
   icon: React.ElementType;
-}> = ({ title, detail, secondsLeft, total, tone, icon: Icon }) => (
-  // These two last a minute and are worth dropping everything for, so unlike
-  // the day-long events they breathe the whole time they are up.
-  <div className="animate-breathe">
-    <div className={`game-glass px-3 py-2.5 w-64 flex flex-col gap-2 ${TONE_GLASS[tone]}`}>
-      <div className="flex items-center gap-2.5">
+  breathe?: boolean;
+  hint?: string;
+}> = ({ title, timeLabel, ratio, tone, icon: Icon, breathe, hint }) => (
+  <div className={breathe ? 'animate-breathe' : undefined} title={hint}>
+    <div className={`game-glass px-3 py-2 w-60 flex flex-col gap-1.5 ${TONE_GLASS[tone]}`}>
+      <div className="flex items-center gap-2">
         <Icon className={`w-4 h-4 shrink-0 ${TONE_TEXT[tone]}`} />
-        <span className={`game-title text-[12px] flex-1 leading-tight break-words ${TONE_TEXT[tone]}`}>
+        <span className={`game-title text-[12px] flex-1 leading-tight truncate ${TONE_TEXT[tone]}`}>
           {title}
         </span>
         <span className={`text-[11px] font-mono font-extrabold shrink-0 tabular-nums ${TONE_TEXT[tone]}`}>
-          {Math.ceil(secondsLeft)} s
+          {timeLabel}
         </span>
       </div>
-      <p className={`text-[11px] font-semibold leading-snug ${PILL_BODY}`}>{detail}</p>
-      <div className="h-1.5 rounded-full bg-black/40 overflow-hidden">
+      <div className="h-1 rounded-full bg-black/40 overflow-hidden">
         <div
-          className="h-full rounded-full bg-white/60"
-          style={{ width: `${Math.max(0, Math.min(1, secondsLeft / total)) * 100}%` }}
+          className="h-full rounded-full bg-white/60 transition-all duration-500"
+          style={{ width: `${Math.max(0, Math.min(1, ratio)) * 100}%` }}
         />
       </div>
     </div>
   </div>
 );
 
+/** Shows what is currently affecting the station and how long it has left. */
 export const ActiveEventsBar: React.FC = () => {
   const activeEvents = useGameStore((s) => s.gameState.activeEvents);
   const rushLeft = useGameStore((s) => s.gameState.dayState.rushSecondsLeft ?? 0);
@@ -103,80 +102,60 @@ export const ActiveEventsBar: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col gap-2 pointer-events-auto">
+    <div className="flex flex-col gap-1.5 items-end pointer-events-auto">
       {gasolineCritical && (
         <button
           onClick={() => setActiveModal('FUEL_ORDER')}
           className="animate-breathe text-left"
+          title="Depo %15'in altında — sipariş vermek için tıklayın"
         >
-          <div className={`game-glass px-3 py-2.5 w-64 flex flex-col gap-1 ${TONE_GLASS.red}`}>
-            <div className="flex items-center gap-2.5">
-              <ShieldAlert className={`w-4 h-4 shrink-0 ${TONE_TEXT.red}`} />
-              <span className={`game-title text-[12px] flex-1 leading-tight ${TONE_TEXT.red}`}>
-                Kritik Stok: Benzin
-              </span>
-            </div>
-            <p className={`text-[11px] font-semibold leading-snug ${PILL_BODY}`}>
-              Depo %15'in altında — sipariş vermek için tıklayın.
-            </p>
+          <div className={`game-glass px-3 py-2 w-60 flex items-center gap-2 ${TONE_GLASS.red}`}>
+            <ShieldAlert className={`w-4 h-4 shrink-0 ${TONE_TEXT.red}`} />
+            <span className={`game-title text-[12px] flex-1 leading-tight truncate ${TONE_TEXT.red}`}>
+              Kritik Stok: Benzin
+            </span>
+            <span className={`text-[11px] font-extrabold shrink-0 ${TONE_TEXT.red}`}>Sipariş ›</span>
           </div>
         </button>
       )}
       {dealLeft > 0 && (
-        <LiveWindow
-          title={`Toptan Yakıt İndirimi %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`}
-          detail="Tedarikçi alış fiyatını indirdi. Satış fiyatınız değişmez — depoları şimdi doldurun."
-          secondsLeft={dealLeft}
-          total={60}
+        <EventChip
+          title={`Yakıtta İndirim %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`}
+          hint="Tedarikçi alış fiyatını indirdi; satış fiyatınız değişmez — depoları şimdi doldurun."
+          timeLabel={`${Math.ceil(dealLeft)} s`}
+          ratio={dealLeft / 60}
           tone="green"
           icon={TrendingDown}
+          breathe
         />
       )}
       {rushLeft > 0 && (
-        <LiveWindow
+        <EventChip
           title="Müşteri Yoğunluğu"
-          detail="Yola araç yığıldı; çok daha fazla sürücü uğruyor."
-          secondsLeft={rushLeft}
-          total={60}
+          hint="Yola araç yığıldı; çok daha fazla sürücü uğruyor."
+          timeLabel={`${Math.ceil(rushLeft)} s`}
+          ratio={rushLeft / 60}
           tone="blue"
           icon={Car}
+          breathe
         />
       )}
       {activeEvents.map((event) => {
-        const Icon = EVENT_ICONS[event.icon] || Sparkles;
-        const tone = CATEGORY_TONES[event.category];
-        const remainingRatio =
-          event.totalHours > 0 ? Math.max(0, event.remainingHours / event.totalHours) : 0;
-
         const minutesLeft = Math.max(0, Math.round(event.remainingHours * 60));
         const timeLabel =
           minutesLeft >= 60
             ? `${Math.floor(minutesLeft / 60)} sa ${minutesLeft % 60} dk`
             : `${minutesLeft} dk`;
-
         return (
-          <div
+          <EventChip
             key={event.id}
-            className={`game-glass px-3 py-2.5 w-64 flex flex-col gap-2 ${TONE_GLASS[tone]}`}
-            title={event.description}
-          >
-            <div className="flex items-center gap-2.5">
-              <Icon className={`w-4 h-4 shrink-0 ${TONE_TEXT[tone]}`} />
-              <span className={`game-title text-[12px] flex-1 leading-tight break-words ${TONE_TEXT[tone]}`}>
-                {event.name}
-              </span>
-              <span className={`text-[11px] font-mono font-extrabold shrink-0 tabular-nums ${TONE_TEXT[tone]}`}>
-                {timeLabel}
-              </span>
-            </div>
-
-            <div className="w-full h-1.5 bg-black/30 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-white/60 transition-all duration-500"
-                style={{ width: `${remainingRatio * 100}%` }}
-              />
-            </div>
-          </div>
+            title={event.name}
+            hint={event.description}
+            timeLabel={timeLabel}
+            ratio={event.totalHours > 0 ? event.remainingHours / event.totalHours : 0}
+            tone={CATEGORY_TONES[event.category]}
+            icon={EVENT_ICONS[event.icon] || Sparkles}
+          />
         );
       })}
     </div>

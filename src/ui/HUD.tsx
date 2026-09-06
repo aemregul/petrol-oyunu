@@ -197,7 +197,9 @@ export const HUD: React.FC = () => {
           </div>
         </div>
 
-        {/* Top-Right: Reputation, Level & XP */}
+        {/* Top-Right: Reputation, Level & XP, with the day's events stacked
+            beneath — the one corner nothing else on the forecourt needs. */}
+        <div className="flex flex-col items-end gap-2 min-w-0">
         <div className="hud-reputation-card game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
           {/* Reputation Stars */}
           <div className="flex items-center gap-1.5 border-r border-slate-700/80 pr-3">
@@ -223,6 +225,13 @@ export const HUD: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+
+        {/* Kritik stok uyarısı ekranın ortasını işgal etmez: sağ üstteki olay
+            kartlarının arasında, ActiveEventsBar'ın tepesinde yaşar. */}
+        <div className="hud-events">
+          <ActiveEventsBar />
+        </div>
         </div>
       </div>
 
@@ -476,11 +485,6 @@ export const HUD: React.FC = () => {
           </div>
         )}
 
-        {/* Kritik stok uyarısı ekranın ortasını işgal etmez: sağdaki olay
-            kartlarının arasında, ActiveEventsBar'ın tepesinde yaşar. */}
-        <div className="hud-events">
-          <ActiveEventsBar />
-        </div>
       </div>
 
       <TankerStatusBar />

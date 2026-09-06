@@ -56,31 +56,15 @@
     max-width: min(20rem, calc(100vw - 1rem));
   }
 
+  /*
+   * The event cards hang under the reputation card in the top-right corner,
+   * in every mode. They used to sit mid-height on the right and, while
+   * placing a structure, shift left by the placement dock's width — which on
+   * a laptop screen dropped the stack onto the forecourt (Emre, 2026-09-06).
+   * Nothing clips them: a clipped card reads as a bug, not a card.
+   */
   .hud-events {
     min-width: 0;
-    transition: margin-right 150ms ease;
-  }
-
-  /*
-   * While placing a structure the event cards leave the middle of the screen
-   * and stack in the lower-right corner, directly above the placement dock.
-   * They used to stay mid-height and shift left by the dock's width, which on
-   * a laptop screen dropped the whole stack onto the forecourt (Emre,
-   * 2026-09-06). The stack is capped so a busy day never climbs into the top
-   * bar; the newest cards sit nearest the dock.
-   */
-  .hud-building .hud-events {
-    position: fixed;
-    right: var(--hud-edge);
-    bottom: calc(var(--hud-bottom-clearance) + var(--placement-dock-height) + 0.5rem);
-    margin-right: 0;
-    max-height: calc(100vh - var(--hud-bottom-clearance) - var(--placement-dock-height) - 5.5rem);
-    overflow-y: auto;
-    scrollbar-width: none;
-  }
-
-  .hud-building .hud-events::-webkit-scrollbar {
-    display: none;
   }
 
   .hud-nav {
@@ -130,7 +114,7 @@
     }
 
     .hud-events .game-glass {
-      width: min(14rem, calc(100vw - var(--placement-dock-width) - 2rem));
+      width: min(14rem, calc(100vw - 2rem));
     }
   }
 
@@ -165,8 +149,8 @@
       height: 0.875rem;
     }
 
-    .hud-building .hud-events .game-glass {
-      width: min(16rem, calc(100vw - 0.75rem));
+    .hud-events .game-glass {
+      width: min(12rem, calc(100vw - 0.75rem));
     }
   }
 

@@ -82,10 +82,18 @@ function notify(
   effects: SimEffects,
   type: GameNotification['type'],
   title: string,
-  message: string
+  message: string,
+  holdMs?: number
 ): void {
-  effects.notifications.push({ type, title, message });
+  effects.notifications.push(holdMs ? { type, title, message, holdMs } : { type, title, message });
 }
+
+/**
+ * How long an event's explanation stays on screen. The card in the corner
+ * only names the event; this toast is where "Rafineri Zammı" is explained,
+ * and it has to outlive the ordinary four-second pills to be read.
+ */
+export const EVENT_TOAST_HOLD_MS = 12_000;
 
 function playCue(effects: SimEffects, cue: SoundCue): void {
   if (!effects.sounds.includes(cue)) effects.sounds.push(cue);
@@ -2702,7 +2710,7 @@ export function triggerEvent(
   state.todayEventIds.push(config.id);
 
   const tone = config.category === 'INCIDENT' ? 'CRITICAL' : config.category === 'OPPORTUNITY' ? 'REWARD' : 'INFO';
-  notify(effects, tone, config.name, description);
+  notify(effects, tone, config.name, description, EVENT_TOAST_HOLD_MS);
   playCue(effects, config.category === 'INCIDENT' ? 'alert' : 'levelUp');
 
   return event;
@@ -3773,7 +3781,8 @@ function tickFuelDeal(state: GameState, dt: number, effects: SimEffects): void {
     effects,
     'INFO',
     `Toptan Yakıt İndirimi! %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`,
-    'Tedarikçi bir dakikalığına tüm yakıtlarda alış fiyatını indirdi — depoları şimdi doldurun.'
+    'Tedarikçi bir dakikalığına tüm yakıtlarda alış fiyatını indirdi — depoları şimdi doldurun.',
+    EVENT_TOAST_HOLD_MS
   );
 }
 
@@ -3803,7 +3812,8 @@ function tickRush(state: GameState, dt: number, effects: SimEffects): void {
     effects,
     'INFO',
     'Müşteri Yoğunluğu!',
-    'Yola araç yığıldı — birkaç dakika boyunca çok daha fazla müşteri uğrayacak.'
+    'Yola araç yığıldı — birkaç dakika boyunca çok daha fazla müşteri uğrayacak.',
+    EVENT_TOAST_HOLD_MS
   );
 }
 
