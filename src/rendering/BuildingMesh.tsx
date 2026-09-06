@@ -259,6 +259,57 @@ const SIGNAGE: Record<
   ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, color: '#ea580c', textColor: '#ffffff' }
 };
 
+/**
+ * What a structure looks like, and nothing else: the model or hand-built
+ * body plus its name board, in the structure's own frame. The forecourt's
+ * BuildingMesh wraps this with position, clicks and selection; the build
+ * preview draws the same body as a ghost so the player sees the actual
+ * building they are placing rather than a wire box.
+ */
+export const BuildingBody: React.FC<{ building: BuildingEntity }> = ({ building }) => {
+  const signage = SIGNAGE[building.type];
+  const CustomFacility = CUSTOM_FACILITIES[building.type];
+
+  const body = CustomFacility ? (
+    <CustomFacility building={building} />
+  ) : hasBuildingModel(building.type) ? (
+    <ModelErrorBoundary fallback={<FallbackGeometry building={building} />}>
+      <Suspense fallback={<FallbackGeometry building={building} />}>
+        <BuildingModel type={building.type} footprint={building.size} sign={signage} />
+      </Suspense>
+    </ModelErrorBoundary>
+  ) : building.type === 'pylon_sign' ? (
+    <PylonSign />
+  ) : building.type === 'price_sign' ? (
+    <PriceTotem level={building.level} />
+  ) : building.type === 'light_pole' ? (
+    <LightPole />
+  ) : building.type.startsWith('tank_') ? (
+    <TankFixtures building={building} />
+  ) : (
+    <FallbackGeometry building={building} />
+  );
+
+  return (
+    <>
+      {body}
+
+      {/* Models carry their own board, hung from the geometry they actually
+          have. Everything else is hand-built to a known height, so the board
+          goes straight on top of it. */}
+      {signage?.height !== undefined && (
+        <FasciaSign
+          text={signage.text}
+          color={signage.color}
+          textColor={signage.textColor}
+          width={Math.max(2.2, building.size[0] * 2 * 0.78)}
+          y={signage.height}
+        />
+      )}
+    </>
+  );
+};
+
 export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const [hovered, setHovered] = useState(false);
   const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
@@ -306,31 +357,6 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
     else if (building.type === 'pylon_sign') setActiveModal('SETTINGS');
   };
 
-  const signage = SIGNAGE[building.type];
-  const ringRadius = Math.max(building.size[0], building.size[1]) + 0.4;
-
-  const CustomFacility = CUSTOM_FACILITIES[building.type];
-
-  const body = CustomFacility ? (
-    <CustomFacility building={building} />
-  ) : hasBuildingModel(building.type) ? (
-    <ModelErrorBoundary fallback={<FallbackGeometry building={building} />}>
-      <Suspense fallback={<FallbackGeometry building={building} />}>
-        <BuildingModel type={building.type} footprint={building.size} sign={signage} />
-      </Suspense>
-    </ModelErrorBoundary>
-  ) : building.type === 'pylon_sign' ? (
-    <PylonSign />
-  ) : building.type === 'price_sign' ? (
-    <PriceTotem level={building.level} />
-  ) : building.type === 'light_pole' ? (
-    <LightPole />
-  ) : building.type.startsWith('tank_') ? (
-    <TankFixtures building={building} />
-  ) : (
-    <FallbackGeometry building={building} />
-  );
-
   return (
     <group
       position={[posX, 0, posZ]}
@@ -342,20 +368,7 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
       }}
       onPointerOut={() => setHovered(false)}
     >
-      {body}
-
-      {/* Models carry their own board, hung from the geometry they actually
-          have. Everything else is hand-built to a known height, so the board
-          goes straight on top of it. */}
-      {signage?.height !== undefined && (
-        <FasciaSign
-          text={signage.text}
-          color={signage.color}
-          textColor={signage.textColor}
-          width={Math.max(2.2, building.size[0] * 2 * 0.78)}
-          y={signage.height}
-        />
-      )}
+      <BuildingBody building={building} />
 
       {/* Only while rearranging does a structure show that it can be picked
           up, and it shows it as the ground it stands on rather than as a ring
