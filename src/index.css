@@ -61,8 +61,26 @@
     transition: margin-right 150ms ease;
   }
 
+  /*
+   * While placing a structure the event cards leave the middle of the screen
+   * and stack in the lower-right corner, directly above the placement dock.
+   * They used to stay mid-height and shift left by the dock's width, which on
+   * a laptop screen dropped the whole stack onto the forecourt (Emre,
+   * 2026-09-06). The stack is capped so a busy day never climbs into the top
+   * bar; the newest cards sit nearest the dock.
+   */
   .hud-building .hud-events {
-    margin-right: calc(var(--placement-dock-width) + 0.75rem);
+    position: fixed;
+    right: var(--hud-edge);
+    bottom: calc(var(--hud-bottom-clearance) + var(--placement-dock-height) + 0.5rem);
+    margin-right: 0;
+    max-height: calc(100vh - var(--hud-bottom-clearance) - var(--placement-dock-height) - 5.5rem);
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .hud-building .hud-events::-webkit-scrollbar {
+    display: none;
   }
 
   .hud-nav {
@@ -145,13 +163,6 @@
     .hud-nav > button svg {
       width: 0.875rem;
       height: 0.875rem;
-    }
-
-    .hud-building .hud-events {
-      position: fixed;
-      right: var(--hud-edge);
-      bottom: calc(var(--hud-bottom-clearance) + var(--placement-dock-height) + 0.5rem);
-      margin-right: 0;
     }
 
     .hud-building .hud-events .game-glass {
