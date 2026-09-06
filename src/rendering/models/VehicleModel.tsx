@@ -1,88 +1,89 @@
-import React, { useMemo, useRef } from 'react';
-import { useGLTF } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
+import React, { useMemo } from 'react';
+import { useFBX } from '@react-three/drei';
 import * as THREE from 'three';
-import { VehicleArchetype } from '../../domain/types/gameState';
-import { VEHICLE_MODELS, VEHICLE_MODEL_URLS } from './vehicleModels';
+import { VehicleArchetype, VehicleModelVariant } from '../../domain/types/gameState';
+import {
+  DEFAULT_VEHICLE_MODEL,
+  VEHICLE_MODELS,
+  VEHICLE_MODEL_URLS
+} from './vehicleModels';
 import { ElectricVehicleModel } from './ElectricVehicleModel';
 
 interface VehicleModelProps {
   archetype: VehicleArchetype;
   vehicleId: string;
+  modelVariant?: VehicleModelVariant;
   /** Metres travelled this frame, used to roll the wheels realistically. */
   speed: number;
 }
 
-/**
- * Only the four road wheels turn. The kit names them
- * `wheel-{front,back}-{left,right}`, while the spare bolted to the SUV's
- * tailgate is a bare `wheel-back` — matching on the side suffix keeps that one
- * still instead of spinning a tyre attached to the bodywork.
- */
 function isRoadWheel(name: string): boolean {
-  return name.startsWith('wheel-') && (name.endsWith('-left') || name.endsWith('-right'));
+  return name.toLowerCase().includes('wheel');
 }
 
-/**
- * Renders one Kenney vehicle. The loaded scene is shared between every car of
- * the same archetype, so it is cloned per instance and its material cloned
- * alongside it — otherwise tinting one car would tint all of them.
- */
-const KenneyVehicleModel: React.FC<VehicleModelProps> = ({ archetype, speed }) => {
-  const config = VEHICLE_MODELS[archetype] || VEHICLE_MODELS.commuter;
-  const { scene } = useGLTF(config.url);
-  const wheelsRef = useRef<THREE.Object3D[]>([]);
+const AssetVehicleModel: React.FC<Required<Pick<VehicleModelProps, 'modelVariant'>>> = ({
+  modelVariant
+}) => {
+  const config = VEHICLE_MODELS[modelVariant];
+  const source = useFBX(config.url);
 
-  const { model, groundOffset } = useMemo(() => {
-    const clone = scene.clone(true);
-    const wheels: THREE.Object3D[] = [];
-
+  const { model, offset } = useMemo(() => {
+    const clone = source.clone(true);
     clone.traverse((child) => {
-      if (isRoadWheel(child.name)) wheels.push(child);
-
       if (!(child instanceof THREE.Mesh)) return;
+
+      if (isRoadWheel(child.name)) {
+        // The FBX pack already contains the correct wheel pose. Its meshes do
+        // not share one pivot convention, so rotating them generically makes
+        // some tyres orbit the car or turn edge-on. Keep them static; at the
+        // game's isometric scale this looks cleaner and preserves every model.
+        child.scale.multiplyScalar(config.wheelScale ?? 1);
+        child.position.x *= config.wheelTrackScale ?? 1;
+      }
+
       child.castShadow = true;
       child.receiveShadow = true;
-
-      // Clone the material so a tint stays local to this vehicle.
-      const source = child.material as THREE.MeshStandardMaterial;
-      const material = source.clone();
-      if (config.tint && !child.name.startsWith('wheel')) {
-        material.color = new THREE.Color(config.tint);
-      }
-      material.roughness = 0.55;
-      material.metalness = archetype === 'luxury' ? 0.45 : 0.1;
-      child.material = material;
+      const sources = Array.isArray(child.material) ? child.material : [child.material];
+      const materials = sources.map((sourceMaterial) => {
+        const material = sourceMaterial.clone();
+        if ('roughness' in material) {
+          (material as THREE.MeshStandardMaterial).roughness = 0.48;
+        }
+        return material;
+      });
+      child.material = Array.isArray(child.material) ? materials : materials[0];
     });
 
-    wheelsRef.current = wheels;
-
-    // Measure the model rather than trusting a hand-tuned offset: sit its
-    // lowest point exactly on the ground, whatever the model's own origin is.
-    clone.scale.setScalar(config.scale);
     clone.updateMatrixWorld(true);
+    const rawBounds = new THREE.Box3().setFromObject(clone);
+    const rawSize = rawBounds.getSize(new THREE.Vector3());
+    const scale = config.targetLength / Math.max(rawSize.z, 0.001);
+    clone.scale.multiplyScalar(scale);
+    clone.updateMatrixWorld(true);
+
     const bounds = new THREE.Box3().setFromObject(clone);
+    const center = bounds.getCenter(new THREE.Vector3());
+    return {
+      model: clone,
+      offset: new THREE.Vector3(-center.x, -bounds.min.y, -center.z)
+    };
+  }, [source, config.targetLength, config.wheelScale, config.wheelTrackScale]);
 
-    return { model: clone, groundOffset: -bounds.min.y };
-  }, [scene, config.tint, config.scale, archetype]);
-
-  useFrame((_, delta) => {
-    if (speed <= 0.01) return;
-    // Roughly one rotation per wheel circumference travelled.
-    const spin = speed * delta * 4;
-    for (const wheel of wheelsRef.current) wheel.rotation.x -= spin;
-  });
-
-  // Scale is baked into the clone above, so only the ground offset is applied.
-  return <primitive object={model} position={[0, groundOffset, 0]} />;
+  return <primitive object={model} position={offset} />;
 };
 
-export const VehicleModel: React.FC<VehicleModelProps> = ({ archetype, vehicleId, speed }) => {
+export const VehicleModel: React.FC<VehicleModelProps> = ({
+  archetype,
+  vehicleId,
+  modelVariant,
+  speed
+}) => {
   if (archetype === 'ev') {
     return <ElectricVehicleModel vehicleId={vehicleId} speed={speed} />;
   }
 
-  return <KenneyVehicleModel archetype={archetype} vehicleId={vehicleId} speed={speed} />;
+  const selected = modelVariant ?? DEFAULT_VEHICLE_MODEL[archetype];
+  return <AssetVehicleModel modelVariant={selected} />;
 };
 
-for (const url of VEHICLE_MODEL_URLS) useGLTF.preload(url);
+for (const url of VEHICLE_MODEL_URLS) useFBX.preload(url);

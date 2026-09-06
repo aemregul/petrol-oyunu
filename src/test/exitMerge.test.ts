@@ -65,7 +65,7 @@ describe('leaving the forecourt', () => {
         const effects = createEffects();
 
         let struck = 0;
-        let insideLane = 0;
+        const insideLaneDetails: string[] = [];
         let worstBlocked = 0;
         let exitTicks = 0;
         let passTicks = 0;
@@ -84,8 +84,17 @@ describe('leaving the forecourt', () => {
             if (v.state !== 'EXIT') continue;
             exitTicks++;
             const away = Math.abs(v.worldPosition[2] - block.roadLaneZ);
-            const stopped = (v.blockedSeconds ?? 0) > 0.5;
-            if (stopped && away < LAYOUT.roadHalfWidth) insideLane++;
+            // Mixed traffic now has intentionally different cruising speeds;
+            // a brief pause behind a bus is ordinary following, not a driver
+            // waiting for a merge gap with their nose in the carriageway.
+            const stopped = (v.blockedSeconds ?? 0) > 3;
+            if (stopped && away < LAYOUT.roadHalfWidth) {
+              insideLaneDetails.push(
+                `${v.archetype}/${v.modelVariant ?? '-'} ${away.toFixed(2)} ` +
+                  `${(v.blockedSeconds ?? 0).toFixed(2)}s @ ` +
+                  `${v.worldPosition[0].toFixed(2)},${v.worldPosition[2].toFixed(2)}`
+              );
+            }
           }
 
           for (const exiting of vs.filter((v) => v.state === 'EXIT')) {
@@ -105,7 +114,7 @@ describe('leaving the forecourt', () => {
         expect(passTicks).toBeGreaterThan(500);
 
         expect(struck).toBe(0);
-        expect(insideLane).toBe(0);
+        expect(insideLaneDetails).toEqual([]);
         // The 30-second knot this test was written for; ordinary give-way
         // waits are a few seconds.
         expect(worstBlocked).toBeLessThan(12);

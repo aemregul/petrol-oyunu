@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
-import { createEffects, runSimulationTick } from '../domain/services/simulationEngine';
+import {
+  createEffects,
+  runSimulationTick,
+  vehicleBodyHalfExtents
+} from '../domain/services/simulationEngine';
 import { evaluatePlacement, getFootprint, snapPlacement } from '../domain/services/placement';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState } from '../domain/types/gameState';
@@ -19,20 +23,23 @@ const FLAT = ['canopy', 'car_park', 'truck_park', 'wide_entry', 'wide_exit'];
 /** Posts a car parks against, the way it parks against a pump island. */
 const SERVICE = ['ev_charger_ac', 'ev_charger_dc'];
 
-const HALF_LENGTH = 0.9;
-const HALF_WIDTH = 0.43;
-
 const TYPES = [
   'hotel', 'mini_market', 'cafe', 'restaurant', 'toilet', 'car_wash', 'oil_change',
   'tyre_service', 'ev_storage', 'ev_substation', 'ev_charger_ac', 'rest_complex', 'decoration'
 ];
 
-function corners(x: number, z: number, heading: number): Array<[number, number]> {
+function corners(
+  x: number,
+  z: number,
+  heading: number,
+  halfLength: number,
+  halfWidth: number
+): Array<[number, number]> {
   const ahead = Math.sin(heading);
   const across = Math.cos(heading);
   const out: Array<[number, number]> = [];
-  for (const along of [-HALF_LENGTH, HALF_LENGTH]) {
-    for (const side of [-HALF_WIDTH, HALF_WIDTH]) {
+  for (const along of [-halfLength, halfLength]) {
+    for (const side of [-halfWidth, halfWidth]) {
       out.push([x + ahead * along + across * side, z + across * along - ahead * side]);
     }
   }
@@ -142,7 +149,8 @@ function round(rnd: () => number, seconds: number): string[] {
 
     for (const vehicle of Object.values(state.vehicles)) {
       const [x, , z] = vehicle.worldPosition;
-      const body = corners(x, z, vehicle.heading);
+      const bodySize = vehicleBodyHalfExtents(vehicle);
+      const body = corners(x, z, vehicle.heading, bodySize.length, bodySize.width);
 
       const legs: Array<[[number, number], [number, number]]> = [];
       let at: [number, number] = [x, z];
@@ -165,6 +173,12 @@ function round(rnd: () => number, seconds: number): string[] {
 
         hits.add(
           `${building.type}@${building.position.join(',')} <- ${vehicle.state}` +
+            ` ${vehicle.archetype}/${vehicle.modelVariant ?? '-'} @ ` +
+            `${vehicle.worldPosition[0].toFixed(2)},${vehicle.worldPosition[2].toFixed(2)}` +
+            ` yol ${[vehicle.targetWaypoint, ...vehicle.route]
+              .filter(Boolean)
+              .map((p) => `${p![0].toFixed(1)},${p![2].toFixed(1)}`)
+              .join('>')}` +
             `${inside ? '' : ' (rota)'} | pompa ${Object.values(state.pumps)
               .map((p) => p.position.join(','))
               .join(' ')}`

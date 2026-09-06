@@ -5,7 +5,43 @@
 
 export type FuelType = 'gasoline' | 'diesel' | 'lpg';
 
-export type VehicleArchetype = 'commuter' | 'family' | 'taxi' | 'courier' | 'commercial' | 'truck' | 'luxury' | 'ev';
+export type VehicleArchetype =
+  | 'commuter'
+  | 'family'
+  | 'taxi'
+  | 'courier'
+  | 'commercial'
+  | 'truck'
+  | 'luxury'
+  | 'ev'
+  | 'police'
+  | 'ambulance'
+  | 'firetruck'
+  | 'bus'
+  | 'monster';
+
+export type VehicleModelVariant =
+  | 'sedan'
+  | 'hatchback'
+  | 'suv'
+  | 'taxi'
+  | 'van'
+  | 'pickup'
+  | 'truck'
+  | 'truck-with-trailer'
+  | 'sports'
+  | 'roadster'
+  | 'muscle'
+  | 'muscle-2'
+  | 'limousine'
+  | 'police-sedan'
+  | 'police-suv'
+  | 'police-sports'
+  | 'police-muscle'
+  | 'ambulance'
+  | 'firetruck'
+  | 'bus'
+  | 'monster-truck';
 
 export type VehicleState =
   | 'SPAWN'
@@ -112,6 +148,8 @@ export interface PumpEntity {
 export interface VehicleEntity {
   id: string;
   archetype: VehicleArchetype;
+  /** Stable visual body selected when this road user is spawned. */
+  modelVariant?: VehicleModelVariant;
   fuelType: FuelType;
   tankCapacity: number;
   currentFuel: number;

@@ -571,6 +571,16 @@ function plot(
     ),
     ...(extraRects ?? [])
   ];
+  // A route may end outside the apron (normally on the highway), but the
+  // clipped point where it leaves the plot must still be a real opening. The
+  // path search deliberately allows its goal cell so a car can pull up beside
+  // a wall; without this core check it also allowed an exit leg to terminate
+  // in a building that happened to cover the driveway.
+  const hardCores = [
+    ...wallRects(state, side, 0, ignoreBuildingId),
+    ...pumpRects(state, side, ignorePumpId, 0),
+    ...(extraRects ?? [])
+  ];
 
   if (rects.length === 0 || waypoints.length === 0) return waypoints;
 
@@ -586,6 +596,7 @@ function plot(
       // is on the plot. The rest runs through the mouth, which is the one way
       // in and out and not something to find an alternative to.
       const [a, b] = clipToApron(from, to, bounds);
+      if (inRects(hardCores, b[0], b[1])) return null;
       const path = detour(turning, a, b, bounds);
       if (!path) return null;
 

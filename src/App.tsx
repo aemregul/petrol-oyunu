@@ -6,7 +6,11 @@ import { NotificationToast } from './ui/NotificationToast';
 import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
-import { ElectricVehicleShowcase, ModelShowcase } from './rendering/ModelShowcase';
+import {
+  ElectricVehicleShowcase,
+  ModelShowcase,
+  PumpDockingShowcase
+} from './rendering/ModelShowcase';
 import { BuildingShowcase } from './rendering/BuildingShowcase';
 
 /** Pixels of virtual drag one arrow-key press is worth. */
@@ -108,6 +112,7 @@ export const App: React.FC = () => {
     const showcase = new URLSearchParams(window.location.search).get('showcase');
     if (showcase === 'buildings') return <BuildingShowcase />;
     if (showcase === 'ev') return <ElectricVehicleShowcase />;
+    if (showcase === 'docking') return <PumpDockingShowcase />;
     if (showcase) return <ModelShowcase />;
   }
 

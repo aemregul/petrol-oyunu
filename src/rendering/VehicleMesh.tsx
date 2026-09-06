@@ -19,6 +19,25 @@ interface VehicleMeshProps {
   vehicle: VehicleEntity;
 }
 
+function getRequestHeight(modelVariant: VehicleEntity['modelVariant']): number {
+  switch (modelVariant) {
+    case 'firetruck':
+      return 4.5;
+    case 'bus':
+    case 'truck-with-trailer':
+      return 4.2;
+    case 'truck':
+      return 4;
+    case 'ambulance':
+    case 'monster-truck':
+      return 3.7;
+    case 'van':
+      return 3.1;
+    default:
+      return 2.5;
+  }
+}
+
 export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
   const openFuelingPanel = useGameStore((s) => s.openFuelingPanelForVehicle);
 
@@ -81,6 +100,16 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         return '#ffffff'; // Beyaz ticari
       case 'truck':
         return '#0284c7'; // Kamyon
+      case 'police':
+        return '#e2e8f0';
+      case 'ambulance':
+        return '#ffffff';
+      case 'firetruck':
+        return '#dc2626';
+      case 'bus':
+        return '#2563eb';
+      case 'monster':
+        return '#0ea5e9';
       case 'luxury':
         return '#0f172a'; // Siyah lüks spor
       default:
@@ -90,6 +119,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
 
   const carColor = getCarColor();
   const patienceRatio = Math.max(0, vehicle.patience / vehicle.maxPatience);
+  const requestHeight = getRequestHeight(vehicle.modelVariant);
 
   return (
     <group
@@ -100,12 +130,13 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         if (needsService) openFuelingPanel(vehicle.id);
       }}
     >
-      {/* Vehicle body: Kenney CC0 model, primitives kept as a fallback */}
+      {/* Vehicle body: RgsDev CC0 model, primitives kept as a fallback. */}
       <ModelErrorBoundary fallback={<FallbackBody color={carColor} />}>
         <Suspense fallback={<FallbackBody color={carColor} />}>
           <VehicleModel
             archetype={vehicle.archetype}
             vehicleId={vehicle.id}
+            modelVariant={vehicle.modelVariant}
             speed={isMoving ? vehicle.speed : 0}
           />
         </Suspense>
@@ -114,7 +145,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
       {/* Request bubble, only while the customer is waiting to be served */}
       {(needsService || isFueling) && (
         <Html
-          position={[0, vehicle.archetype === 'truck' ? 3.8 : 2.5, 0]}
+          position={[0, requestHeight, 0]}
           center
           distanceFactor={20}
           zIndexRange={[5, 0]}
