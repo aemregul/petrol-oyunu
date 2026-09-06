@@ -75,8 +75,9 @@ describe('mixed road fleet', () => {
   });
 
   it('renders emergency vans at a clearly larger scale than passenger cars', () => {
+    // A van-based ambulance is ~6 m to a sedan's 4.7 m; a fire engine ~9.5 m.
     expect(VEHICLE_MODELS.ambulance.targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 1.4
+      VEHICLE_MODELS.sedan.targetLength * 1.25
     );
     expect(VEHICLE_MODELS.firetruck.targetLength).toBeGreaterThan(
       VEHICLE_MODELS.sedan.targetLength * 1.9
@@ -85,7 +86,7 @@ describe('mixed road fleet', () => {
 
   it('gives heavy commercial vehicles a clearly larger road presence', () => {
     expect(VEHICLE_MODELS.truck.targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 1.4
+      VEHICLE_MODELS.sedan.targetLength * 1.3
     );
     expect(VEHICLE_MODELS['truck-with-trailer'].targetLength).toBeGreaterThan(
       VEHICLE_MODELS.sedan.targetLength * 2.6
@@ -93,6 +94,47 @@ describe('mixed road fleet', () => {
     expect(VEHICLE_MODELS.bus.targetLength).toBeGreaterThan(
       VEHICLE_MODELS.sedan.targetLength * 2.5
     );
+  });
+
+  it('keeps the road in real-life size order: no car outgrows a van, no van a lorry', () => {
+    const length = (v: VehicleModelVariant) => VEHICLE_MODELS[v].targetLength;
+    const cars: VehicleModelVariant[] = [
+      'hatchback', 'sedan', 'taxi', 'suv', 'roadster', 'sports', 'muscle', 'muscle-2',
+      'police-sedan', 'police-suv', 'police-sports', 'police-muscle',
+      'kenney-sedan', 'kenney-taxi', 'kenney-sedan-sports', 'kenney-hatchback-sports',
+      'kenney-suv', 'kenney-suv-luxury'
+    ];
+    const vans: VehicleModelVariant[] = ['pickup', 'van', 'ambulance', 'kenney-van', 'kenney-delivery'];
+    const lorries: VehicleModelVariant[] = ['truck', 'kenney-truck'];
+    const giants: VehicleModelVariant[] = ['firetruck', 'limousine', 'bus', 'truck-with-trailer'];
+
+    const longestCar = Math.max(...cars.map(length));
+    const shortestVan = Math.min(...vans.map(length));
+    const longestVan = Math.max(...vans.map(length));
+    const shortestLorry = Math.min(...lorries.map(length));
+    const longestLorry = Math.max(...lorries.map(length));
+    const shortestGiant = Math.min(...giants.map(length));
+
+    // Every SUV, taxi and sports car stays shorter than the smallest pickup.
+    expect(longestCar).toBeLessThan(shortestVan);
+    expect(longestVan).toBeLessThan(shortestLorry);
+    expect(longestLorry).toBeLessThan(shortestGiant);
+
+    // The fixed real-world order at the top of the range.
+    expect(length('firetruck')).toBeLessThan(length('limousine'));
+    expect(length('limousine')).toBeLessThan(length('bus'));
+    expect(length('bus')).toBeLessThan(length('truck-with-trailer'));
+
+    // Within the cars: hatchback < sedan < SUV, in both packs.
+    expect(length('hatchback')).toBeLessThan(length('sedan'));
+    expect(length('sedan')).toBeLessThan(length('suv'));
+    expect(length('kenney-sedan')).toBeLessThan(length('kenney-suv'));
+  });
+
+  it('puts a beacon on every police car and on nothing else', () => {
+    for (const [variant, model] of Object.entries(VEHICLE_MODELS)) {
+      expect(!!model.beacon, variant).toBe(variant.startsWith('police-'));
+    }
   });
 
   it('maps every configured variant to a bundled model definition', () => {

@@ -38,6 +38,55 @@ function isSpinningWheel(name: string, format: VehicleModelConfig['format']): bo
   );
 }
 
+/** How many times a second the beacon swaps sides. */
+const BEACON_HZ = 5;
+
+/**
+ * A police light bar: a dark base with a red and a blue lamp that strobe in
+ * alternation. The lamps are emissive and left out of tone mapping so they
+ * read as lit from the isometric distance, on a black road, without a point
+ * light per car.
+ */
+const PoliceBeacon: React.FC<{ roofY: number }> = ({ roofY }) => {
+  const red = useRef<THREE.MeshStandardMaterial>(null);
+  const blue = useRef<THREE.MeshStandardMaterial>(null);
+
+  useFrame(({ clock }) => {
+    const phase = Math.floor(clock.elapsedTime * BEACON_HZ) % 2;
+    if (red.current) red.current.emissiveIntensity = phase === 0 ? 4 : 0.3;
+    if (blue.current) blue.current.emissiveIntensity = phase === 0 ? 0.3 : 4;
+  });
+
+  return (
+    <group position={[0, roofY + 0.06, 0.1]}>
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[1.15, 0.1, 0.34]} />
+        <meshStandardMaterial color="#0f172a" roughness={0.6} />
+      </mesh>
+      <mesh position={[-0.3, 0.12, 0]}>
+        <boxGeometry args={[0.48, 0.16, 0.3]} />
+        <meshStandardMaterial
+          ref={red}
+          color="#ef4444"
+          emissive="#ff1a1a"
+          emissiveIntensity={4}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh position={[0.3, 0.12, 0]}>
+        <boxGeometry args={[0.48, 0.16, 0.3]} />
+        <meshStandardMaterial
+          ref={blue}
+          color="#3b82f6"
+          emissive="#1a5cff"
+          emissiveIntensity={0.3}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  );
+};
+
 /**
  * One body from either pack. The loaded scene is shared between every car
  * using the same file, so it is cloned per instance and its materials cloned
@@ -52,7 +101,7 @@ const VehicleBody: React.FC<{
 }> = ({ source, config, speed }) => {
   const wheelsRef = useRef<THREE.Object3D[]>([]);
 
-  const { model, offset } = useMemo(() => {
+  const { model, offset, height } = useMemo(() => {
     const clone = source.clone(true);
     const wheels: THREE.Object3D[] = [];
     clone.traverse((child) => {
@@ -87,13 +136,15 @@ const VehicleBody: React.FC<{
     const rawSize = rawBounds.getSize(new THREE.Vector3());
     const scale = config.targetLength / Math.max(rawSize.z, 0.001);
     clone.scale.multiplyScalar(scale);
+    clone.scale.x *= config.widthScale ?? 1;
     clone.updateMatrixWorld(true);
 
     const bounds = new THREE.Box3().setFromObject(clone);
     const center = bounds.getCenter(new THREE.Vector3());
     return {
       model: clone,
-      offset: new THREE.Vector3(-center.x, -bounds.min.y, -center.z)
+      offset: new THREE.Vector3(-center.x, -bounds.min.y, -center.z),
+      height: bounds.max.y - bounds.min.y
     };
   }, [source, config]);
 
@@ -104,7 +155,12 @@ const VehicleBody: React.FC<{
     for (const wheel of wheelsRef.current) wheel.rotation.x -= spin;
   });
 
-  return <primitive object={model} position={offset} />;
+  return (
+    <group>
+      <primitive object={model} position={offset} />
+      {config.beacon && <PoliceBeacon roofY={height} />}
+    </group>
+  );
 };
 
 const RgsDevVehicleModel: React.FC<{ config: VehicleModelConfig; speed: number }> = ({

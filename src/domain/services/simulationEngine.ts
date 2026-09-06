@@ -1029,7 +1029,7 @@ export function vehicleBodyHalfExtents(
     case 'firetruck':
       return { length: 1.9, width: 0.62 };
     case 'limousine':
-      return { length: 1.85, width: 0.5 };
+      return { length: 2.15, width: 0.58 };
     case 'ambulance':
       return { length: 1.38, width: 0.55 };
     case 'van':
