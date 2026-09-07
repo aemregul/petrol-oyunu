@@ -670,7 +670,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 250,
       size: [2, 2],
       unlockLevel: 7,
-      description: 'Trafo ve dağıtım panosu. Şebekeden enerji çeker; batarya bankasının ön koşuludur.',
+      description: 'Trafo ve dağıtım panosu. Şebekeden enerji çeker; bataryanın ön koşuludur.',
       icon: 'Zap'
     },
     ev_storage: {
@@ -681,7 +681,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 180,
       size: [3, 3],
       unlockLevel: 8,
-      description: '200 kWh batarya bankası; şarj üniteleri buradan çeker, trafo şebekeden doldurur. Elektrik altyapısı gerekir.',
+      description: '200 kWh batarya; şarj üniteleri buradan çeker, trafo şebekeden doldurur. Elektrik altyapısı gerekir.',
       icon: 'BatteryCharging'
     },
     ev_charger_ac: {
@@ -690,9 +690,9 @@ export const GAME_CONFIG: GameConfig = {
       category: 'energy',
       price: 18000,
       dailyUpkeep: 90,
-      size: [2, 3],
+      size: [1, 2],
       unlockLevel: 7,
-      description: 'Yavaş şarj ünitesi. Batarya bankasından çeker; şarjcı alınabilir. Enerji depolama gerekir.',
+      description: 'Yavaş şarj ünitesi. Bataryadan çeker; şarjcı alınabilir. Enerji depolama gerekir.',
       icon: 'Plug'
     },
     ev_charger_dc: {
@@ -701,9 +701,9 @@ export const GAME_CONFIG: GameConfig = {
       category: 'energy',
       price: 45000,
       dailyUpkeep: 220,
-      size: [2, 3],
+      size: [1, 2],
       unlockLevel: 9,
-      description: 'Yüksek güçlü hızlı şarj ünitesi. Bankayı hızlı boşaltır; şarjcı alınabilir. Enerji depolama gerekir.',
+      description: 'Yüksek güçlü hızlı şarj ünitesi. Bataryayı hızlı boşaltır; şarjcı alınabilir. Enerji depolama gerekir.',
       icon: 'Zap'
     },
     diesel_generator: {
@@ -714,7 +714,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 120,
       size: [2, 2],
       unlockLevel: 8,
-      description: 'Banka azalınca kendi tankındaki mazotu yakar. Sattığın dizeli tüketir; stok kritiğe inince durur. Enerji depolama gerekir.',
+      description: 'Batarya azalınca kendi tankındaki mazotu yakar. Sattığın dizeli tüketir; stok kritiğe inince durur. Enerji depolama gerekir.',
       icon: 'Fuel'
     },
   },
@@ -879,13 +879,13 @@ export const GAME_CONFIG: GameConfig = {
         type: 'ev_substation',
         level: 2,
         cost: 30000,
-        effectsDescription: 'Şebeke sözleşmesi büyür: bankaya saatte 120 kWh çekilir.'
+        effectsDescription: 'Şebeke sözleşmesi büyür: bataryaya saatte 120 kWh çekilir.'
       },
       3: {
         type: 'ev_substation',
         level: 3,
         cost: 65000,
-        effectsDescription: 'Sanayi sözleşmesi: bankaya saatte 240 kWh çekilir.'
+        effectsDescription: 'Sanayi sözleşmesi: bataryaya saatte 240 kWh çekilir.'
       }
     },
     ev_storage: {
@@ -893,13 +893,13 @@ export const GAME_CONFIG: GameConfig = {
         type: 'ev_storage',
         level: 2,
         cost: 25000,
-        effectsDescription: 'Batarya bankası 400 kWh tutar; şarj kuyruğu daha geç boşalır.'
+        effectsDescription: 'Batarya 400 kWh tutar; şarj kuyruğu daha geç boşalır.'
       },
       3: {
         type: 'ev_storage',
         level: 3,
         cost: 55000,
-        effectsDescription: 'Batarya bankası 800 kWh tutar; hızlı şarj üniteleri gün boyu dolu çalışır.'
+        effectsDescription: 'Batarya 800 kWh tutar; hızlı şarj üniteleri gün boyu dolu çalışır.'
       }
     },
     rest_complex: {

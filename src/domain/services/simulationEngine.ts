@@ -913,6 +913,17 @@ export function pumpSide(pump: { position: [number, number] }): DrivewaySide {
 
 /** How far to the side of a pump a vehicle parks, in grid units. */
 export const PUMP_BAY_OFFSET = 1.4;
+/**
+ * A charging post is a slim pillar, not a two-sided island: the car pulls up
+ * right beside it, on the same slab (Emre, 2026-09-07, after the reference
+ * game). Its bay sits this far from the post's centre, in grid units.
+ */
+export const CHARGER_BAY_OFFSET = 0.9;
+
+/** Whether this service point is a charging post rather than a pump. */
+export function isChargerType(type?: string): boolean {
+  return type === 'ev_charger_ac' || type === 'ev_charger_dc';
+}
 
 /** True when a quarter turn has put a pump's serving faces on the z axis. */
 export function pumpFacesAcrossZ(pump: { rotation?: number }): boolean {
@@ -929,11 +940,12 @@ export function pumpFacesAcrossZ(pump: { rotation?: number }): boolean {
  * pompayı/şarjı çevirerek aracın nereye yanaşacağını kendisi seçer:
  * rot 0 → +x, 90 → -z (yeni oyunun yola dönük pompası), 180 → -x, 270 → +z.
  */
-export function pumpBayOffset(pump: { rotation?: number }): [number, number] {
+export function pumpBayOffset(pump: { rotation?: number; type?: string }): [number, number] {
   const theta = ((((pump.rotation ?? 0) % 360) + 360) % 360) * (Math.PI / 180);
+  const reach = isChargerType(pump.type) ? CHARGER_BAY_OFFSET : PUMP_BAY_OFFSET;
   return [
-    Math.round(PUMP_BAY_OFFSET * Math.cos(theta) * 1000) / 1000 + 0,
-    Math.round(-PUMP_BAY_OFFSET * Math.sin(theta) * 1000) / 1000 + 0
+    Math.round(reach * Math.cos(theta) * 1000) / 1000 + 0,
+    Math.round(-reach * Math.sin(theta) * 1000) / 1000 + 0
   ];
 }
 
@@ -956,9 +968,10 @@ export const SERVICE_BAY_TYPES = ['pump_standard', 'ev_charger_ac', 'ev_charger_
 export function serviceBayRect(
   position: [number, number],
   rotation: number,
-  size: [number, number] = [2, 3]
+  size: [number, number] = [2, 3],
+  type?: string
 ): { minX: number; maxX: number; minZ: number; maxZ: number } {
-  const [ox, oz] = pumpBayOffset({ rotation });
+  const [ox, oz] = pumpBayOffset({ rotation, type });
   // Uzun kenar, aracın durduğu doğrultuda (bay ofsetine dik eksen).
   const alongX = Math.abs(ox) < 0.01;
   const hx = alongX ? 1.0 : 0.6;
@@ -979,6 +992,18 @@ export function serviceBayRect(
   if (ox < -0.01) rect.maxX = Math.min(rect.maxX, position[0] - islandHx);
   if (oz > 0.01) rect.minZ = Math.max(rect.minZ, position[1] + islandHz);
   if (oz < -0.01) rect.maxZ = Math.min(rect.maxZ, position[1] - islandHz);
+
+  // A car leaving a post rolls a length ahead before it turns, so the post
+  // needs that much open ground in front of its bay. Claimed as part of the
+  // bay, so a post cannot be put nose-on to a pump island or a wall.
+  if (isChargerType(type)) {
+    const [dx, dz] = bayApproachDir({ rotation });
+    const ahead = 1.2;
+    if (dx > 0.01) rect.maxX += ahead;
+    if (dx < -0.01) rect.minX -= ahead;
+    if (dz > 0.01) rect.maxZ += ahead;
+    if (dz < -0.01) rect.minZ -= ahead;
+  }
   return rect;
 }
 
@@ -1824,6 +1849,63 @@ function blockFor(state: GameState, vehicle: VehicleEntity): BlockLayout {
  * concrete. Derived from the block so widening the station lengthens the
  * queue — and so the block across the road gets its own limit.
  */
+/** Car-to-car spacing in a line behind a charging post, in grid units. */
+const CHARGE_QUEUE_SPACING = 2.2;
+const CHARGE_QUEUE_MAX = 4;
+
+/**
+ * Where electric customers wait: in a line behind a charging post, back
+ * along the way in to its bay, not in the pump queue at the front (Emre,
+ * 2026-09-07). The line is as long as the concrete behind the post allows —
+ * never onto the front lane, the frontage, or into a building or island.
+ * With several posts, the one with the longest line takes the queue.
+ */
+export function chargeQueueLine(
+  state: GameState,
+  block: BlockLayout,
+  side: DrivewaySide
+): { postId: string; dir: [number, number]; slots: Array<[number, number, number]> } | null {
+  let best: { postId: string; dir: [number, number]; slots: Array<[number, number, number]> } | null = null;
+  const keepOut = frontageKeepOut(block);
+  for (const point of chargingPoints(state, side)) {
+    const post = state.buildings[point.id];
+    if (!post) continue;
+    const [ox, oz] = pumpBayOffset({ rotation: post.rotation, type: post.type });
+    const bay = clampBayToApron(block, [post.position[0] + ox, 0, post.position[1] + oz]);
+    const dir = bayApproachDir({ rotation: post.rotation });
+    const walls = [...wallRects(state, side, 0.3, post.id), ...pumpRects(state, side, undefined, 0.3)];
+    const slots: Array<[number, number, number]> = [];
+    for (let k = 1; k <= CHARGE_QUEUE_MAX; k++) {
+      const at: [number, number, number] = [bay[0] - dir[0] * CHARGE_QUEUE_SPACING * k, 0, bay[2] - dir[1] * CHARGE_QUEUE_SPACING * k];
+      const onApron =
+        at[0] >= block.minX + LANE_HALF_WIDTH &&
+        at[0] <= block.maxX - LANE_HALF_WIDTH &&
+        at[2] >= block.minZ + LAYOUT.apronMargin &&
+        at[2] <= block.maxZ - LAYOUT.apronMargin;
+      if (!onApron) break;
+      // Never standing on the front lane: that is the way in for everyone.
+      if (Math.abs(at[2] - block.laneZ) < 1.5) break;
+      if (inRects(keepOut, at[0], at[2]) || inRects(walls, at[0], at[2])) break;
+      slots.push(at);
+    }
+    if (!best || slots.length > best.slots.length) best = { postId: point.id, dir, slots };
+  }
+  return best && best.slots.length > 0 ? best : null;
+}
+
+/** The way into a charge-queue slot: from one spacing further back, straight in. */
+function chargeJoinRoute(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  line: { dir: [number, number]; slots: Array<[number, number, number]> },
+  index: number
+): Array<[number, number, number]> | null {
+  const slot = line.slots[index];
+  if (!slot) return null;
+  return driveable(state, vehicle, block, [slot]);
+}
+
 function maxQueueLength(state: GameState, block: BlockLayout): number {
   // Half a lane, not the apron's parking margin: a queue slot is measured
   // along the lay-by line, and the parking margin priced the tail slots off
@@ -2412,7 +2494,7 @@ function chargerRoute(
   const block = blockFor(state, vehicle);
   // Şarj direğinin ön yüzü de oyuncunun çevirdiği yöndür — pompayla aynı kural.
   const rotation = (postId ? state.buildings[postId]?.rotation : 0) ?? 0;
-  const [ox, oz] = pumpBayOffset({ rotation });
+  const [ox, oz] = pumpBayOffset({ rotation, type: postId ? state.buildings[postId]?.type : undefined });
   const bay = clampBayToApron(block, [point[0] + ox, 0, point[1] + oz]);
 
   const approach = approachBay(
@@ -2584,17 +2666,37 @@ function exitRoute(
   // choice below.
   let bayKind: 'front' | 'other' | null = null;
   let bayDir: [number, number] | null = null;
+  // The post the car is standing against: close enough to count as a wall
+  // it is "inside", so the planner is told to look past it. The first leg
+  // rolls the car clear of it anyway.
+  let bayPostId: string | undefined;
   const inwardHere = block.side === 'far' ? -1 : 1;
-  for (const pump of Object.values(state.pumps)) {
-    if (pumpSide(pump) !== block.side) continue;
-    const bay = pumpBay(block, pump, from);
-    if (
-      Math.hypot(from.worldPosition[0] - bay[0], from.worldPosition[2] - bay[2]) >= 1
-    ) {
-      continue;
-    }
-    bayKind = (pump.position[1] - bay[2]) * inwardHere > 0 ? 'front' : 'other';
-    bayDir = bayApproachDir(pump);
+  // A charging post has a bay exactly as a pump does, and a car standing at
+  // it leaves the same way; it used to be invisible here, so the leaver
+  // planned from inside the post's shadow, found no way, and dissolved on
+  // the spot (Emre, 2026-09-07).
+  const servicePoints: Array<{ id?: string; position: [number, number]; rotation?: number; bay: [number, number, number]; type?: string }> = [
+    ...Object.values(state.pumps)
+      .filter((pump) => pumpSide(pump) === block.side)
+      .map((pump) => ({ position: pump.position, rotation: pump.rotation, bay: pumpBay(block, pump, from) })),
+    ...Object.values(state.buildings)
+      .filter((b) => isChargerType(b.type) && drivewaySideAt(b.position[1]) === block.side)
+      .map((post) => {
+        const [ox, oz] = pumpBayOffset({ rotation: post.rotation, type: post.type });
+        return {
+          id: post.id,
+          position: post.position,
+          rotation: post.rotation,
+          type: post.type,
+          bay: clampBayToApron(block, [post.position[0] + ox, 0, post.position[1] + oz])
+        };
+      })
+  ];
+  for (const point of servicePoints) {
+    if (Math.hypot(from.worldPosition[0] - point.bay[0], from.worldPosition[2] - point.bay[2]) >= 1) continue;
+    bayKind = (point.position[1] - point.bay[2]) * inwardHere > 0 ? 'front' : 'other';
+    bayDir = bayApproachDir({ rotation: point.rotation });
+    bayPostId = point.id;
     break;
   }
   // Bay'den ayrılış gerçek hayattaki gibi: önce burnun doğrultusunda İLERİ
@@ -2613,7 +2715,7 @@ function exitRoute(
     // ve planlayıcının kestirme çaprazları, dönen aracın köşesini komşu
     // pompaya sokup katı-yapı kuralına yakalatıyordu. Yalnızca araya
     // gerçekten bina girmişse (oyuncunun marifeti) olağan akışa düşülür.
-    const walls = wallRects(state, block.side, 0);
+    const walls = wallRects(state, block.side, 0, bayPostId);
     const clear =
       legIsClear(walls, [from.worldPosition[0], from.worldPosition[2]], [rollOut[0], rollOut[2]]) &&
       legIsClear(walls, [rollOut[0], rollOut[2]], [ontoLane[0], ontoLane[2]]) &&
@@ -2636,21 +2738,38 @@ function exitRoute(
   // Yan/arka bay'den ayrılan da önce burnu yönünde bir araç boyu çıkar;
   // gerisini planlayıcı o noktadan devralır. (Gövde, yerinde dönüşte adaya
   // değmesin diye.)
-  const rollAhead: [number, number, number] | null =
-    bayKind === 'other' && bayDir
-      ? clampLaneToApron(block, [
-          from.worldPosition[0] + bayDir[0] * 2.4,
-          0,
-          from.worldPosition[2] + bayDir[1] * 2.4
-        ])
-      : null;
-  const rollAheadClear =
-    rollAhead !== null &&
-    legIsClear(
-      wallRects(state, block.side, 0),
-      [from.worldPosition[0], from.worldPosition[2]],
-      [rollAhead[0], rollAhead[2]]
-    );
+  //
+  // A post's bay can sit a car's length from the next building — a tank
+  // farm, a bank — and a full roll into that building's margin gives the
+  // planner a start it refuses. So the roll is as long as fits: the longest
+  // of a few that ends outside the planner's clearance and runs clear of
+  // everything but the post itself; failing that, the shortest that merely
+  // runs clear, since turning on the spot puts the tail through the post.
+  let rollAhead: [number, number, number] | null = null;
+  if (bayKind === 'other' && bayDir) {
+    const rollTo = (reach: number): [number, number, number] =>
+      clampLaneToApron(block, [
+        from.worldPosition[0] + bayDir![0] * reach,
+        0,
+        from.worldPosition[2] + bayDir![1] * reach
+      ]);
+    const here: [number, number] = [from.worldPosition[0], from.worldPosition[2]];
+    const tight = wallRects(state, block.side, 0, bayPostId);
+    const roomy = wallRects(state, block.side, undefined, bayPostId);
+    const reaches = bayPostId ? [2.4, 1.8, 1.2] : [2.4];
+    rollAhead =
+      reaches
+        .map(rollTo)
+        .find((p) => legIsClear(tight, here, [p[0], p[2]]) && !inRects(roomy, p[0], p[2])) ??
+      (bayPostId
+        ? reaches
+            .slice()
+            .reverse()
+            .map(rollTo)
+            .find((p) => legIsClear(tight, here, [p[0], p[2]])) ?? null
+        : null);
+  }
+  const rollAheadClear = rollAhead !== null;
   const start: [number, number, number] = rollAheadClear
     ? rollAhead!
     : [from.worldPosition[0], 0, from.worldPosition[2]];
@@ -2708,7 +2827,7 @@ function exitRoute(
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
       undefined,
-      undefined,
+      bayPostId,
       parkedTruckRects(state)
     );
     if (forward) return forward;
@@ -2732,7 +2851,7 @@ function exitRoute(
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
       undefined,
-      undefined,
+      bayPostId,
       parkedTruckRects(state)
     );
 
@@ -2740,7 +2859,18 @@ function exitRoute(
   // en az kötü satırı seçer ve o satır bir yapının üstüne düşebilir. O zaman
   // son çare, ağızdan ağıza inşaata kapalı tutulan ön yoldur — araç yolu
   // rezervi tam da bu an için var.
-  return via(throughLane); // BISECT-VIA
+  // A car off a charging post goes straight for the mouth by the front
+  // lane. The lap round the back is a pump customer's habit, and with the
+  // back lane walled off by what stands there the planner drew that lap out
+  // to the far corner of the plot and only then to the exit (Emre,
+  // 2026-09-07: "arsanın en sol üst köşesine kadar gidiyor").
+  if (bayPostId) return via(block.laneZ) ?? via(throughLane);
+
+  // The return lane can be walled off by what the player built along the
+  // back. Then the front lane is the way out even when the mouth lies
+  // behind: a turn against the traffic beats a car that dissolves where it
+  // stands.
+  return via(throughLane) ?? (throughLane !== block.laneZ ? via(block.laneZ) : null);
 }
 
 function setRoute(vehicle: VehicleEntity, waypoints: Array<[number, number, number]>): void {
@@ -4856,7 +4986,7 @@ function serviceFailureReason(
 
   if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
     if (energyAvailable(state, side) < 1) {
-      return 'Batarya bankası boş — elektrikli müşteri şarj alamadan ayrıldı.';
+      return 'Batarya boş — elektrikli müşteri şarj alamadan ayrıldı.';
     }
     return fallback;
   }
@@ -5544,16 +5674,22 @@ function tickVehicles(
   // Queue order is stable by arrival so slots do not shuffle between ticks,
   // and each block queues on its own concrete rather than sharing a line.
   const queues: Record<DrivewaySide, VehicleEntity[]> = { near: [], far: [] };
+  // Electric customers wait in their own line, behind a post.
+  const chargeQueues: Record<DrivewaySide, VehicleEntity[]> = { near: [], far: [] };
   for (const v of vehicles) {
-    if (v.state === 'QUEUE') queues[vehicleSide(v)].push(v);
+    if (v.state !== 'QUEUE') continue;
+    const electric = !!GAME_CONFIG.customerTypes[v.archetype]?.requiresCharger;
+    (electric ? chargeQueues : queues)[vehicleSide(v)].push(v);
   }
   for (const side of ['near', 'far'] as const) {
     queues[side].sort((a, b) => b.waitingTimeSeconds - a.waitingTimeSeconds);
+    chargeQueues[side].sort((a, b) => b.waitingTimeSeconds - a.waitingTimeSeconds);
   }
 
   for (const vehicle of vehicles) {
     const side = vehicleSide(vehicle);
     const queued = queues[side];
+    const chargeQueued = chargeQueues[side];
     const block = blockFor(state, vehicle);
 
     switch (vehicle.state) {
@@ -5591,11 +5727,15 @@ function tickVehicles(
         // full blocks the entrance, and everything behind them stacks up on
         // the carriageway waiting for a gap that cannot open.
         const stillOnRoad = Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1;
+        const electric = !!GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger;
+        const chargeLine = electric ? chargeQueueLine(state, block, side) : null;
         if (
           stillOnRoad &&
           !vehicle.facilityIntent &&
-          !findAvailablePump(state, vehicle.fuelType, mods, side) &&
-          queued.length >= maxQueueLength(state, block)
+          (electric
+            ? !findFreeCharger(state, side) && chargeQueued.length >= (chargeLine?.slots.length ?? 0)
+            : !findAvailablePump(state, vehicle.fuelType, mods, side) &&
+              queued.length >= maxQueueLength(state, block))
         ) {
           setVehicleState(vehicle, 'PASSING');
           setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
@@ -5635,8 +5775,8 @@ function tickVehicles(
           const point = findFreeCharger(state, side);
           const toCharger = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           const toQueue =
-            queued.length < maxQueueLength(state, block)
-              ? queueJoinRoute(state, vehicle, block, queued.length, side, queued)
+            chargeLine && chargeQueued.length < chargeLine.slots.length
+              ? chargeJoinRoute(state, vehicle, block, chargeLine, chargeQueued.length)
               : null;
 
           if (point && toCharger) {
@@ -5650,7 +5790,7 @@ function tickVehicles(
           } else if (toQueue) {
             setVehicleState(vehicle, 'QUEUE');
             setRoute(vehicle, toQueue);
-            queued.push(vehicle);
+            chargeQueued.push(vehicle);
           } else {
             sendAway(state, vehicle);
             turnAway(state);
@@ -5743,9 +5883,20 @@ function tickVehicles(
           break;
         }
 
-        const slot = queued.indexOf(vehicle);
-        if (slot >= 0) {
-          const slotPos = queueSlotPosition(state, slot, side, queueSetback(queued, slot));
+        // An electric customer's place is in the line behind the post.
+        const chargeLine = wantsCharge ? chargeQueueLine(state, block, side) : null;
+        const slot = wantsCharge ? chargeQueued.indexOf(vehicle) : queued.indexOf(vehicle);
+        const lineSlot = chargeLine?.slots[slot] ?? null;
+        if (wantsCharge && !lineSlot && slot !== 0) {
+          // The line has shrunk under them — something built across it, a
+          // post sold. Beyond the head, there is nowhere to stand: leave.
+          loseCustomer(state, vehicle, 'Şarj kuyruğunda yer kalmadı — elektrikli müşteri ayrıldı.', effects);
+          break;
+        }
+        if (slot >= 0 && (!wantsCharge || lineSlot)) {
+          const slotPos = wantsCharge
+            ? lineSlot!
+            : queueSlotPosition(state, slot, side, queueSetback(queued, slot));
           // Judged by where the car is ultimately headed, not by its next
           // waypoint: with something to steer round, the next waypoint is a
           // corner of the way round rather than the slot itself.
@@ -5778,7 +5929,10 @@ function tickVehicles(
           // at whatever angle their last swerve left them on, and a queue of
           // them frozen mid-turn reads as chaos, not a queue.
           if (parked) {
-            const laneHeading = block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2;
+            // In the pump queue, along the lane; behind a post, nose to the bay.
+            const laneHeading = chargeLine
+              ? Math.atan2(chargeLine.dir[0], chargeLine.dir[1])
+              : block.roadEndX > block.roadStartX ? Math.PI / 2 : -Math.PI / 2;
             const turn =
               ((laneHeading - vehicle.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
             vehicle.heading += turn * Math.min(1, dt * 2.5);
@@ -5786,7 +5940,7 @@ function tickVehicles(
         }
 
         // Only the head of the queue may claim a point that has come free.
-        if (slot === 0 && GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
+        if (slot === 0 && wantsCharge) {
           const point = findFreeCharger(state, side);
           const toPost = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           if (point && toPost) {
@@ -5797,7 +5951,7 @@ function tickVehicles(
                 : GAME_CONFIG.ev.acChargeSeconds;
             setVehicleState(vehicle, 'PUMP_RESERVED');
             setRoute(vehicle, toPost);
-            queued.shift();
+            chargeQueued.shift();
           }
           break;
         }
@@ -5928,7 +6082,7 @@ function tickVehicles(
           if (drawn < need * 0.999) {
             vehicle.patience -= dt * 0.5;
             if (vehicle.patience <= 0) {
-              loseCustomer(state, vehicle, 'Batarya bankası boş — şarjı yarım kalan müşteri ayrıldı.', effects);
+              loseCustomer(state, vehicle, 'Batarya boş — şarjı yarım kalan müşteri ayrıldı.', effects);
               break;
             }
           }

@@ -119,7 +119,7 @@ export function occupiedFootprints(
     taken.push({
       id: building.id,
       name: `${GAME_CONFIG.buildings[building.type]?.name ?? building.type} duruş alanı`,
-      footprint: serviceBayRect(building.position, building.rotation, building.size)
+      footprint: serviceBayRect(building.position, building.rotation, building.size, building.type)
     });
   }
 
@@ -447,7 +447,7 @@ export function evaluatePlacement(
   // yerleşim ona göre kabul ya da red edilir.
   const zones: Footprint[] = [footprint];
   if (SERVICE_BAY_TYPES.includes(buildingType)) {
-    zones.push(serviceBayRect(position, rotation, catalog.size as [number, number]));
+    zones.push(serviceBayRect(position, rotation, catalog.size as [number, number], buildingType));
   }
 
   for (const zone of zones) {

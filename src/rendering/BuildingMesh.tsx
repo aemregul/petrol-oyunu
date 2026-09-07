@@ -259,8 +259,9 @@ const SIGNAGE: Record<
   tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, color: '#0369a1', textColor: '#ffffff' },
   air_water: { text: 'HAVA & SU', height: 3.4, color: '#0f172a', textColor: '#ffffff' },
   hotel: { text: 'OTEL', color: '#4f46e5', textColor: '#ffffff' },
-  ev_charger_ac: { text: 'AC ŞARJ', height: 3, color: '#059669', textColor: '#ffffff' },
-  ev_charger_dc: { text: 'DC HIZLI ŞARJ', height: 3.4, color: '#ea580c', textColor: '#ffffff' }
+  // A charging post carries its own header board, on the post itself: a
+  // board hung over the footprint would float off a post that stands at the
+  // slab's edge (Emre, 2026-09-07: "tabelalar yamuk").
 };
 
 /**

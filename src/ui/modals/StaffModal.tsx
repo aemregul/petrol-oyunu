@@ -345,7 +345,7 @@ export const StaffModal: React.FC = () => {
 
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <span className="font-extrabold text-sm text-white">Bankayı Gece Doldur</span>
+                    <span className="font-extrabold text-sm text-white">Bataryayı Gece Doldur</span>
                     <input
                       type="checkbox"
                       checked={gameState.managerSettings.nightGridFill ?? false}
@@ -356,7 +356,7 @@ export const StaffModal: React.FC = () => {
                   <div className="text-[11px] text-slate-400">
                     Müdür şebekeden yalnızca gece tarifesinde ({GAME_CONFIG.ev.gridTariff.night.from}:00–
                     {GAME_CONFIG.ev.gridTariff.night.to}:00, ₺{GAME_CONFIG.ev.gridTariff.night.price.toFixed(1)}/kWh) çeker.
-                    Banka %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
+                    Batarya %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
                   </div>
                 </div>
 

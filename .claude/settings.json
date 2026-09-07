@@ -351,7 +351,9 @@
       "Bash(sed -i '' 's|className=\"fixed inset-0 pointer-events-none z-40 flex items-center justify-center sm:justify-start sm:p-6 sm:left-4\"|className=\"fixed inset-0 pointer-events-none z-40 flex items-center justify-center p-4\"|' src/ui/PumpPanel.tsx src/ui/FacilityPanel.tsx src/ui/StructurePanel.tsx)",
       "Bash(sed -i '' 's|className=\"w-\\\\[340px\\\\] pointer-events-auto select-none rounded-\\\\[2rem\\\\] overflow-hidden bg-\\\\[#161419\\\\] border border-white/10 shadow-2xl animate-fade-in flex flex-col\"|className=\"w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none rounded-[2rem] bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col\"|' src/ui/PumpPanel.tsx src/ui/FacilityPanel.tsx src/ui/StructurePanel.tsx)",
       "Bash(xargs -I{} npx vitest run {})",
-      "Bash(grep -n \"^import.*simulationEngine\\\\|^} from '../domain/services/simulationEngine'\\\\|^import { GAME_CONFIG\" src/store/gameStore.ts)"
+      "Bash(grep -n \"^import.*simulationEngine\\\\|^} from '../domain/services/simulationEngine'\\\\|^import { GAME_CONFIG\" src/store/gameStore.ts)",
+      "Bash(awk -F: '$1>5560 && $1<6000')",
+      "Bash(grep -E \"'[^']*[Bb]anka[^']*'|\\\\\"[^\\\\\"]*[Bb]anka[^\\\\\"]*\\\\\"|>[^<]*[Bb]anka[^<]*<|\\\\`[^\\\\`]*[Bb]anka[^\\\\`]*\\\\`\")"
     ],
     "additionalDirectories": [
       "/private/tmp"

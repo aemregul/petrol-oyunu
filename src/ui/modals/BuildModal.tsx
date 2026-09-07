@@ -252,7 +252,7 @@ const RoofCards: React.FC<{ level: number; onClose: () => void }> = ({ level, on
       name: 'Güneşli Sundurma',
       size: GAME_CONFIG.buildings.canopy.size,
       where: 'Sundurmalı bir pompanın kartından kurulur.',
-      blurb: 'Ada sundurmasının üstüne paneller. Gündüz bankayı doldurur; yağmurda ve kirli istasyonda az üretir.',
+      blurb: 'Ada sundurmasının üstüne paneller. Gündüz bataryayı doldurur; yağmurda ve kirli istasyonda az üretir.',
       icon: <Sun className="w-10 h-10 text-amber-300" />
     },
   ];

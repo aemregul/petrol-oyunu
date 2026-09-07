@@ -106,7 +106,7 @@ export const StructurePanel: React.FC = () => {
         ? { text: 'Çalışıyor', tone: 'text-emerald-400' }
         : dieselForGenerator(gameState.tanks.diesel) <= 0
           ? { text: 'Mazot rezervde', tone: 'text-rose-300' }
-          : { text: 'Banka yeterli, bekliyor', tone: 'text-amber-400' };
+          : { text: 'Batarya yeterli, bekliyor', tone: 'text-amber-400' };
   const t = gameState.dayState.todayStats;
 
   const handleClose = () => {
@@ -182,7 +182,7 @@ export const StructurePanel: React.FC = () => {
             {(isPost || isBank) && (
               <div className="py-1.5">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-semibold">{isBank ? 'Dolu' : 'Batarya bankası'}</span>
+                  <span className="text-slate-400 font-semibold">{isBank ? 'Dolu' : 'Batarya'}</span>
                   <span className={`font-extrabold font-mono ${bankKwh < 1 ? 'text-rose-300' : 'text-sky-300'}`}>
                     {Math.round(bankKwh)} / {bankCapacity} kWh
                   </span>
@@ -263,7 +263,7 @@ export const StructurePanel: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center py-1.5">
                   <span className="text-slate-400 font-semibold">Devreye girer</span>
-                  <span className="font-extrabold font-mono text-white">banka %{GAME_CONFIG.ev.generator.runBelowPercent} altında</span>
+                  <span className="font-extrabold font-mono text-white">batarya %{GAME_CONFIG.ev.generator.runBelowPercent} altında</span>
                 </div>
                 <div className="flex justify-between items-center py-1.5">
                   <span className="text-slate-400 font-semibold">Yakılabilir mazot</span>

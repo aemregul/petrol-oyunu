@@ -204,7 +204,7 @@ describe('the electric line', () => {
       const effects = createEffects();
       for (let i = 0; i < 20; i++) runSimulationTick(state, 0.05, effects);
       expect(['EXIT', 'DESPAWN']).toContain(car.state);
-      expect(effects.notifications.some((n) => n.message.includes('Batarya bankası boş'))).toBe(true);
+      expect(effects.notifications.some((n) => n.message.includes('Batarya boş'))).toBe(true);
     } finally {
       GAME_CONFIG.ev.gridKwhPerHour = grid;
     }

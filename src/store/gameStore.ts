@@ -127,7 +127,7 @@ function solarAllowed(
   if (energyCapacityOn(gameState, side) <= 0) {
     get().addNotification({
       type: 'WARNING',
-      title: 'Banka Yok',
+      title: 'Batarya Yok',
       message: 'Panelin ürettiğini tutacak bir Enerji Depolama bu blokta kurulu olmalı.'
     });
     return false;
@@ -2242,7 +2242,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'REWARD',
       title: 'Güneşli Sundurma',
-      message: `Açık havada öğlen ${solarPeakKwhPerHour(size)} kWh/sa bankaya akar.`
+      message: `Açık havada öğlen ${solarPeakKwhPerHour(size)} kWh/sa bataryaya akar.`
     });
     return true;
   },

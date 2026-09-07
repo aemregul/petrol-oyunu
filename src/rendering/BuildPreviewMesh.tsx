@@ -130,7 +130,7 @@ export const BuildPreviewMesh: React.FC = () => {
   // pump ghost brings its own pad, so only the service bays draw one here.
   const bayOffset =
     !ghostPump && buildMode.buildingType && SERVICE_BAY_TYPES.includes(buildMode.buildingType)
-      ? pumpBayOffset({ rotation: buildMode.rotation })
+      ? pumpBayOffset({ rotation: buildMode.rotation, type: buildMode.buildingType })
       : null;
 
   return (

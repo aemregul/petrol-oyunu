@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
 import { DECAL, decal } from './decal';
 import { BayPad } from './BayPad';
-import { pumpBayOffset, generatorRunning } from '../domain/services/simulationEngine';
+import { pumpBayOffset, generatorRunning, CHARGER_BAY_OFFSET } from '../domain/services/simulationEngine';
 import { useGameStore } from '../store/gameStore';
 import { PumpAttendantMesh } from './PumpAttendantMesh';
+import { FasciaSign } from './FasciaSign';
 
 /**
  * Hand-built facility geometry for the pieces no CC0 kit covers: wash tunnels,
@@ -506,7 +507,12 @@ export const EnergyStorage: React.FC<FacilityProps> = ({ building }) => {
   );
 };
 
-/** Charging pillar. DC units are taller, heavier and marked in orange. */
+/**
+ * Charging pillar. A slim post at the edge of one slab, and the car pulls up
+ * on that same slab right beside it — the way the reference game does it,
+ * not a pump island with a pad floating next to it (Emre, 2026-09-07). DC
+ * units are taller, heavier and marked in orange.
+ */
 export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
   building,
   fast = false
@@ -518,68 +524,85 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
   );
   const accent = fast ? '#f97316' : '#22c55e';
   const height = fast ? 2.4 : 1.9;
+  const postW = fast ? 1.0 : 0.8;
+  const postD = fast ? 0.7 : 0.55;
 
   // Şarj aracının gerçekten durduğu yer: chargerRoute'un bay hesabıyla aynı.
   // Ön yüz yapının rotasyonuna aittir — oyuncu direği çevirince alan döner.
-  const bayOffset = pumpBayOffset({ rotation: building.rotation });
+  const bayOffset = pumpBayOffset({ rotation: building.rotation, type: building.type });
+  // In the post's own frame the bay is always off to +x: one slab runs from
+  // the post's kerb across the whole bay.
+  const bayX = CHARGER_BAY_OFFSET * 2;
+  const bayHalfW = 1.2;
+  const slabMinX = -w / 2;
+  const slabMaxX = bayX + bayHalfW + 0.15;
+  const slabW = slabMaxX - slabMinX;
+  const slabD = Math.max(d, 4.3);
+  const postX = -w / 2 + postD / 2 + 0.25;
 
   return (
     <group>
+      {/* One slab under post and car alike */}
+      <mesh position={[(slabMinX + slabMaxX) / 2, 0.04, 0]} receiveShadow>
+        <boxGeometry args={[slabW, 0.08, slabD]} />
+        <meshStandardMaterial color="#7b8494" roughness={0.9} />
+      </mesh>
+
       <BayPad
         worldOffset={[bayOffset[0] * 2, bayOffset[1] * 2]}
         worldAlong={building.rotation % 180 !== 0 ? 'x' : 'z'}
         rotationDeg={building.rotation}
+        color={accent}
       />
 
-      {/* The hand on the post, beside the pedestal, facing the bay. */}
+      {/* Kerb the post stands on, along the slab's far edge */}
+      <mesh position={[-w / 2 + 0.45, 0.17, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.9, 0.18, slabD * 0.7]} />
+        <meshStandardMaterial color="#5b6472" roughness={0.9} />
+      </mesh>
+
+      {/* The hand on the post, behind it, facing the bay. */}
       {attendant && (
         <PumpAttendantMesh
           attendant={attendant}
-          position={[-(w / 2) - 0.55, 0.3, 0.2]}
+          position={[postX, 0.3, -1.3]}
           rotation={[0, Math.PI / 2, 0]}
         />
       )}
 
-      {/* Island pad and kerb, same language as the fuel pump */}
-      <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
-        <boxGeometry args={[w * 0.9, 0.3, d * 0.9]} />
-        <meshStandardMaterial color="#6b7688" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 0.31, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[w * 0.92, d * 0.92]} />
-        <meshBasicMaterial color={accent} transparent opacity={0.25} {...DECAL} />
-      </mesh>
-
-      <mesh position={[0, 0.3 + height / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[fast ? 1.1 : 0.8, height, fast ? 0.85 : 0.6]} />
-        <meshStandardMaterial color="#111827" roughness={0.45} metalness={0.4} />
-      </mesh>
-
-      {/* Screen */}
-      <mesh position={[0, 0.3 + height * 0.72, (fast ? 0.43 : 0.31)]}>
-        <planeGeometry args={[fast ? 0.7 : 0.5, 0.42]} />
-        <meshStandardMaterial
-          color="#082f49"
-          emissive="#0ea5e9"
-          emissiveIntensity={0.9}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Accent band and cable */}
-      <mesh position={[0, 0.3 + height - 0.12, 0]}>
-        <boxGeometry args={[fast ? 1.13 : 0.83, 0.2, fast ? 0.88 : 0.63]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={0.8}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh position={[fast ? 0.62 : 0.46, 0.3 + height * 0.45, 0]} rotation={[0, 0, 0.5]}>
-        <cylinderGeometry args={[0.06, 0.06, 1.1, 8]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.9} />
-      </mesh>
+      {/* The post, turned to face the car */}
+      <group position={[postX, 0.26, 0]}>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[postD, height, postW]} />
+          <meshStandardMaterial color="#111827" roughness={0.45} metalness={0.4} />
+        </mesh>
+        {/* Screen, on the face toward the bay */}
+        <mesh position={[postD / 2 + 0.01, height * 0.72, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[postW * 0.7, 0.42]} />
+          <meshStandardMaterial color="#082f49" emissive="#0ea5e9" emissiveIntensity={0.9} toneMapped={false} />
+        </mesh>
+        {/* Accent band */}
+        <mesh position={[0, height - 0.12, 0]}>
+          <boxGeometry args={[postD + 0.03, 0.2, postW + 0.03]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.8} toneMapped={false} />
+        </mesh>
+        {/* Header board on the post, square to the car */}
+        <group position={[0, height + 0.05, 0]} rotation={[0, -Math.PI / 2, 0]}>
+          <FasciaSign
+            text={fast ? 'DC HIZLI ŞARJ' : 'AC ŞARJ'}
+            color={fast ? '#ea580c' : '#059669'}
+            textColor="#ffffff"
+            width={fast ? 2.0 : 1.5}
+            y={0}
+            anchor="bottom"
+          />
+        </group>
+        {/* Cable, hanging toward the car */}
+        <mesh position={[postD / 2 + 0.2, height * 0.45, postW / 2 - 0.1]} rotation={[0, 0, -0.5]}>
+          <cylinderGeometry args={[0.05, 0.05, 1.0, 8]} />
+          <meshStandardMaterial color="#0f172a" roughness={0.9} />
+        </mesh>
+      </group>
     </group>
   );
 };
