@@ -1,5 +1,6 @@
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
+import { GAME_CONFIG } from '../config/gameConfig';
 import { ActiveGameEvent } from '../domain/types/gameState';
 import { FUEL_DEAL_DISCOUNT } from '../domain/services/simulationEngine';
 import { TONE_GLASS, TONE_TEXT, type Tone } from './gameStyle';
@@ -84,6 +85,20 @@ const EventChip: React.FC<{
 );
 
 /**
+ * How long an event has left, on the player's own clock. Events are timed in
+ * game hours, but a game hour is ten real seconds: "6 sa 11 dk" was a minute
+ * of real waiting dressed up as an afternoon (Emre, 2026-09-07). Minutes and
+ * seconds of wall-clock time, like the other cards in this corner.
+ */
+export function eventTimeLabel(remainingHours: number): string {
+  const seconds = Math.max(0, Math.ceil(remainingHours * GAME_CONFIG.economy.realSecondsPerGameHour));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest > 0 ? `${minutes} dk ${rest} s` : `${minutes} dk`;
+}
+
+/**
  * Whether the tank is low enough to nag about — and nobody has done anything
  * about it yet. The card asks for an order; once one is on its way the ask
  * is met, the tanker widget shows it coming, and a red card still shouting
@@ -156,17 +171,12 @@ export const ActiveEventsBar: React.FC = () => {
         />
       )}
       {activeEvents.map((event) => {
-        const minutesLeft = Math.max(0, Math.round(event.remainingHours * 60));
-        const timeLabel =
-          minutesLeft >= 60
-            ? `${Math.floor(minutesLeft / 60)} sa ${minutesLeft % 60} dk`
-            : `${minutesLeft} dk`;
         return (
           <EventChip
             key={event.id}
             title={event.name}
             hint={event.description}
-            timeLabel={timeLabel}
+            timeLabel={eventTimeLabel(event.remainingHours)}
             ratio={event.totalHours > 0 ? event.remainingHours / event.totalHours : 0}
             tone={CATEGORY_TONES[event.category]}
             icon={EVENT_ICONS[event.icon] || Sparkles}

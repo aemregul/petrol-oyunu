@@ -23,3 +23,15 @@ describe('critical stock card', () => {
     expect(stockWarningDue({ ...low, stock: 300 }, [])).toBe(false);
   });
 });
+
+describe('event card clock', () => {
+  it('shows what is left in real minutes and seconds, not game hours', async () => {
+    const { eventTimeLabel } = await import('../ui/ActiveEventsBar');
+    // Ten real seconds to the game hour: 6 h 11 min of forecourt time is
+    // sixty-two seconds at the keyboard.
+    expect(eventTimeLabel(6 + 11 / 60)).toBe('1 dk 2 s');
+    expect(eventTimeLabel(0.5)).toBe('5 s');
+    expect(eventTimeLabel(12)).toBe('2 dk');
+    expect(eventTimeLabel(0)).toBe('0 s');
+  });
+});
