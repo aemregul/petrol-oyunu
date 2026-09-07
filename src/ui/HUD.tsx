@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -36,6 +36,7 @@ export const HUD: React.FC = () => {
   const [confirmMerge, setConfirmMerge] = useState(false);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const openOffice = useGameStore((s) => s.openOffice);
+  const officeTab = useGameStore((s) => s.officeTab);
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const cameraView = useGameStore((s) => s.cameraView);
   const cycleCameraView = useGameStore((s) => s.cycleCameraView);
@@ -502,6 +503,24 @@ export const HUD: React.FC = () => {
           >
             <Users className="w-4 h-4 text-indigo-400" />
             <span className="hud-nav-label">Personel & Müdür</span>
+          </button>
+
+          {/* A shortcut straight to the office's missions tab, beside the
+              profile icon (Emre, 2026-09-07); the missions still live in the
+              office, this is just a second door. */}
+          <button
+            onClick={() => openOffice('missions')}
+            className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
+              activeModal === 'OFFICE' && officeTab === 'missions' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
+            }`}
+            title="Görevler"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {claimableMissions > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
+                {claimableMissions}
+              </span>
+            )}
           </button>
 
           {/* Toasts leave on their own, so the bell is where anything missed
