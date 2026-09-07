@@ -7,6 +7,7 @@ import { calculateRepairCost } from '../domain/formulas/economy';
 import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 import { TankerStatusBar } from './TankerStatusBar';
+import { StockStrip } from './StockStrip';
 import { PumpPanel } from './PumpPanel';
 import { FacilityPanel } from './FacilityPanel';
 import { StructurePanel } from './StructurePanel';
@@ -448,6 +449,7 @@ export const HUD: React.FC = () => {
       </div>
 
       <TankerStatusBar />
+      <StockStrip />
       <PumpPanel />
       <FacilityPanel />
       <StructurePanel />
