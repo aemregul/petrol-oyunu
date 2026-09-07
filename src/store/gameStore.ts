@@ -274,6 +274,12 @@ export interface PerformanceMetrics {
 /** Land-buying mode: hovering a parcel previews it, clicking buys it. */
 export interface LandModeState {
   active: boolean;
+  /**
+   * What the player came to do: buy land, or lay concrete on land they own.
+   * Two cards in the catalogue, two jobs on the map — a click never has to
+   * guess which of the two the parcel under it should get.
+   */
+  intent: 'BUY' | 'PAVE';
   /** Parcel under the cursor, or null when it is off the buyable map. */
   hovered: { col: number; row: number } | null;
   /** What clicking would do: buy the land, pave it, or nothing. */
@@ -327,6 +333,13 @@ interface GameStore {
   selectedVehicleId: string | null;
   selectedPumpId: string | null;
   selectedBuildingId: string | null;
+  /**
+   * Which tab the office opens on. The price sign is a door to the office's
+   * Fiyat tab: one card, many doors, never a second card with a different
+   * face (Emre, 2026-09-07).
+   */
+  officeTab: 'summary' | 'price' | 'accounts' | 'missions';
+  openOffice: (tab?: 'summary' | 'price' | 'accounts' | 'missions') => void;
   buildMode: BuildModeState;
   /** Set while a lifted building is being carried to its new spot. */
   relocating: {
@@ -405,7 +418,7 @@ interface GameStore {
   /** Moves a facility on to the next price on its card. */
   cycleFacilityTariff: (id: string) => boolean;
   toggleStationOpen: () => void;
-  enterLandMode: () => void;
+  enterLandMode: (intent?: 'BUY' | 'PAVE') => void;
   exitLandMode: () => void;
   /** Turns rearranging on or off; a click on a structure then lifts it. */
   toggleEditMode: () => void;
@@ -661,6 +674,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   selectedVehicleId: null,
   selectedPumpId: null,
   selectedBuildingId: null,
+  officeTab: 'summary',
+  openOffice: (tab = 'summary') => set({ officeTab: tab, activeModal: 'OFFICE' }),
   fittingCanopy: false,
   buildMode: {
     active: false,
@@ -672,7 +687,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     isValid: true
   },
   relocating: null,
-  landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
+  landMode: { active: false, intent: 'BUY', hovered: null, action: 'NONE', price: 0, canBuy: false },
   editMode: false,
   cameraAngle: 225, // Yol sol üstten sağ alta iner, istasyon sağında kalır
   cameraView: 0,
@@ -1561,10 +1576,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     });
   },
 
-  enterLandMode: () => {
+  enterLandMode: (intent = 'BUY') => {
     sounds.playClick();
     set({
-      landMode: { active: true, hovered: null, action: 'NONE', price: 0, canBuy: false },
+      landMode: { active: true, intent, hovered: null, action: 'NONE', price: 0, canBuy: false },
       buildMode: { active: false, buildingType: null, pinned: false, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
       activeModal: 'NONE'
     });
@@ -1572,7 +1587,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   exitLandMode: () => {
     sounds.playClick();
-    set({ landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false } });
+    set({ landMode: { active: false, intent: 'BUY', hovered: null, action: 'NONE', price: 0, canBuy: false } });
   },
 
   toggleEditMode: () => {
@@ -1599,7 +1614,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       selectedPumpId: null,
       ...(on
         ? {
-            landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false },
+            landMode: { active: false, intent: 'BUY', hovered: null, action: 'NONE', price: 0, canBuy: false },
             activeModal: 'NONE' as const
           }
         : {})
@@ -1616,11 +1631,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       const paved = state.gameState.station.plots.pavedParcels;
       const needsPaving = isOwned(owned, col, row) && !isOwned(paved, col, row);
       const cost = needsPaving ? paveCost(row) : price;
-      const action: LandModeState['action'] = needsPaving
-        ? 'PAVE'
-        : buyable
-          ? 'BUY'
-          : 'NONE';
+      // Only the job the player came for: a concrete crew does not sell land,
+      // and the estate agent does not pour concrete.
+      const intent = state.landMode.intent;
+      const action: LandModeState['action'] =
+        intent === 'PAVE' ? (needsPaving ? 'PAVE' : 'NONE') : buyable ? 'BUY' : 'NONE';
       const canBuy = action !== 'NONE' && state.gameState.player.cash >= cost;
 
       // Bail out only when nothing at all would change. Comparing the parcel
@@ -1640,6 +1655,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       return {
         landMode: {
           active: before.active,
+          intent: before.intent,
           hovered: { col, row },
           action,
           price: cost,
@@ -1696,7 +1712,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     SaveManager.saveGame(state);
     set({
       gameState: state,
-      landMode: { active: true, hovered: null, action: 'NONE', price: 0, canBuy: false }
+      landMode: { active: true, intent: get().landMode.intent, hovered: null, action: 'NONE', price: 0, canBuy: false }
     });
 
     get().addNotification({
@@ -2305,12 +2321,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       pump.supportedFuels = ['gasoline', 'diesel', 'lpg'];
     }
 
-    // The manager's hiring bar checks the office, the crew and the books;
-    // a test mode that leaves any of them short is a test mode that cannot
-    // test the manager.
-    for (const building of Object.values(state.buildings)) {
-      if (building.type === 'office' && building.level < 2) building.level = 2;
-    }
+    // The manager's hiring bar checks the crew and the books; a test mode
+    // that leaves either short is a test mode that cannot test the manager.
     state.player.statistics.recentNetProfits = [1000, 1000, 1000];
     const attendantCount = Object.values(state.employees).filter(
       (e) => e.role === 'PUMP_ATTENDANT'
@@ -2680,9 +2692,8 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     // Every advertised requirement is enforced, not just the first two — a
     // hiring bar that the button ignores is a lie with a checkbox next to it.
-    const officeLevel = Object.values(gameState.buildings)
-      .filter((b) => b.type === 'office')
-      .reduce((best, b) => Math.max(best, b.level), 0);
+    // The office is no longer on the list: it is fixed, and never upgraded
+    // (Emre, 2026-09-07).
     const attendantCount = Object.values(gameState.employees).filter(
       (e) => e.role === 'PUMP_ATTENDANT'
     ).length;
@@ -2693,8 +2704,6 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (gameState.player.level < conf.minLevel) missing.push(`Seviye ${conf.minLevel}`);
     if (gameState.player.reputation < conf.minReputation)
       missing.push(`${conf.minReputation.toFixed(2)} itibar`);
-    if (officeLevel < conf.minOfficeLevel)
-      missing.push(`Seviye ${conf.minOfficeLevel} Yönetim Ofisi`);
     if (attendantCount < conf.minActiveAttendants)
       missing.push(`${conf.minActiveAttendants} pompacı`);
     if (recent.length < 3 || profitableDays < conf.minProfitableDaysInLast3)
@@ -2956,7 +2965,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       cameraAngle: 225,
       cameraView: 0,
       buildMode: { active: false, buildingType: null, pinned: false, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
-      landMode: { active: false, hovered: null, action: 'NONE', price: 0, canBuy: false }
+      landMode: { active: false, intent: 'BUY', hovered: null, action: 'NONE', price: 0, canBuy: false }
     });
   },
 

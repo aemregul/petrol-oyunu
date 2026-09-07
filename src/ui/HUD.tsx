@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Award, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Landmark, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Tag, Target, Trash2, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Target, Trash2, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -34,6 +34,7 @@ export const HUD: React.FC = () => {
   const activeModal = useGameStore((s) => s.activeModal);
   const [confirmMerge, setConfirmMerge] = useState(false);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
+  const openOffice = useGameStore((s) => s.openOffice);
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const cameraView = useGameStore((s) => s.cameraView);
   const cycleCameraView = useGameStore((s) => s.cycleCameraView);
@@ -47,9 +48,7 @@ export const HUD: React.FC = () => {
   const exitBuildMode = useGameStore((s) => s.exitBuildMode);
   const resetCamera = useGameStore((s) => s.resetCamera);
   const landMode = useGameStore((s) => s.landMode);
-  const enterLandMode = useGameStore((s) => s.enterLandMode);
   const exitLandMode = useGameStore((s) => s.exitLandMode);
-  const upgradeRoad = useGameStore((s) => s.upgradeRoad);
   const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
   const selectedPumpId = useGameStore((s) => s.selectedPumpId);
   const selectBuilding = useGameStore((s) => s.selectBuilding);
@@ -106,7 +105,8 @@ export const HUD: React.FC = () => {
   const selected = (() => {
     if (selectedPumpId) return null;
     const building = selectedBuildingId ? gameState.buildings[selectedBuildingId] : null;
-    if (!building || isFacility(building.type)) return null;
+    // The office opens its own modal on click; a bar under it is noise.
+    if (!building || isFacility(building.type) || building.type === 'office') return null;
 
     return {
       id: building.id,
@@ -289,20 +289,28 @@ export const HUD: React.FC = () => {
           </button>
         </div>
 
-        {/* Buying land needs no caption telling the player to click a parcel —
-            the parcels light up on their own. What it does need is the one
-            action that has nowhere else to live. */}
-        {landMode.active && gameState.station.roadLevel < 2 && (
-          <button
-            onClick={upgradeRoad}
-            className={`game-btn rounded-2xl px-4 py-2.5 pointer-events-auto flex flex-col items-start leading-tight animate-fade-in text-white text-xs font-extrabold ${TONE_BUTTON.amber}`}
-            title={`Seviye ${GAME_CONFIG.roadUpgrade.minLevel}, ${GAME_CONFIG.roadUpgrade.minReputation.toFixed(2)} itibar gerekir`}
-          >
-            <span>Yolu Genişlet — ₺{GAME_CONFIG.roadUpgrade.price.toLocaleString('tr-TR')}</span>
-            <span className="text-[10px] font-semibold text-amber-100/80">
-              Çift şerit + yolun karşısı açılır
-            </span>
-          </button>
+        {/* Land is bought and paved from the catalogue's Arsa cards; on the
+            map the only thing left to say is which job is on and how to
+            stop. */}
+        {landMode.active && (
+          <div className="fixed bottom-24 inset-x-0 z-40 flex justify-center pointer-events-none">
+            <div className="game-surface !border-emerald-500/70 px-3 py-2 flex items-center gap-3 text-xs font-bold text-slate-100 pointer-events-auto animate-fade-in">
+              <MapIcon className="w-4 h-4 text-emerald-400" />
+              <span>
+                {landMode.intent === 'PAVE'
+                  ? 'Beton dökmek için betonsuz parsele tıkla'
+                  : 'Satın almak için mavi parsele tıkla'}
+              </span>
+              <button
+                onClick={exitLandMode}
+                className={`game-btn rounded-xl w-8 h-8 flex items-center justify-center ${TONE_BUTTON.red}`}
+                title="Bitti"
+                aria-label="Arsa işini bitir"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Fitting a canopy has no ground preview to cancel, so it gets its
@@ -497,14 +505,21 @@ export const HUD: React.FC = () => {
       {/* ================= BOTTOM ACTION BAR ================= */}
       <div ref={bottomBarRef} className="hud-bottom flex justify-center items-center w-full">
         <div className="hud-nav game-surface p-1.5 pointer-events-auto flex items-center gap-1">
+          {/* Price, books and missions live inside the office now; the bar
+              only needs the door to it, with the claimable-reward badge. */}
           <button
-            onClick={() => setActiveModal('OFFICE')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
+            onClick={() => openOffice('summary')}
+            className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
               activeModal === 'OFFICE' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
             }`}
           >
             <Building2 className="w-4 h-4 text-sky-400" />
             <span className="hud-nav-label">Ofis</span>
+            {claimableMissions > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
+                {claimableMissions}
+              </span>
+            )}
           </button>
 
           <button
@@ -542,31 +557,6 @@ export const HUD: React.FC = () => {
           </button>
 
           <button
-            onClick={() => (landMode.active ? exitLandMode() : enterLandMode())}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              landMode.active ? `game-btn ${TONE_BUTTON.green}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <MapIcon className="w-4 h-4 text-emerald-400" />
-            <span className="hud-nav-label">Arsa Al</span>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('MISSIONS')}
-            className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'MISSIONS' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Target className="w-4 h-4 text-rose-400" />
-            <span className="hud-nav-label">Görevler</span>
-            {claimableMissions > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
-                {claimableMissions}
-              </span>
-            )}
-          </button>
-
-          <button
             onClick={() => setActiveModal('FUEL_ORDER')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
               activeModal === 'FUEL_ORDER' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
@@ -584,26 +574,6 @@ export const HUD: React.FC = () => {
           >
             <Users className="w-4 h-4 text-indigo-400" />
             <span className="hud-nav-label">Personel & Müdür</span>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('PRICING')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'PRICING' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Tag className="w-4 h-4 text-purple-400" />
-            <span className="hud-nav-label">Fiyatlandırma</span>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('BANK')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'BANK' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Landmark className="w-4 h-4 text-emerald-400" />
-            <span className="hud-nav-label">Banka & Kredi</span>
           </button>
 
           {/* Toasts leave on their own, so the bell is where anything missed

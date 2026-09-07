@@ -362,6 +362,7 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
   const selectBuilding = useGameStore((s) => s.selectBuilding);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
+  const openOffice = useGameStore((s) => s.openOffice);
   const editMode = useGameStore((s) => s.editMode);
   const placing = useGameStore((s) => s.buildMode.active);
   const relocateStructure = useGameStore((s) => s.relocateStructure);
@@ -399,8 +400,8 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
     }
 
     selectBuilding(building.id);
-    if (building.type === 'office') setActiveModal('OFFICE');
-    else if (building.type === 'price_sign') setActiveModal('PRICING');
+    if (building.type === 'office') openOffice('summary');
+    else if (building.type === 'price_sign') openOffice('price');
     else if (building.type === 'pylon_sign') setActiveModal('SETTINGS');
   };
 

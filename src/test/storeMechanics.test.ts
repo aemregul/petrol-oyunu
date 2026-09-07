@@ -238,12 +238,11 @@ describe('the manager', () => {
   it('cannot be hired until every advertised requirement actually holds', () => {
     const state = useGameStore.getState().gameState;
     state.player.reputation = 5;
-    // Level and reputation are fine; the office, attendants and profit are not.
+    // Level and reputation are fine; the attendants and profit are not.
     useGameStore.setState({ gameState: { ...state } });
     expect(useGameStore.getState().hireManager()).toBe(false);
 
     const ready = useGameStore.getState().gameState;
-    ready.buildings.office_1.level = 2;
     for (let i = 0; i < 2; i++) {
       const id = `emp_${i}`;
       ready.employees[id] = {

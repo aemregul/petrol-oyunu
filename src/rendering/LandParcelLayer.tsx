@@ -64,11 +64,13 @@ export const LandParcelLayer: React.FC<LandParcelLayerProps> = ({ pointerState }
 
   if (!landMode.active) return null;
 
-  // Two kinds of offer: unowned neighbours to buy, and owned land to pave.
-  const forSale = buyableParcels(owned, roadLevel);
-  const toPave = owned
-    .filter((key) => !paved.includes(key))
-    .map((key) => parseParcelKey(key));
+  // Two kinds of offer, one at a time: unowned neighbours to buy when the
+  // player came to buy, owned bare land when they came to pour concrete.
+  const forSale = landMode.intent === 'BUY' ? buyableParcels(owned, roadLevel) : [];
+  const toPave =
+    landMode.intent === 'PAVE'
+      ? owned.filter((key) => !paved.includes(key)).map((key) => parseParcelKey(key))
+      : [];
 
   const handleMove = (e: ThreeEvent<PointerEvent>) => {
     if (pointerState.current.pointerDown) return;
@@ -83,7 +85,7 @@ export const LandParcelLayer: React.FC<LandParcelLayerProps> = ({ pointerState }
     const { col, row } = parcelAt(e.point.x / S, e.point.z / S);
     hoverParcel(col, row);
 
-    if (isOwned(owned, col, row)) paveHoveredParcel();
+    if (landMode.intent === 'PAVE') paveHoveredParcel();
     else buyHoveredParcel();
   };
 

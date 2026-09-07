@@ -193,7 +193,6 @@ export interface GameConfig {
     pumpAttendant: EmployeeConfig;
     manager: {
       minLevel: number;
-      minOfficeLevel: number;
       minReputation: number;
       minActiveAttendants: number;
       minProfitableDaysInLast3: number;
@@ -735,20 +734,6 @@ export const GAME_CONFIG: GameConfig = {
         effectsDescription: 'Büyük Tank: Her yakıtın depolama kapasitesini 6.000 L seviyesine çıkarır.'
       }
     },
-    office: {
-      2: {
-        type: 'office',
-        level: 2,
-        cost: 18000,
-        effectsDescription: 'Gelişmiş günlük faaliyet raporu ve İstasyon Müdürü çalışma alanı.'
-      },
-      3: {
-        type: 'office',
-        level: 3,
-        cost: 40000,
-        effectsDescription: 'Modern kurumsal bina, personel eğitim merkezi altyapısı.'
-      }
-    },
     mini_market: {
       2: {
         type: 'mini_market',
@@ -1198,7 +1183,6 @@ export const GAME_CONFIG: GameConfig = {
     },
     manager: {
       minLevel: 10,
-      minOfficeLevel: 2,
       minReputation: 4.00,
       minActiveAttendants: 2,
       minProfitableDaysInLast3: 2,
@@ -1259,7 +1243,7 @@ export const GAME_CONFIG: GameConfig = {
     { level: 2, requiredTotalXp: 300, rewardCash: 1500, unlockedFeatures: 'Çöp Kutusu, Aydınlatmalı Gece Trafiği' },
     { level: 3, requiredTotalXp: 800, rewardCash: 0, unlockedFeatures: 'Pompacı İşe Alma, Pompa S2, Dizel Tabancası, Aydınlatma Direği' },
     { level: 4, requiredTotalXp: 1600, rewardCash: 2500, unlockedFeatures: 'Orta Boy Tank Yükseltmesi (3.000 L)' },
-    { level: 5, requiredTotalXp: 2800, rewardCash: 0, unlockedFeatures: 'Banka Kredileri, Yapı Bakımı & Tamir, Ofis S2' },
+    { level: 5, requiredTotalXp: 2800, rewardCash: 0, unlockedFeatures: 'Banka Kredileri, Yapı Bakımı & Tamir, Düzenleme Modu' },
     { level: 6, requiredTotalXp: 4500, rewardCash: 3000, unlockedFeatures: 'Mini Market, Tuvalet, Oto Yıkama' },
     { level: 7, requiredTotalXp: 6500, rewardCash: 0, unlockedFeatures: 'Ada Sundurması (Canopy), Dijital LED Tabela' },
     { level: 8, requiredTotalXp: 9000, rewardCash: 0, unlockedFeatures: 'Büyük Tank (6.000 L), Pompa S3, LPG Tabancası, Geniş Yakıt Tankı' },
