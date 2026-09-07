@@ -257,6 +257,54 @@ describe('the manager', () => {
     expect(useGameStore.getState().hireManager()).toBe(true);
     expect(useGameStore.getState().gameState.station.managerId).toBe('manager_1');
   });
+
+  it('is promoted for a fee and a reputation bar, paid by grade, and takes the grade along when let go', () => {
+    // Emre, 2026-09-07: the manager comes in grades. Each grade adds duties
+    // and costs more per day; promotion is bought and has to be earned; a
+    // fired manager takes their grade with them.
+    const ready = useGameStore.getState().gameState;
+    ready.player.reputation = 5;
+    for (let i = 0; i < 2; i++) {
+      const id = `emp_${i}`;
+      ready.employees[id] = {
+        id, name: `Pompacı ${i + 1}`, role: 'PUMP_ATTENDANT', level: 1, wage: 450,
+        state: 'IDLE', assignedPumpId: null, currentVehicleId: null, serviceCount: 0,
+        actionTimerSeconds: 0, worldPosition: [0, 0, 0]
+      } as unknown as GameState['employees'][string];
+    }
+    ready.player.statistics.recentNetProfits = [1200, -300, 900];
+    useGameStore.setState({ gameState: { ...ready } });
+    expect(useGameStore.getState().hireManager()).toBe(true);
+    expect(useGameStore.getState().gameState.station.managerLevel).toBe(1);
+
+    // Grade 2 wants the station held in higher regard than hiring did.
+    const tiers = GAME_CONFIG.employees.manager.tiers;
+    const hired = useGameStore.getState().gameState;
+    hired.player.reputation = tiers[1].minReputation - 0.1;
+    useGameStore.setState({ gameState: { ...hired } });
+    expect(useGameStore.getState().upgradeManager()).toBe(false);
+    expect(useGameStore.getState().gameState.station.managerLevel).toBe(1);
+
+    const regarded = useGameStore.getState().gameState;
+    regarded.player.reputation = 5;
+    useGameStore.setState({ gameState: { ...regarded } });
+    const cashBefore = regarded.player.cash;
+    expect(useGameStore.getState().upgradeManager()).toBe(true);
+    const promoted = useGameStore.getState().gameState;
+    expect(promoted.station.managerLevel).toBe(2);
+    expect(promoted.player.cash).toBe(cashBefore - tiers[1].upgradeCost);
+
+    // The day's wage is the grade's wage, not the hiring one.
+    useGameStore.getState().endDayAndShowReport();
+    const closedDayNet = useGameStore.getState().gameState.player.statistics.recentNetProfits?.at(-1) ?? 0;
+    expect(closedDayNet).toBeLessThanOrEqual(-tiers[1].dailyWage);
+
+    expect(useGameStore.getState().fireManager()).toBe(true);
+    const gone = useGameStore.getState().gameState;
+    expect(gone.station.managerId).toBeNull();
+    expect(gone.station.managerLevel).toBe(1);
+    expect(useGameStore.getState().upgradeManager()).toBe(false);
+  });
 });
 
 describe('renaming the station', () => {

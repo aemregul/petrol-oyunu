@@ -362,7 +362,11 @@
       "Bash(echo \"GREP_EXIT=$?\")",
       "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh\\) AppleWebKit/537.36 Chrome/120 Safari/537.36\" \"https://fonts.googleapis.com/css2?family=Lilita+One&display=swap\")",
       "Bash(cp src/domain/services/simulationEngine.ts __TRACKED_VAR__/se.bak)",
-      "Bash(sed -i '' 's|  const { evicted } = evictFromPump\\(state, pump.id\\);|  const evicted = 0; // TEMP|' src/domain/services/simulationEngine.ts)"
+      "Bash(sed -i '' 's|  const { evicted } = evictFromPump\\(state, pump.id\\);|  const evicted = 0; // TEMP|' src/domain/services/simulationEngine.ts)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:5199/)",
+      "Bash(curl -s http://127.0.0.1:5199/)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad/manager-shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad)",
+      "Bash(node /Users/emre/petrol-oyunu/_manager_shot.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad)"
     ],
     "additionalDirectories": [
       "/private/tmp",

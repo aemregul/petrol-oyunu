@@ -448,10 +448,29 @@ export interface ManagerAutomationSettings {
   collectIntervalHours?: number;
   /**
    * Draw from the grid only in the cheap night window, unless the bank has
-   * fallen below the floor. Absent reads as off: the contract fills at any
-   * hour until the manager is told otherwise.
+   * fallen below the floor. Absent reads as on, like every other duty; a
+   * manager below the grade for it fills at any hour regardless.
    */
   nightGridFill?: boolean;
+  /**
+   * Preventive maintenance: a pump worn below minHealthThreshold is serviced
+   * out of the automation budget before it fails. Absent reads as on.
+   */
+  autoMaintenance?: boolean;
+  /** Breakdown repair: a BROKEN pump is put back into service. Absent reads as on. */
+  autoRepair?: boolean;
+  /** Site cleaning: the forecourt is swept before the grime costs custom and sun. Absent reads as on. */
+  autoClean?: boolean;
+  /**
+   * Fill every tank the station sells from while the supplier's daily
+   * discount window is open. Absent reads as on.
+   *
+   * Every duty defaults to on: the manager arrives with the whole job
+   * description and the player takes away what they do not want. What is
+   * actually done is still gated by the manager's own level — a duty the
+   * tier has not unlocked stays switched off however the toggle reads.
+   */
+  dealStockUp?: boolean;
 }
 
 export interface ManagerLogEntry {
@@ -608,6 +627,18 @@ export interface GameState {
     roadLevel: 1 | 2;
     /** Game time of the manager's last round of the tills. */
     lastTillCollectAt?: number;
+    /**
+     * The manager's own grade, 1–3. Each grade adds duties to the job and
+     * shortens the round. Absent reads as 1: a save from before grades knew
+     * only the one manager.
+     */
+    managerLevel?: number;
+    /**
+     * Sim seconds until the manager's next round. Duties are done on rounds,
+     * not every tick: the manager walks the station, sees what needs doing,
+     * and does it — and a better manager walks it more often.
+     */
+    managerTourSecondsLeft?: number;
   };
   tanks: Record<FuelType, FuelTankEntity>;
   pricing: Record<FuelType, FuelPricingState>;

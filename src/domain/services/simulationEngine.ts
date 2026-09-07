@@ -72,8 +72,10 @@ import {
   calculateServiceScore,
   calculateCustomerTip,
   calculateManagerAvailableBudget,
+  calculateRepairCost,
   clamp
 } from '../formulas/economy';
+import { dutyActive, managerDailyWage, managerTier, MANAGER_CLEAN_BELOW } from './managerDuties';
 import { FAR_SIDE_FRONT, farSideBounds, unpavedHoles } from './land';
 import {
   dieselForGenerator,
@@ -4873,7 +4875,7 @@ function tickEnergy(state: GameState, dt: number): void {
     // The grid last, through the contract on the substation.
     const substation = substationOn(state, side);
     if (!substation) continue;
-    if (state.station.managerId && state.managerSettings.nightGridFill && !isNightTariff(hour)) {
+    if (dutyActive(state, 'nightGridFill') && !isNightTariff(hour)) {
       // The manager waits for the cheap window — unless the bank is about
       // to leave customers standing at a dead post.
       const share = (energyAvailable(state, side) / capacity) * 100;
@@ -6497,17 +6499,6 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
   if (!state.station.managerId) return;
   const settings = state.managerSettings;
 
-  const estimatedWages = Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0);
-  const dueInstallments = state.loans
-    .filter((l) => l.state === 'ACTIVE')
-    .reduce((sum, l) => sum + Math.min(l.dailyPayment, l.remaining), 0);
-  const budget = calculateManagerAvailableBudget(
-    state.player.cash,
-    settings.kasaReserve,
-    dueInstallments,
-    estimatedWages
-  );
-
   const logAction = (
     category: 'FUEL_ORDER' | 'PRICING' | 'STAFF' | 'MAINTENANCE' | 'ALERT' | 'FINANCE',
     reason: string,
@@ -6528,7 +6519,57 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     if (state.managerLogs.length > 60) state.managerLogs.pop();
   };
 
-  if (settings.autoFuelOrder) {
+  // The rounds of the tills. Without a manager the player walks to each
+  // building and clicks the money out; with one, it turns up in the cash
+  // every couple of hours with a line in the log saying so. This keeps its
+  // own clock, in game hours, and is not part of the rounds below.
+  if (dutyActive(state, 'collectTills')) {
+    const every = settings.collectIntervalHours ?? MANAGER_COLLECT_EVERY_HOURS;
+    const now = state.dayState.gameTime;
+    const last = state.station.lastTillCollectAt;
+    if (last === undefined || now - last >= every || now < last) {
+      state.station.lastTillCollectAt = now;
+      // The first tick after hiring starts the clock rather than emptying
+      // every till at once — the rounds are rounds, not a windfall.
+      if (last !== undefined) {
+        const round = collectAllTills(state);
+        if (round.total > 0) {
+          logAction(
+            'FINANCE',
+            `${round.buildings} tesisin kasası toplandı: ₺${round.total.toLocaleString('tr-TR')}.`,
+            'SUCCESS',
+            round.total
+          );
+        }
+      }
+    }
+  }
+
+  // Everything else the manager does, they do in rounds, not every tick:
+  // they walk the station, see what needs doing and do it, then go back to
+  // the office for a while. A tank can run down and a bay can fail between
+  // two looks, and a better grade looks more often — that gap is what
+  // promotion buys. The first round happens the moment they are hired.
+  const left = (state.station.managerTourSecondsLeft ?? 0) - dt;
+  if (left > 0) {
+    state.station.managerTourSecondsLeft = left;
+    return;
+  }
+  state.station.managerTourSecondsLeft = managerTier(state).tourSeconds;
+
+  const estimatedWages =
+    Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0) + managerDailyWage(state);
+  const dueInstallments = state.loans
+    .filter((l) => l.state === 'ACTIVE')
+    .reduce((sum, l) => sum + Math.min(l.dailyPayment, l.remaining), 0);
+  let budget = calculateManagerAvailableBudget(
+    state.player.cash,
+    settings.kasaReserve,
+    dueInstallments,
+    estimatedWages
+  );
+
+  if (dutyActive(state, 'fuelOrder')) {
     // Only what the station can actually sell. The tank farm stocks all three
     // fuels from day one, so ordering by capacity alone had the manager
     // paying for LPG deliveries at a station with no LPG nozzle — three
@@ -6559,10 +6600,38 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
 
       const placed = placeFuelOrder(state, fuelType, orderLiters, effects);
       logAction('FUEL_ORDER', reason, placed ? 'SUCCESS' : 'FAILED', orderLiters);
+      if (placed) budget -= cost;
     }
   }
 
-  if (settings.autoPricing) {
+  // The supplier's minute of cheap fuel. A sharp manager fills every tank the
+  // station sells from while it lasts — whatever the reorder rule says, and
+  // right up to the brim, because this is the one time a full tank is cheap.
+  if (dutyActive(state, 'dealStock') && isFuelDealOn(state)) {
+    for (const fuelType of fuelsOnSale(state)) {
+      const tank = state.tanks[fuelType];
+      if (tank.capacity <= 0) continue;
+      if (state.fuelOrders.some((o) => o.fuelType === fuelType)) continue;
+
+      const conf = GAME_CONFIG.fuels[fuelType];
+      const room = tank.capacity - tank.stock;
+      const orderLiters = Math.floor(room / conf.orderStepLiters) * conf.orderStepLiters;
+      if (orderLiters < conf.orderMinLiters) continue;
+
+      const cost = orderLiters * wholesaleNow(state, fuelType) + conf.deliveryFee;
+      const reason = `${conf.shortName} indirimdeyken depo fullendi.`;
+      if (cost > budget) {
+        logAction('FUEL_ORDER', `İndirim var ama kasa rezervi ${conf.shortName} için yetmedi.`, 'SKIPPED_RESERVE', orderLiters);
+        continue;
+      }
+
+      const placed = placeFuelOrder(state, fuelType, orderLiters, effects);
+      logAction('FUEL_ORDER', reason, placed ? 'SUCCESS' : 'FAILED', orderLiters);
+      if (placed) budget -= cost;
+    }
+  }
+
+  if (dutyActive(state, 'pricing')) {
     for (const fuelType of Object.keys(state.pricing) as FuelType[]) {
       if (state.tanks[fuelType].capacity <= 0) continue;
       const pricing = state.pricing[fuelType];
@@ -6589,7 +6658,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     }
   }
 
-  if (settings.autoAssignAttendants) {
+  if (dutyActive(state, 'assignAttendants')) {
     const idlePumps = Object.values(state.pumps).filter(
       (p) => p.state !== 'BROKEN' && !Object.values(state.employees).some((e) => e.assignedPumpId === p.id)
     );
@@ -6602,27 +6671,67 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     }
   }
 
-  // The rounds of the tills. Without a manager the player walks to each
-  // building and clicks the money out; with one, it turns up in the cash
-  // every couple of hours with a line in the log saying so.
-  if (settings.autoCollectTills ?? true) {
-    const every = settings.collectIntervalHours ?? MANAGER_COLLECT_EVERY_HOURS;
-    const now = state.dayState.gameTime;
-    const last = state.station.lastTillCollectAt;
-    if (last === undefined || now - last >= every || now < last) {
-      state.station.lastTillCollectAt = now;
-      // The first tick after hiring starts the clock rather than emptying
-      // every till at once — the rounds are rounds, not a windfall.
-      if (last !== undefined) {
-        const round = collectAllTills(state);
-        if (round.total > 0) {
-          logAction(
-            'FINANCE',
-            `${round.buildings} tesisin kasası toplandı: ₺${round.total.toLocaleString('tr-TR')}.`,
-            'SUCCESS',
-            round.total
-          );
-        }
+  // Pumps: a worn bay is serviced before it fails, a failed one is put back
+  // to work. Two separate duties, because they are two grades of manager —
+  // the first knows to call the fitter, the second is trusted with the bill
+  // for a dead bay. Both come out of the automation budget, so a thin reserve
+  // leaves the pumps to wear like it leaves the tanks to run down.
+  for (const pump of Object.values(state.pumps)) {
+    const broken = pump.state === 'BROKEN';
+    if (broken ? !dutyActive(state, 'repair') : !dutyActive(state, 'maintenance')) continue;
+    if (!broken && pump.health >= settings.minHealthThreshold) continue;
+    // A preventive service waits for the bay to be empty rather than
+    // turning a paying customer out of it.
+    if (!broken && (pump.currentVehicleId || pump.state !== 'IDLE')) continue;
+
+    const cost = calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health);
+    const what = broken ? 'arızası giderildi' : `bakımı yapıldı (sağlık %${pump.health.toFixed(0)})`;
+    if (cost > budget) {
+      // Once per stretch of not affording it, not once per round.
+      const last = state.managerLogs.find(
+        (l) => l.category === 'MAINTENANCE' && l.reason.includes(pump.id)
+      );
+      if (last?.result !== 'SKIPPED_RESERVE') {
+        logAction(
+          'MAINTENANCE',
+          `${pump.id} ${broken ? 'arızalı' : 'yıpranmış'}; kasa rezervi tamir için yetmedi (₺${cost.toLocaleString('tr-TR')}).`,
+          'SKIPPED_RESERVE',
+          cost
+        );
+      }
+      continue;
+    }
+
+    const paid = servicePump(state, pump, `${pump.id} ${broken ? 'arıza onarımı' : 'bakımı'} (müdür)`);
+    logAction('MAINTENANCE', `${pump.id} ${what}.`, paid === null ? 'FAILED' : 'SUCCESS', cost);
+    if (paid !== null) {
+      budget -= paid;
+      trackMissionMetric(state, 'PUMPS_REPAIRED', 1, effects);
+    }
+  }
+
+  // The forecourt. Grime costs custom and, on the roof panels, sun; a sweep
+  // is one of the cheaper things the manager pays for, so it waits on the
+  // reserve like the rest.
+  if (dutyActive(state, 'cleanStation') && state.station.cleanliness < MANAGER_CLEAN_BELOW) {
+    const cost = GAME_CONFIG.economy.siteCleanCost;
+    if (cost > budget) {
+      const last = state.managerLogs.find((l) => l.category === 'MAINTENANCE' && l.reason.includes('temizli'));
+      if (last?.result !== 'SKIPPED_RESERVE') {
+        logAction('MAINTENANCE', 'Saha kirlendi; kasa rezervi temizlik için yetmedi.', 'SKIPPED_RESERVE', cost);
+      }
+    } else {
+      const tx = TransactionService.executeCashTransaction(state, {
+        type: 'CLEAN',
+        amount: -cost,
+        description: 'Saha temizliği (müdür)'
+      });
+      if (tx.success) {
+        budget -= cost;
+        state.station.cleanliness = Math.min(100, state.station.cleanliness + 25);
+        state.player.statistics.cleanActionsCount++;
+        trackMissionMetric(state, 'STATION_CLEANED', 1, effects);
+        logAction('MAINTENANCE', `Saha temizlendi (%${Math.round(state.station.cleanliness)}).`, 'SUCCESS', cost);
       }
     }
   }
@@ -6630,6 +6739,8 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
   if (settings.autoMaintenanceAlert) {
     for (const pump of Object.values(state.pumps)) {
       if (pump.health >= settings.minHealthThreshold) continue;
+      // No need to nag about a bay the manager is about to service anyway.
+      if (dutyActive(state, 'maintenance') && pump.state !== 'BROKEN') continue;
       const alreadyWarned = state.managerLogs.some(
         (l) => l.category === 'MAINTENANCE' && l.reason.includes(pump.id)
       );
@@ -6644,6 +6755,38 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       );
     }
   }
+}
+
+/**
+ * Puts a pump back to full health and into service, and pays for it.
+ *
+ * Shared by the player's repair button and the manager's rounds, so what a
+ * repair costs and what it does is decided in one place. Whoever is at the
+ * bay is sent away first: a service that only forgot the car left it
+ * standing at the pump for ever, neither fuelling nor leaving — the same
+ * failure as a breakdown used to be — and turning a customer out to service
+ * the bay under them costs what turning a customer out always costs.
+ *
+ * Returns what was paid, or null if the till could not cover it.
+ */
+export function servicePump(state: GameState, pump: PumpEntity, description: string): number | null {
+  const cost = calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health);
+  const tx = TransactionService.executeCashTransaction(state, {
+    type: 'REPAIR',
+    amount: -cost,
+    description
+  });
+  if (!tx.success) return null;
+
+  evictFromPump(state, pump.id);
+  pump.health = 100;
+  // A broken pump has to go through MAINTENANCE before it can serve again.
+  setPumpState(pump, 'MAINTENANCE');
+  setPumpState(pump, 'IDLE');
+  releasePump(pump);
+  state.player.statistics.repairActionsCount++;
+  state.dayState.todayStats.repairs += cost;
+  return cost;
 }
 
 /* ------------------------------------------------------------------ */

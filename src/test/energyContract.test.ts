@@ -98,6 +98,8 @@ describe('the grid contract', () => {
   it('waits for the cheap window when the manager is told to, unless the bank is low', () => {
     const noon = plot(200);
     noon.station.managerId = 'mgr';
+    // Waiting for the cheap window is a second-grade manager's duty.
+    noon.station.managerLevel = 2;
     noon.managerSettings.nightGridFill = true;
     advance(noon, HOUR);
     expect(energyAvailable(noon, side)).toBe(200);
@@ -105,12 +107,16 @@ describe('the grid contract', () => {
 
     const low = plot(40);
     low.station.managerId = 'mgr';
+    // Waiting for the cheap window is a second-grade manager's duty.
+    low.station.managerLevel = 2;
     low.managerSettings.nightGridFill = true;
     advance(low, HOUR);
     expect(energyAvailable(low, side)).toBeGreaterThan(40);
 
     const night = plot(200, true, 23);
     night.station.managerId = 'mgr';
+    // Waiting for the cheap window is a second-grade manager's duty.
+    night.station.managerLevel = 2;
     night.managerSettings.nightGridFill = true;
     advance(night, HOUR);
     expect(energyAvailable(night, side)).toBeCloseTo(260, 0);

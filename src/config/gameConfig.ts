@@ -165,6 +165,39 @@ export interface LoanProductConfig {
   requiredExpansion?: 'A' | 'B';
 }
 
+/**
+ * What the manager takes on, one toggle each. The keys are the job
+ * description; which of them a given manager actually does is decided by
+ * their grade (ManagerTierConfig.duties) and the player's toggles together.
+ */
+export type ManagerDuty =
+  | 'collectTills'
+  | 'fuelOrder'
+  | 'assignAttendants'
+  | 'maintenance'
+  | 'pricing'
+  | 'nightGridFill'
+  | 'cleanStation'
+  | 'repair'
+  | 'dealStock';
+
+export interface ManagerTierConfig {
+  level: number;
+  /** What promotion to this grade costs. Zero for the grade hiring gives. */
+  upgradeCost: number;
+  dailyWage: number;
+  /** The station must be held in this regard before the manager is promoted. */
+  minReputation: number;
+  /** Sim seconds between the manager's rounds. */
+  tourSeconds: number;
+  /** Everything this grade can do — cumulative, so a list per grade is complete. */
+  duties: ManagerDuty[];
+  /** Tank levels the manager can be told to reorder at, in percent. */
+  orderThresholds: number[];
+  /** Whether the manager may be told to fill the tank right up rather than to the target. */
+  canFillTank: boolean;
+}
+
 export interface LevelThresholdConfig {
   level: number;
   requiredTotalXp: number;
@@ -197,8 +230,10 @@ export interface GameConfig {
       minActiveAttendants: number;
       minProfitableDaysInLast3: number;
       hireCost: number;
+      /** Level 1 pay; the tiers below carry their own. */
       dailyWage: number;
       defaultKasaReserve: number;
+      tiers: ManagerTierConfig[];
     };
   };
   /**
@@ -1272,7 +1307,53 @@ export const GAME_CONFIG: GameConfig = {
       minProfitableDaysInLast3: 2,
       hireCost: 45000,
       dailyWage: 2800,
-      defaultKasaReserve: 8000
+      defaultKasaReserve: 8000,
+      // Three grades, and the job grows with them. The first manager keeps the
+      // lights on: money in, fuel ordered, staff at their posts, worn pumps
+      // serviced. The second is trusted with the books and the power bill and
+      // gets a failed bay back on its feet. Only the third is sharp enough to
+      // catch the supplier's one-minute discount. Rounds get quicker as they
+      // go — 45 seconds is long enough for a tank to run down between looks,
+      // which is the point of paying for a better one (Emre, 2026-09-07:
+      // the manager is meant to be expensive and the game meant to be hard).
+      tiers: [
+        {
+          level: 1,
+          upgradeCost: 0,
+          dailyWage: 2800,
+          minReputation: 4.0,
+          tourSeconds: 45,
+          duties: ['collectTills', 'fuelOrder', 'assignAttendants', 'maintenance'],
+          orderThresholds: [10, 20],
+          canFillTank: false
+        },
+        {
+          level: 2,
+          upgradeCost: 60000,
+          dailyWage: 3600,
+          minReputation: 4.25,
+          tourSeconds: 32,
+          duties: [
+            'collectTills', 'fuelOrder', 'assignAttendants', 'maintenance',
+            'pricing', 'nightGridFill', 'cleanStation', 'repair'
+          ],
+          orderThresholds: [10, 20, 35],
+          canFillTank: false
+        },
+        {
+          level: 3,
+          upgradeCost: 95000,
+          dailyWage: 4500,
+          minReputation: 4.5,
+          tourSeconds: 22,
+          duties: [
+            'collectTills', 'fuelOrder', 'assignAttendants', 'maintenance',
+            'pricing', 'nightGridFill', 'cleanStation', 'repair', 'dealStock'
+          ],
+          orderThresholds: [10, 20, 35, 50],
+          canFillTank: true
+        }
+      ]
     }
   },
   pumpFuelModules: {

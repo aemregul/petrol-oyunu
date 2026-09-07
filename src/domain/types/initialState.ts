@@ -214,7 +214,7 @@ export function createInitialGameState(): GameState {
     },
     managerSettings: {
       autoFuelOrder: false,
-      orderThresholdPercent: 25,
+      orderThresholdPercent: 20,
       orderTargetPercent: 90,
       kasaReserve: GAME_CONFIG.employees.manager.defaultKasaReserve,
       autoPricing: false,
@@ -224,7 +224,12 @@ export function createInitialGameState(): GameState {
       autoMaintenanceAlert: true,
       minHealthThreshold: 40,
       autoCollectTills: true,
-      collectIntervalHours: 2
+      collectIntervalHours: 2,
+      nightGridFill: true,
+      autoMaintenance: true,
+      autoRepair: true,
+      autoClean: true,
+      dealStockUp: true
     },
     managerLogs: [],
     settings: {

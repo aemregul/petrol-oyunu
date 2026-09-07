@@ -1815,3 +1815,98 @@ describe('withdrawing a service mid-visit', () => {
     expect(state.player.reputation).toBeLessThan(5);
   });
 });
+
+describe('the manager', () => {
+  // Emre, 2026-09-07: the manager comes in grades and works in rounds. Each
+  // grade adds duties and looks more often; every duty is a toggle the
+  // player can take away, but a duty the grade has not unlocked is not done
+  // however the toggle reads.
+  function withManager(level: number): GameState {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.station.open = false;
+    state.player.cash = 300000;
+    state.player.level = 12;
+    state.station.managerId = 'mgr';
+    state.station.managerLevel = level;
+    return state;
+  }
+
+  it('services a worn bay at the first grade, but repairs a failed one only from the second', () => {
+    const state = withManager(1);
+    state.pumps.pump_1.health = 30;
+    const cash = state.player.cash;
+    advance(state, 1);
+    expect(state.pumps.pump_1.health).toBeCloseTo(100, 0);
+    expect(state.player.cash).toBeLessThan(cash);
+
+    state.pumps.pump_1.health = 0;
+    state.pumps.pump_1.state = 'BROKEN';
+    advance(state, 120);
+    expect(state.pumps.pump_1.state).toBe('BROKEN');
+
+    state.station.managerLevel = 2;
+    advance(state, 60);
+    expect(state.pumps.pump_1.state).toBe('IDLE');
+    // Repaired to full, then worn a touch by the rest of the minute.
+    expect(state.pumps.pump_1.health).toBeGreaterThan(95);
+  });
+
+  it('leaves alone a duty the player has switched off', () => {
+    const state = withManager(2);
+    state.managerSettings.autoRepair = false;
+    state.pumps.pump_1.health = 0;
+    state.pumps.pump_1.state = 'BROKEN';
+    advance(state, 90);
+    expect(state.pumps.pump_1.state).toBe('BROKEN');
+  });
+
+  it('sweeps the forecourt from the second grade', () => {
+    const junior = withManager(1);
+    junior.station.cleanliness = 30;
+    advance(junior, 1);
+    expect(junior.station.cleanliness).toBeLessThan(31);
+
+    const senior = withManager(2);
+    senior.station.cleanliness = 30;
+    advance(senior, 1);
+    expect(senior.station.cleanliness).toBeGreaterThan(50);
+    expect(senior.player.cash).toBe(300000 - GAME_CONFIG.economy.siteCleanCost);
+  });
+
+  it('fills the tanks when the supplier discount opens, at the top grade only', () => {
+    const half = (s: GameState) => {
+      s.tanks.gasoline.stock = s.tanks.gasoline.capacity * 0.5;
+      s.tanks.gasoline.reservedStock = 0;
+    };
+    const junior = withManager(2);
+    half(junior);
+    junior.dayState.fuelDealSecondsLeft = 60;
+    advance(junior, 40);
+    expect(junior.fuelOrders).toHaveLength(0);
+
+    const senior = withManager(3);
+    half(senior);
+    senior.dayState.fuelDealSecondsLeft = 60;
+    advance(senior, 40);
+    const order = senior.fuelOrders.find((o) => o.fuelType === 'gasoline');
+    expect(order).toBeDefined();
+    // Right up to the brim, at the discounted price.
+    const room = senior.tanks.gasoline.capacity * 0.5;
+    expect(order!.liters).toBe(Math.floor(room / GAME_CONFIG.fuels.gasoline.orderStepLiters) * GAME_CONFIG.fuels.gasoline.orderStepLiters);
+    expect(order!.unitCost).toBeLessThan(senior.pricing.gasoline.todayWholesaleCost);
+  });
+
+  it('works in rounds: a tank that runs down between looks waits for the next one', () => {
+    const state = withManager(1);
+    state.managerSettings.autoFuelOrder = true;
+    state.managerSettings.orderThresholdPercent = 20;
+    advance(state, 1);
+    state.tanks.gasoline.stock = state.tanks.gasoline.capacity * 0.1;
+    state.tanks.gasoline.reservedStock = 0;
+    advance(state, 20);
+    expect(state.fuelOrders).toHaveLength(0);
+    advance(state, 30);
+    expect(state.fuelOrders.some((o) => o.fuelType === 'gasoline')).toBe(true);
+  });
+});

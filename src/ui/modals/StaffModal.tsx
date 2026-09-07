@@ -1,8 +1,33 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle, Trash2 } from 'lucide-react';
+import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle, Trash2, Check, Lock } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import {
+  MANAGER_DUTIES,
+  MANAGER_DUTY_SETTING,
+  MANAGER_MAX_LEVEL,
+  dutyEnabled,
+  dutyMinLevel,
+  dutyUnlocked,
+  managerLevel,
+  managerTier,
+  managerTierAt
+} from '../../domain/services/managerDuties';
+import type { ManagerDuty } from '../../config/gameConfig';
+
+/** What each duty is called on the panel, and what it means in a line. */
+const DUTY_LABEL: Record<ManagerDuty, { label: string; hint: string }> = {
+  collectTills: { label: 'Kumbara topla', hint: 'Tesislerin kasasını dolaşıp parayı istasyon kasasına aktarır.' },
+  fuelOrder: { label: 'Yakıt sipariş et', hint: 'Tank eşiğin altına inince tanker çağırır.' },
+  assignAttendants: { label: 'Pompacı ata', hint: 'Boşta kalan pompacıyı boş pompaya koyar.' },
+  maintenance: { label: 'Bakım yaptır', hint: 'Yıpranan pompayı arızalanmadan, boşken servise sokar.' },
+  pricing: { label: 'Fiyat dengele', hint: 'Bölge ortalamasını izler, marjı korur.' },
+  nightGridFill: { label: 'Bataryayı gece doldur', hint: 'Şebekeden yalnızca gece tarifesinde çeker.' },
+  cleanStation: { label: 'Sahayı temizle', hint: 'Temizlik %50 altına inince sahayı ve panelleri yıkatır.' },
+  repair: { label: 'Arıza tamir et', hint: 'Arızalanan pompayı tekrar hizmete alır.' },
+  dealStock: { label: 'İndirimde stokla', hint: 'Tedarikçi indirimi açılınca depoları fuller.' }
+};
 
 export const StaffModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
@@ -12,6 +37,8 @@ export const StaffModal: React.FC = () => {
   const upgradeAttendant = useGameStore((s) => s.upgradeAttendant);
   const fireAttendant = useGameStore((s) => s.fireAttendant);
   const hireManager = useGameStore((s) => s.hireManager);
+  const upgradeManager = useGameStore((s) => s.upgradeManager);
+  const fireManager = useGameStore((s) => s.fireManager);
   const updateManagerSettings = useGameStore((s) => s.updateManagerSettings);
 
   const [activeTab, setActiveTab] = useState<'attendants' | 'manager'>('attendants');
@@ -244,8 +271,10 @@ export const StaffModal: React.FC = () => {
                 <div>
                   <div className="font-display text-lg text-ink">İstasyon Müdürü İşe Alımı</div>
                   <div className="text-xs text-mute mt-1">
-                    Müdür, belirlediğiniz kasa rezervi ve kurallar dahilinde otomatik yakıt siparişi verir,
-                    fiyatları dengeler ve pompacıları yönetir.
+                    Müdür belirlediğin kasa rezervi dahilinde istasyonu tur tur dolaşır: Sv.1 kasaları toplar,
+                    yakıt sipariş eder, pompacı atar ve bakım yaptırır; Sv.2 fiyat dengeler, bataryayı gece
+                    doldurur, sahayı temizler ve arıza tamir eder; Sv.3 tedarikçi indiriminde depoları fuller.
+                    Terfi paralı.
                   </div>
                 </div>
 
@@ -294,80 +323,188 @@ export const StaffModal: React.FC = () => {
                 </button>
               </div>
             ) : (
-              // Active Automation Rules Configuration
-              <div className="flex flex-col gap-4">
-                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
-                  <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2">
-                    <span className="font-display text-base text-ink">Otomatik Yakıt Siparişi</span>
-                    <input
-                      type="checkbox"
-                      checked={gameState.managerSettings.autoFuelOrder}
-                      onChange={(e) => updateManagerSettings({ autoFuelOrder: e.target.checked })}
-                      className="accent-kgrn w-4 h-4 cursor-pointer"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="k-label block">Sipariş Eşiği</span>
-                      <span className="font-display text-ink tabular-nums">
-                        Tank %{gameState.managerSettings.orderThresholdPercent} altına inince
-                      </span>
+              // The manager's card: grade, pay, promotion, and the job
+              // description as toggles — what the grade has not unlocked shows
+              // locked with the grade that would unlock it.
+              (() => {
+                const level = managerLevel(gameState);
+                const tier = managerTier(gameState);
+                const next = level < MANAGER_MAX_LEVEL ? managerTierAt(level + 1) : null;
+                const settings = gameState.managerSettings;
+                const canPromote =
+                  !!next &&
+                  gameState.player.reputation >= next.minReputation &&
+                  gameState.player.cash >= next.upgradeCost;
+                const allThresholds = managerTierAt(MANAGER_MAX_LEVEL).orderThresholds;
+                const thresholdMinLevel = (pct: number) =>
+                  managerConf.tiers.find((t) => t.orderThresholds.includes(pct))?.level ?? MANAGER_MAX_LEVEL;
+                const fillMinLevel =
+                  managerConf.tiers.find((t) => t.canFillTank)?.level ?? MANAGER_MAX_LEVEL;
+                const fillOn = settings.orderTargetPercent >= 100;
+                const chip = (on: boolean, locked: boolean) =>
+                  `game-btn flex items-center gap-1.5 border-2 border-ink rounded-md px-3 py-1.5 font-display text-xs tracking-wide ${
+                    locked
+                      ? 'bg-board text-mute opacity-70 cursor-not-allowed'
+                      : on
+                        ? 'bg-kgrn text-white'
+                        : 'bg-board text-ink hover:bg-paper'
+                  }`;
+                const dutyLine = (t: (typeof managerConf.tiers)[number], from: (typeof managerConf.tiers)[number] | null) =>
+                  t.duties
+                    .filter((d) => !from || !from.duties.includes(d))
+                    .map((d) => DUTY_LABEL[d].label.toLowerCase())
+                    .join(', ');
+
+                return (
+                  <div className="flex flex-col gap-4">
+                    <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
+                      <div className="flex flex-wrap justify-between items-center gap-2 border-b-2 border-dotted border-mute/60 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-5 h-5 text-kblu" />
+                          <span className="font-display text-base text-ink">Müdür Sv.{level}</span>
+                          <span className="text-xs text-mute">
+                            · yevmiye ₺{tier.dailyWage.toLocaleString('tr-TR')}/gün
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {next ? (
+                            <button
+                              onClick={upgradeManager}
+                              disabled={!canPromote}
+                              title={
+                                canPromote
+                                  ? `Tur ${next.tourSeconds} sn'ye iner, yevmiye ₺${next.dailyWage.toLocaleString('tr-TR')}/gün olur.`
+                                  : `İtibar ${next.minReputation.toFixed(2)} ve ₺${next.upgradeCost.toLocaleString('tr-TR')} gerekir.`
+                              }
+                              className={`game-btn flex items-center gap-1 px-3 py-1.5 rounded-md font-display text-xs uppercase tracking-wide ${
+                                canPromote ? 'bg-kyel text-ink' : 'bg-board text-mute opacity-70 cursor-not-allowed'
+                              }`}
+                            >
+                              <ArrowUpCircle className="w-4 h-4" />
+                              Sv.{next.level} terfi · ₺{next.upgradeCost.toLocaleString('tr-TR')}
+                            </button>
+                          ) : (
+                            <span className="k-label">MAKS · Sv.{MANAGER_MAX_LEVEL}</span>
+                          )}
+                          <button
+                            onClick={fireManager}
+                            className="game-btn flex items-center gap-1 px-3 py-1.5 rounded-md font-display text-xs uppercase tracking-wide bg-kred text-white"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            İşten Çıkar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-mute leading-relaxed">
+                        <b className="text-ink">{tier.tourSeconds} sn'de bir tur</b> (
+                        {managerConf.tiers.map((t) => `Sv.${t.level} ${t.tourSeconds}`).join(' · ')}
+                        ): {managerConf.tiers.map((t, i) => (
+                          <span key={t.level}>
+                            {i > 0 ? '; ' : ''}
+                            <b className={t.level <= level ? 'text-ink' : 'text-mute'}>Sv.{t.level}</b>{' '}
+                            {dutyLine(t, i > 0 ? managerConf.tiers[i - 1] : null)}
+                          </span>
+                        ))}
+                        . Sen başka şubedeyken şubeyi işletir — günlük net kazancı kasana otomatik yazılır.
+                        {next && (
+                          <>
+                            {' '}Terfi için itibar {next.minReputation.toFixed(2)} (
+                            {gameState.player.reputation.toFixed(2)}).
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="k-label block">Hedef Doluluk</span>
-                      <span className="font-display text-ink tabular-nums">
-                        %{gameState.managerSettings.orderTargetPercent} seviyesine kadar
-                      </span>
+
+                    <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
+                      <span className="k-label">Müdüre talimat — neyi yapsın, ne zaman sipariş versin</span>
+                      <div className="flex flex-wrap gap-2">
+                        {MANAGER_DUTIES.map((duty) => {
+                          const unlocked = dutyUnlocked(gameState, duty);
+                          const on = dutyEnabled(settings, duty);
+                          return (
+                            <button
+                              key={duty}
+                              disabled={!unlocked}
+                              title={
+                                unlocked
+                                  ? DUTY_LABEL[duty].hint
+                                  : `Sv.${dutyMinLevel(duty)} müdürle açılır. ${DUTY_LABEL[duty].hint}`
+                              }
+                              onClick={() =>
+                                updateManagerSettings({ [MANAGER_DUTY_SETTING[duty]]: !on })
+                              }
+                              className={chip(on, !unlocked)}
+                            >
+                              {unlocked ? (
+                                on ? <Check className="w-3.5 h-3.5" /> : null
+                              ) : (
+                                <Lock className="w-3.5 h-3.5" />
+                              )}
+                              {DUTY_LABEL[duty].label}
+                              {!unlocked && <span className="text-[10px]">Sv.{dutyMinLevel(duty)}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <span className="k-label mt-1">Tank şu orana düşünce sipariş versin</span>
+                      <div className="flex flex-wrap gap-2">
+                        {allThresholds.map((pct) => {
+                          const unlocked = tier.orderThresholds.includes(pct);
+                          const on = settings.orderThresholdPercent === pct;
+                          return (
+                            <button
+                              key={pct}
+                              disabled={!unlocked}
+                              title={unlocked ? `Tank %${pct} altına inince tanker çağırır.` : `Sv.${thresholdMinLevel(pct)} müdürle açılır.`}
+                              onClick={() => updateManagerSettings({ orderThresholdPercent: pct })}
+                              className={chip(on, !unlocked)}
+                            >
+                              {!unlocked && <Lock className="w-3.5 h-3.5" />}%{pct}
+                            </button>
+                          );
+                        })}
+                        <button
+                          disabled={!tier.canFillTank}
+                          title={
+                            tier.canFillTank
+                              ? 'Sipariş depoyu %100 doldurur; kapalıyken %90 hedefler.'
+                              : `Sv.${fillMinLevel} müdürle açılır.`
+                          }
+                          onClick={() => updateManagerSettings({ orderTargetPercent: fillOn ? 90 : 100 })}
+                          className={chip(fillOn, !tier.canFillTank)}
+                        >
+                          {tier.canFillTank ? (fillOn ? <Check className="w-3.5 h-3.5" /> : null) : <Lock className="w-3.5 h-3.5" />}
+                          Depoyu FULLE
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-mute">
+                        Şu an: tank %{settings.orderThresholdPercent} altına inince %{settings.orderTargetPercent} seviyesine kadar
+                        sipariş. Pompa bakımı sağlık %{settings.minHealthThreshold} altına inince.
+                        {dutyUnlocked(gameState, 'nightGridFill') && (
+                          <>
+                            {' '}Gece tarifesi {GAME_CONFIG.ev.gridTariff.night.from}:00–{GAME_CONFIG.ev.gridTariff.night.to}:00,
+                            batarya %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-display text-base text-ink">Kasa Rezervi Güvencesi</span>
+                        <span className="font-display tabular-nums text-kgrn">
+                          ₺{settings.kasaReserve.toLocaleString('tr-TR')}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-mute">
+                        Müdür yapacağı hiçbir harcamada — sipariş, bakım, tamir — kasanı bu tutarın altına düşüremez.
+                        Günün maaşları ve kredi taksitleri de bütçeden önce ayrılır.
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2">
-                    <span className="font-display text-base text-ink">Tesis Kasalarını Topla</span>
-                    <input
-                      type="checkbox"
-                      checked={gameState.managerSettings.autoCollectTills ?? true}
-                      onChange={(e) => updateManagerSettings({ autoCollectTills: e.target.checked })}
-                      className="accent-kgrn w-4 h-4 cursor-pointer"
-                    />
-                  </div>
-                  <div className="text-[11px] text-mute">
-                    Müdür her {gameState.managerSettings.collectIntervalHours ?? 2} saatte bir WC, market,
-                    kahveci, restoran ve otelin kasasını dolaşıp parayı istasyon kasasına aktarır.
-                    Kapalıyken parayı yapıların üstündeki rozete tıklayarak sen toplarsın.
-                  </div>
-                </div>
-
-                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2">
-                    <span className="font-display text-base text-ink">Bataryayı Gece Doldur</span>
-                    <input
-                      type="checkbox"
-                      checked={gameState.managerSettings.nightGridFill ?? false}
-                      onChange={(e) => updateManagerSettings({ nightGridFill: e.target.checked })}
-                      className="accent-kgrn w-4 h-4 cursor-pointer"
-                    />
-                  </div>
-                  <div className="text-[11px] text-mute">
-                    Müdür şebekeden yalnızca gece tarifesinde ({GAME_CONFIG.ev.gridTariff.night.from}:00–
-                    {GAME_CONFIG.ev.gridTariff.night.to}:00, ₺{GAME_CONFIG.ev.gridTariff.night.price.toFixed(1)}/kWh) çeker.
-                    Batarya %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
-                  </div>
-                </div>
-
-                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-display text-base text-ink">Kasa Rezervi Güvencesi</span>
-                    <span className="font-display tabular-nums text-kgrn">
-                      ₺{gameState.managerSettings.kasaReserve.toLocaleString('tr-TR')}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-mute">
-                    Müdür yapacağı hiçbir harcamada kasanızı bu tutarın altına düşüremez.
-                  </div>
-                </div>
-              </div>
+                );
+              })()
             )}
           </div>
         )}

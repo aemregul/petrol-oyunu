@@ -29,8 +29,6 @@ import {
   rollDailyEvent,
   getWholesaleEventModifier,
   applyLevelProgression,
-  releasePump,
-  setPumpState,
   drivewayRole,
   drivewaySideAt,
   syncPriceSign,
@@ -38,12 +36,19 @@ import {
   getLayout,
   closeForecourt,
   evictFromPump,
+  servicePump,
   dailyPriceReputationDelta,
   dismissVehicle,
   DRIVEWAY_Z,
   energyCapacityOn
 } from '../domain/services/simulationEngine';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
+import {
+  managerDailyWage,
+  managerLevel,
+  managerTierAt,
+  MANAGER_MAX_LEVEL
+} from '../domain/services/managerDuties';
 import {
   evaluatePlacement,
   snapPlacement,
@@ -525,6 +530,10 @@ interface GameStore {
   assignAttendantToPump: (employeeId: string, pumpId: string | null) => void;
   upgradeAttendant: (employeeId: string) => boolean;
   hireManager: () => boolean;
+  /** Promotes the manager one grade, for a fee and a reputation bar. */
+  upgradeManager: () => boolean;
+  /** Lets the manager go. The grade goes with them. */
+  fireManager: () => boolean;
   updateManagerSettings: (settings: Partial<GameState['managerSettings']>) => void;
 
   // Simulation Step & Day Cycle
@@ -1950,22 +1959,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    const tx = TransactionService.executeCashTransaction(state, {
-      type: 'REPAIR',
-      amount: -cost,
-      description: `${pump.id} bakımı ve onarımı`
-    });
-
-    if (!tx.success) return false;
-
-    const repaired = state.pumps[pumpId];
-    repaired.health = 100;
-    // A broken pump has to go through MAINTENANCE before it can serve again.
-    setPumpState(repaired, 'MAINTENANCE');
-    setPumpState(repaired, 'IDLE');
-    releasePump(repaired);
-    state.player.statistics.repairActionsCount++;
-    state.dayState.todayStats.repairs += cost;
+    if (servicePump(state, state.pumps[pumpId], `${pump.id} bakımı ve onarımı`) === null) return false;
 
     const repairEffects = createEffects();
     trackMissionMetric(state, 'PUMPS_REPAIRED', 1, repairEffects);
@@ -2889,9 +2883,20 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!tx.success) return false;
 
     state.station.managerId = 'manager_1';
+    // A new hire starts at the bottom grade and does their first round at once.
+    state.station.managerLevel = 1;
+    state.station.managerTourSecondsLeft = 0;
+    // The whole job description is on by default; the player takes away what
+    // they do not want. The grade decides what is actually done.
     state.managerSettings.autoFuelOrder = true;
     state.managerSettings.autoPricing = true;
     state.managerSettings.autoCollectTills = true;
+    state.managerSettings.autoAssignAttendants = true;
+    state.managerSettings.nightGridFill = true;
+    state.managerSettings.autoMaintenance = true;
+    state.managerSettings.autoRepair = true;
+    state.managerSettings.autoClean = true;
+    state.managerSettings.dealStockUp = true;
 
     sounds.playLevelUp();
     SaveManager.saveGame(state);
@@ -2900,9 +2905,84 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'REWARD',
       title: 'İstasyon Müdürü Göreve Başladı!',
-      message: 'Otomasyon kuralları devrede. Stok ve fiyat yönetimi artık otomatik.'
+      message: 'Sv.1 müdür 45 saniyede bir tur atıyor: kasalar, yakıt siparişi, pompacılar ve bakım onda.'
     });
 
+    return true;
+  },
+
+  upgradeManager: () => {
+    const { gameState } = get();
+    if (!gameState.station.managerId) return false;
+
+    const current = managerLevel(gameState);
+    if (current >= MANAGER_MAX_LEVEL) return false;
+    const next = managerTierAt(current + 1);
+
+    // Promotion is earned as well as bought: a manager is only trusted with
+    // more when the station is held in higher regard than it was at hiring.
+    if (gameState.player.reputation < next.minReputation) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Şartlar Sağlanmadı',
+        message: `Müdür Sv.${next.level} için istasyon itibarı ${next.minReputation.toFixed(2)} olmalı.`
+      });
+      return false;
+    }
+    if (gameState.player.cash < next.upgradeCost) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `Müdür terfisi için ${next.upgradeCost.toLocaleString('tr-TR')} TL gerekiyor.`
+      });
+      return false;
+    }
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const tx = TransactionService.executeCashTransaction(state, {
+      type: 'WAGE_PAYMENT',
+      amount: -next.upgradeCost,
+      description: `İstasyon Müdürü Sv.${next.level} Terfisi`
+    });
+    if (!tx.success) return false;
+
+    state.station.managerLevel = next.level;
+    // A promoted manager gets straight to work with their new remit.
+    state.station.managerTourSecondsLeft = 0;
+
+    sounds.playLevelUp();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+
+    get().addNotification({
+      type: 'REWARD',
+      title: `Müdür Sv.${next.level}!`,
+      message: `Tur süresi ${next.tourSeconds} saniyeye indi, yevmiye ₺${next.dailyWage.toLocaleString('tr-TR')}/gün oldu.`
+    });
+    return true;
+  },
+
+  fireManager: () => {
+    const { gameState } = get();
+    if (!gameState.station.managerId) return false;
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    state.station.managerId = null;
+    // The grade goes with the person: the next hire starts at the bottom and
+    // costs the full hiring fee again. Letting a good manager go is meant to
+    // hurt.
+    state.station.managerLevel = 1;
+    state.station.managerTourSecondsLeft = undefined;
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+
+    get().addNotification({
+      type: 'INFO',
+      title: 'Müdür İşten Çıkarıldı',
+      message: 'Otomasyon durdu. Sipariş, kasa ve bakım işleri yeniden sende.'
+    });
     return true;
   },
 
@@ -2959,7 +3039,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     // The manager lives outside the employees collection, which is how their
     // wage went uncollected for as long as the job existed.
-    const managerWage = state.station.managerId ? GAME_CONFIG.employees.manager.dailyWage : 0;
+    const managerWage = managerDailyWage(state);
     const totalWages =
       Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0) + managerWage;
 
