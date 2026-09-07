@@ -22,9 +22,9 @@ const VIEW_ICONS: Record<CameraViewId, React.ElementType> = {
 };
 
 const WEATHER_DISPLAY = {
-  SUNNY: { icon: Sun, color: 'text-amber-400', label: 'Güneşli' },
-  OVERCAST: { icon: Cloud, color: 'text-slate-300', label: 'Parçalı Bulutlu' },
-  RAIN: { icon: CloudRain, color: 'text-sky-400', label: 'Yağmurlu' }
+  SUNNY: { icon: Sun, color: 'text-kyel-dark', label: 'Güneşli' },
+  OVERCAST: { icon: Cloud, color: 'text-ink', label: 'Parçalı Bulutlu' },
+  RAIN: { icon: CloudRain, color: 'text-kblu', label: 'Yağmurlu' }
 } as const;
 
 export const HUD: React.FC = () => {
@@ -119,99 +119,106 @@ export const HUD: React.FC = () => {
   const targetXp = nextLvlConf ? nextLvlConf.requiredTotalXp : prevXp + 1000;
   const xpPercent = Math.min(100, Math.max(0, ((player.xp - prevXp) / (targetXp - prevXp)) * 100));
 
+  // The bottom bar's doors, in the order they sit. Colour marks the door,
+  // red marks the one that is open.
+  type Door = {
+    key: string;
+    label: string;
+    title: string;
+    dot: string;
+    badge: number;
+    open: () => void;
+    isOn: (modal: typeof activeModal, tab: typeof officeTab) => boolean;
+  };
+  const NAV: Door[] = [
+    { key: 'office', label: 'Ofis', title: 'Ofis', dot: 'bg-kyel', badge: 0, open: () => openOffice('summary'), isOn: (m, t) => m === 'OFFICE' && t !== 'missions' },
+    { key: 'build', label: 'İnşaat', title: 'İnşaat & Yatırım', dot: 'bg-kblu', badge: 0, open: () => setActiveModal('BUILD'), isOn: (m) => m === 'BUILD' },
+    { key: 'fuel', label: 'Tedarik', title: 'Yakıt Siparişi', dot: 'bg-kgrn', badge: 0, open: () => setActiveModal('FUEL_ORDER'), isOn: (m) => m === 'FUEL_ORDER' },
+    { key: 'staff', label: 'Personel', title: 'Personel & Müdür', dot: 'bg-kred', badge: 0, open: () => setActiveModal('STAFF'), isOn: (m) => m === 'STAFF' }
+  ];
+  const ICONS: Array<Door & { icon: React.ElementType; badgeTone: string }> = [
+    { key: 'missions', label: '', title: 'Görevler', dot: '', badge: claimableMissions, badgeTone: 'bg-kgrn', icon: ClipboardList, open: () => openOffice('missions'), isOn: (m, t) => m === 'OFFICE' && t === 'missions' },
+    { key: 'account', label: '', title: 'Hesabım', dot: '', badge: 0, badgeTone: '', icon: UserRound, open: () => setActiveModal('ACCOUNT'), isOn: (m) => m === 'ACCOUNT' },
+    { key: 'bell', label: '', title: 'Bildirimler', dot: '', badge: unreadNotifications, badgeTone: 'bg-kred', icon: Bell, open: () => setActiveModal('NOTIFICATIONS'), isOn: (m) => m === 'NOTIFICATIONS' },
+    { key: 'settings', label: '', title: 'Ayarlar', dot: '', badge: 0, badgeTone: '', icon: SettingsIcon, open: () => setActiveModal('SETTINGS'), isOn: (m) => m === 'SETTINGS' }
+  ];
+
   return (
     <div
       ref={hudRef}
       className={`hud-root absolute inset-0 pointer-events-none flex flex-col justify-between font-sans select-none z-10 ${buildMode.active ? 'hud-building' : ''}`}
     >
-      {/* ================= TOP BAR ================= */}
-      <div className="hud-top flex justify-between items-start w-full">
-        {/* Top-Left: Day, Clock & Time Controls */}
-        <div className="hud-status-card game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
-          <div className="flex items-center gap-2 border-r border-slate-700/80 pr-3">
-            <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold font-mono text-sm border border-sky-500/30">
-              G{dayState.currentDay}
-            </div>
-            <div className="hud-status-detail">
-              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                {weatherStyle.label}
-              </div>
-              <div className="text-base font-extrabold font-mono text-white flex items-center gap-1.5">
-                <WeatherIcon className={`w-3.5 h-3.5 ${weatherStyle.color}`} />
-                {timeFormatted}
-              </div>
-            </div>
+      {/* ================= TOP STRIP ================= */}
+      {/* One strip across the top, the way the Karton mock has it (Emre,
+          2026-09-07): the station's name on the left, the figures as
+          cardboard tiles in the middle, the clock and the open switch on the
+          right. The event cards hang under its right end. */}
+      <div className="hud-top flex flex-col items-stretch w-full gap-2">
+        <div className="hud-strip game-surface relative pointer-events-auto px-4 py-2 grid grid-cols-[auto_1fr_auto] items-center gap-4">
+          <span className="k-tape k-tape-l" aria-hidden="true" />
+          <span className="k-tape k-tape-r" aria-hidden="true" />
+
+          {/* The name, as the sign out front spells it. */}
+          <div className="hud-brand font-display text-2xl leading-none text-kred whitespace-nowrap" style={{ textShadow: '0.12em 0.12em 0 #f2c230' }}>
+            {gameState.station.name || 'Gül Petrol'}
           </div>
 
-          {/* Open / closed. Shutting up shop stops new arrivals without
-              stopping the clock, so the player can rebuild in peace. */}
-          <button
-            onClick={toggleStationOpen}
-            className={`px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
-              gameState.station.open
-                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
-                : 'bg-red-500/15 text-red-400 border-red-500/40 hover:bg-red-500/25'
-            }`}
-            title={gameState.station.open ? 'İstasyonu kapat' : 'İstasyonu aç'}
-          >
-            <Power className="w-3.5 h-3.5" />
-            <span className="hud-status-detail">{gameState.station.open ? 'Açık' : 'Kapalı'}</span>
-          </button>
-        </div>
-
-        {/* Top-Center: Cash Balance & Today's Net Revenue */}
-        <div className="hud-cash-card game-surface px-5 py-2.5 pointer-events-auto flex items-center gap-4 text-center">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">İstasyon Kasası</div>
-            <div className="text-xl font-black font-mono text-emerald-400 tracking-tight flex items-center justify-center gap-1">
-              <span>₺</span>
-              <span>{player.cash.toLocaleString('tr-TR')}</span>
+          <div className="hud-tiles flex justify-center gap-2 min-w-0">
+            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[8.5rem]">
+              <div className="k-label">Kasa</div>
+              <div className="font-display text-xl leading-tight text-kgrn tabular-nums">₺{player.cash.toLocaleString('tr-TR')}</div>
             </div>
-          </div>
-          <div className="hud-revenue h-7 w-px bg-slate-700/80" />
-          <div className="hud-revenue">
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Bugün Gelir</div>
-            <div className="text-sm font-bold font-mono text-sky-400">
-              +₺{dayState.todayStats.fuelRevenue.toLocaleString('tr-TR')}
+            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[7rem]">
+              <div className="k-label">Bugün</div>
+              <div className="font-display text-xl leading-tight text-kblu tabular-nums">+₺{dayState.todayStats.fuelRevenue.toLocaleString('tr-TR')}</div>
             </div>
-          </div>
-        </div>
-
-        {/* Top-Right: Reputation, Level & XP, with the day's events stacked
-            beneath — the one corner nothing else on the forecourt needs. */}
-        <div className="flex flex-col items-end gap-2 min-w-0">
-        <div className="hud-reputation-card game-surface p-2.5 pointer-events-auto flex items-center gap-3.5">
-          {/* Reputation Stars */}
-          <div className="flex items-center gap-1.5 border-r border-slate-700/80 pr-3">
-            <span className="text-amber-400 text-base">★</span>
-            <div>
-              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">İtibar</div>
-              <div className="text-sm font-extrabold font-mono text-amber-400">
-                {player.reputation.toFixed(2)} <span className="text-[10px] text-slate-400">/ 5.00</span>
+            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[6.5rem]">
+              <div className="k-label">İtibar</div>
+              <div className="font-display text-xl leading-tight text-kred tabular-nums">★ {player.reputation.toFixed(2)}</div>
+            </div>
+            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[6.5rem]" title={`${player.xp} XP`}>
+              <div className="k-label">Seviye</div>
+              <div className="flex items-center gap-2">
+                <span className="font-display text-xl leading-tight text-ink tabular-nums">{player.level}</span>
+                <span className="k-bar flex-1 h-2 min-w-[2.5rem]">
+                  <i className="bg-kblu" style={{ width: `${xpPercent}%` }} />
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Level & XP */}
-          <div className="hud-xp-detail">
-            <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 mb-0.5">
-              <span>Seviye {player.level}</span>
-              <span className="text-slate-400 font-mono">{player.xp} XP</span>
+          <div className="hud-day flex items-center gap-2">
+            <div
+              className="bg-kyel border-2 border-ink rounded-md px-2.5 py-1 font-display text-base text-ink flex items-center gap-1.5 tabular-nums"
+              title={`${weatherStyle.label} · Gün ${dayState.currentDay}`}
+            >
+              <WeatherIcon className={`w-4 h-4 ${weatherStyle.color}`} />
+              {/* The display face has no tabular figures, so a fixed box keeps
+                  the strip from twitching as the minutes tick. */}
+              <span className="inline-block w-[3.3em] text-center">{timeFormatted}</span>
             </div>
-            <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-              <div
-                className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-300"
-                style={{ width: `${xpPercent}%` }}
-              />
-            </div>
+            {/* Open / closed. Shutting up shop stops new arrivals without
+                stopping the clock, so the player can rebuild in peace. */}
+            <button
+              onClick={toggleStationOpen}
+              className={`game-btn px-3 py-1 font-display text-base tracking-wide ${
+                gameState.station.open ? 'bg-kgrn text-white hover:bg-kgrn-dark' : 'bg-kred text-white hover:bg-kred-dark'
+              }`}
+              title={gameState.station.open ? 'İstasyonu kapat' : 'İstasyonu aç'}
+            >
+              {gameState.station.open ? 'AÇIK' : 'KAPALI'}
+            </button>
           </div>
         </div>
 
-        {/* Kritik stok uyarısı ekranın ortasını işgal etmez: sağ üstteki olay
-            kartlarının arasında, ActiveEventsBar'ın tepesinde yaşar. */}
-        <div className="hud-events">
-          <ActiveEventsBar />
-        </div>
+        {/* Under the strip: what is in the tanks and the battery, centred;
+            the day's events hang off the right end. */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="hud-under-left w-48 shrink-0" />
+          <StockStrip />
+          <div className="hud-events">
+            <ActiveEventsBar />
+          </div>
         </div>
       </div>
 
@@ -224,7 +231,7 @@ export const HUD: React.FC = () => {
               view switch and the two things the wheel cannot do. */}
           <button
             onClick={cycleCameraView}
-            className="game-surface game-btn w-12 h-12 hover:bg-slate-800 flex items-center justify-center text-slate-200 hover:text-white"
+            className="game-surface game-btn w-12 h-12 hover:bg-card flex items-center justify-center text-ink hover:text-ink"
             title={`Bakış açısı: ${currentView.label} — sıradaki: ${nextView.label}`}
           >
             <ViewIcon className="w-5 h-5" />
@@ -238,10 +245,10 @@ export const HUD: React.FC = () => {
             disabled={!canEdit}
             className={`game-surface game-btn w-12 h-12 flex items-center justify-center transition-all ${
               !canEdit
-                ? 'text-slate-600 cursor-not-allowed'
+                ? 'text-mute/50 cursor-not-allowed'
                 : editMode
-                  ? `${TONE_BUTTON.blue} !border-sky-300/70`
-                  : 'hover:bg-slate-800 text-slate-200 hover:text-white'
+                  ? `${TONE_BUTTON.blue} !border-ink`
+                  : 'hover:bg-card text-ink hover:text-ink'
             }`}
             title={
               canEdit
@@ -250,28 +257,28 @@ export const HUD: React.FC = () => {
             }
             aria-label="Düzenleme modu"
           >
-            <Move className={`w-5 h-5 ${editMode ? 'text-white' : canEdit ? 'text-sky-400' : 'text-slate-600'}`} />
+            <Move className={`w-5 h-5 ${editMode ? 'text-white' : canEdit ? 'text-kblu' : 'text-mute/50'}`} />
           </button>
 
           <div className="game-surface p-1.5 flex flex-col gap-1 w-12">
             <button
               onClick={() => rotateCamera('LEFT')}
-              className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
+              className="p-2 rounded-xl text-ink hover:bg-card hover:text-ink transition-all flex items-center justify-center"
               title="Kamerayı Sola Döndür (Q)"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
             <button
               onClick={() => rotateCamera('RIGHT')}
-              className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
+              className="p-2 rounded-xl text-ink hover:bg-card hover:text-ink transition-all flex items-center justify-center"
               title="Kamerayı Sağa Döndür (E)"
             >
               <RotateCw className="w-4 h-4" />
             </button>
-            <div className="h-px bg-slate-700 mx-1 my-0.5" />
+            <div className="h-px bg-mute/40 mx-1 my-0.5" />
             <button
               onClick={resetCamera}
-              className="p-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-center"
+              className="p-2 rounded-xl text-ink hover:bg-card hover:text-ink transition-all flex items-center justify-center"
               title="Kamerayı Ortala (F) — Sürükle: kaydır, Tekerlek: yakınlaştır"
             >
               <Crosshair className="w-4 h-4" />
@@ -285,8 +292,8 @@ export const HUD: React.FC = () => {
             stop. */}
         {landMode.active && (
           <div className="fixed bottom-24 inset-x-0 z-40 flex justify-center pointer-events-none">
-            <div className="game-surface !border-emerald-500/70 px-3 py-2 flex items-center gap-3 text-xs font-bold text-slate-100 pointer-events-auto animate-fade-in">
-              <MapIcon className="w-4 h-4 text-emerald-400" />
+            <div className="game-surface !border-kgrn px-3 py-2 flex items-center gap-3 text-xs font-bold text-ink pointer-events-auto animate-fade-in">
+              <MapIcon className="w-4 h-4 text-kgrn" />
               <span>
                 {landMode.intent === 'PAVE'
                   ? 'Beton dökmek için betonsuz parsele tıkla'
@@ -309,8 +316,8 @@ export const HUD: React.FC = () => {
             a roof. */}
         {fittingCanopy && (
           <div className="fixed bottom-24 inset-x-0 z-40 flex justify-center pointer-events-none">
-            <div className="game-surface !border-sky-500/70 px-3 py-2 flex items-center gap-3 text-xs font-bold text-slate-100 pointer-events-auto animate-fade-in">
-              <Umbrella className="w-4 h-4 text-sky-400" />
+            <div className="game-surface !border-kblu px-3 py-2 flex items-center gap-3 text-xs font-bold text-ink pointer-events-auto animate-fade-in">
+              <Umbrella className="w-4 h-4 text-kblu" />
               <span>Sundurmanın kurulacağı pompaya tıkla</span>
               <button
                 onClick={exitCanopyMode}
@@ -330,12 +337,12 @@ export const HUD: React.FC = () => {
         {buildMode.active && (
           <div ref={placementDockRef} className="hud-placement-dock fixed z-40 pointer-events-auto flex flex-col items-end gap-2 animate-fade-in">
             {!buildMode.pinned ? (
-              <div className="hud-placement-hint game-surface !border-sky-500/70 px-3 py-2 flex items-center gap-2 text-xs font-bold text-slate-100">
-                <Target className="w-4 h-4 text-sky-400" />
+              <div className="hud-placement-hint game-surface !border-kblu px-3 py-2 flex items-center gap-2 text-xs font-bold text-ink">
+                <Target className="w-4 h-4 text-kblu" />
                 <span>Konumu sabitlemek için sahaya tıkla</span>
               </div>
             ) : (
-              <div className="game-surface !border-sky-500/70 p-1.5 grid grid-cols-3 gap-1">
+              <div className="game-surface !border-kblu p-1.5 grid grid-cols-3 gap-1">
                 <span />
                 <button
                   onClick={() => nudgeBuildPreview('UP')}
@@ -412,17 +419,17 @@ export const HUD: React.FC = () => {
         {/* A rest complex replaces the parade it is built over, and that is
             not something to discover after paying for it. */}
         {confirmMerge && buildMode.active && (
-          <div className="game-surface !border-amber-500 px-6 py-4 pointer-events-auto max-w-md animate-fade-in">
-            <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm mb-1">
+          <div className="game-surface !border-kyel-dark px-6 py-4 pointer-events-auto max-w-md animate-fade-in">
+            <div className="flex items-center gap-2 text-kyel-dark font-extrabold text-sm mb-1">
               <ShieldAlert className="w-4 h-4" />
               Mevcut Yapılar Birleştirilecek
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed mb-3">
+            <p className="text-xs text-ink leading-relaxed mb-3">
               Dinlenme Tesisi; market, restoran, kahveci ve WC birimlerini tek çatı
               altında toplar. Bu tesisi kurarsanız aşağıdaki yapılar sökülecek ve
               yerine tek bir tesis geçecek — <b>bedelleri iade edilmez</b>.
             </p>
-            <ul className="text-xs text-white font-bold mb-4 space-y-0.5">
+            <ul className="text-xs text-ink font-bold mb-4 space-y-0.5">
               {wouldAbsorb.map((b) => (
                 <li key={b.id}>• {b.name}</li>
               ))}
@@ -450,115 +457,58 @@ export const HUD: React.FC = () => {
       </div>
 
       <TankerStatusBar />
-      <StockStrip />
       <PumpPanel />
       <FacilityPanel />
       <StructurePanel />
 
       {/* ================= BOTTOM ACTION BAR ================= */}
       <div ref={bottomBarRef} className="hud-bottom flex justify-center items-center w-full">
-        <div className="hud-nav game-surface p-1.5 pointer-events-auto flex items-center gap-1">
-          {/* Price, books and missions live inside the office now; the bar
-              only needs the door to it, with the claimable-reward badge. */}
-          <button
-            onClick={() => openOffice('summary')}
-            className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'OFFICE' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Building2 className="w-4 h-4 text-sky-400" />
-            <span className="hud-nav-label">Ofis</span>
-            {claimableMissions > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
-                {claimableMissions}
-              </span>
-            )}
-          </button>
+        <div className="hud-nav game-surface p-1.5 pointer-events-auto flex items-center gap-1.5">
+          {NAV.map((item) => {
+            const on = item.isOn(activeModal, officeTab);
+            return (
+              <button
+                key={item.key}
+                onClick={item.open}
+                className={`relative flex items-center gap-2 px-3.5 py-2 font-display text-[15px] tracking-wide border-2 border-ink rounded-md transition-colors ${
+                  on ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
+                }`}
+                title={item.title}
+              >
+                <span className={`w-3 h-3 rounded-full border-2 border-ink shrink-0 ${item.dot}`} />
+                <span className="hud-nav-label">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-kgrn border-2 border-ink text-white text-[10px] font-black flex items-center justify-center tabular-nums animate-pulse">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
-          <button
-            onClick={() => setActiveModal('BUILD')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'BUILD' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Hammer className="w-4 h-4 text-amber-400" />
-            <span className="hud-nav-label">İnşaat</span>
-          </button>
+          <span className="w-0.5 h-7 bg-ink/30 mx-0.5" />
 
-          <button
-            onClick={() => setActiveModal('FUEL_ORDER')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'FUEL_ORDER' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Fuel className="w-4 h-4 text-emerald-400" />
-            <span className="hud-nav-label">Yakıt Tedarik</span>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('STAFF')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all ${
-              activeModal === 'STAFF' ? `game-btn ${TONE_BUTTON.blue}` : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-          >
-            <Users className="w-4 h-4 text-indigo-400" />
-            <span className="hud-nav-label">Personel & Müdür</span>
-          </button>
-
-          {/* A shortcut straight to the office's missions tab, beside the
-              profile icon (Emre, 2026-09-07); the missions still live in the
-              office, this is just a second door. */}
-          <button
-            onClick={() => openOffice('missions')}
-            className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
-              activeModal === 'OFFICE' && officeTab === 'missions' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
-            }`}
-            title="Görevler"
-          >
-            <ClipboardList className="w-4 h-4" />
-            {claimableMissions > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
-                {claimableMissions}
-              </span>
-            )}
-          </button>
-
-          {/* Toasts leave on their own, so the bell is where anything missed
-              is still findable. The badge counts what has not been looked at. */}
-          <button
-            onClick={() => setActiveModal('ACCOUNT')}
-            className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
-              activeModal === 'ACCOUNT' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
-            }`}
-            title="Hesabım"
-          >
-            <UserRound className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => setActiveModal('NOTIFICATIONS')}
-            className={`relative p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
-              activeModal === 'NOTIFICATIONS' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
-            }`}
-            title="Bildirimler"
-          >
-            <Bell className="w-4 h-4" />
-            {unreadNotifications > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-extrabold flex items-center justify-center tabular-nums">
-                {unreadNotifications > 9 ? '9+' : unreadNotifications}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveModal('SETTINGS')}
-            className={`p-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-all ${
-              activeModal === 'SETTINGS' ? `game-btn ${TONE_BUTTON.blue}` : 'border-2 border-transparent'
-            }`}
-            title="Ayarlar"
-          >
-            <SettingsIcon className="w-4 h-4" />
-          </button>
+          {ICONS.map((item) => {
+            const on = item.isOn(activeModal, officeTab);
+            return (
+              <button
+                key={item.key}
+                onClick={item.open}
+                className={`relative w-9 h-9 flex items-center justify-center border-2 border-ink rounded-md transition-colors ${
+                  on ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
+                }`}
+                title={item.title}
+                aria-label={item.title}
+              >
+                <item.icon className="w-4 h-4" />
+                {item.badge > 0 && (
+                  <span className={`absolute -top-1.5 -right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full border-2 border-ink text-white text-[10px] font-black flex items-center justify-center tabular-nums ${item.badgeTone}`}>
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

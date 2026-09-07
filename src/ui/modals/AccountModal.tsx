@@ -19,9 +19,9 @@ const Row: React.FC<{ label: string; value: React.ReactNode; accent?: string }> 
   value,
   accent
 }) => (
-  <div className="flex justify-between items-center py-2.5 border-b border-slate-800 last:border-0">
-    <span className="text-xs font-bold text-slate-300">{label}</span>
-    <span className={`text-xs font-extrabold font-mono ${accent ?? 'text-white'}`}>{value}</span>
+  <div className="k-row last:border-0">
+    <span>{label}</span>
+    <span className={accent}>{value}</span>
   </div>
 );
 
@@ -51,17 +51,14 @@ export const AccountModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-1.5 h-5 rounded-full bg-red-500" />
-            <div className="text-base font-extrabold text-white">Hesabım</div>
-          </div>
+        <div className="k-head k-head-blu shrink-0">
+          <div className="font-display text-xl tracking-wide">Hesabım</div>
           <button
             onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -69,18 +66,18 @@ export const AccountModal: React.FC = () => {
 
         <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
           {/* Profil kartı — istasyon adı markadır, kalemle burada değişir. */}
-          <div className="bg-slate-950/60 border-2 border-slate-700 rounded-2xl p-4 flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-red-500/15 border-2 border-red-500/40 text-red-400 flex items-center justify-center shrink-0">
+          <div className="bg-board border-2 border-ink rounded-md p-4 flex items-center gap-4">
+            <div className="game-icon-badge w-14 h-14 bg-paper text-kblu">
               <UserRound className="w-7 h-7" />
             </div>
             <div className="min-w-0">
               {editingName === null ? (
                 <div className="flex items-center gap-2">
-                  <div className="text-lg font-black text-white uppercase truncate">{station.name}</div>
+                  <div className="font-display text-xl text-ink uppercase tracking-wide truncate">{station.name}</div>
                   <button
                     onClick={() => setEditingName(station.name)}
                     title="İstasyon adını değiştir — tabelalar da güncellenir"
-                    className="text-slate-400 hover:text-sky-400 transition-colors shrink-0"
+                    className="text-mute hover:text-kblu transition-colors shrink-0"
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
@@ -96,17 +93,17 @@ export const AccountModal: React.FC = () => {
                       if (e.key === 'Enter') commitName();
                       if (e.key === 'Escape') setEditingName(null);
                     }}
-                    className="bg-slate-950/80 border border-sky-500/50 rounded-lg px-2 py-1 text-base font-extrabold text-white w-44 outline-none focus:border-sky-400"
+                    className="bg-paper border-2 border-ink rounded-md px-2 py-1 text-base font-extrabold text-ink w-44 outline-none focus:border-kblu"
                   />
                   <button
                     onClick={commitName}
-                    className="game-btn w-7 h-7 rounded-lg bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 flex items-center justify-center"
+                    className="game-btn w-7 h-7 rounded-md bg-kgrn hover:bg-kgrn-dark text-white flex items-center justify-center"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
-              <div className="text-xs text-slate-400 truncate">
+              <div className="text-xs text-mute truncate">
                 {account
                   ? (account.email ?? `${account.name} · ${PROVIDER_LABEL[account.provider]}`)
                   : 'Giriş yapılmadı — yerel kayıt'}
@@ -116,16 +113,16 @@ export const AccountModal: React.FC = () => {
 
           {/* İstatistikler */}
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">İstatistikler</div>
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl px-4 py-1">
+            <div className="k-label mb-1">İstatistikler</div>
+            <div className="bg-board border-2 border-ink rounded-md px-4 py-1">
               <Row label="Oyun günü" value={dayState.currentDay} />
               <Row label="İtibar" value={`${player.reputation.toFixed(1)} / 5`} />
-              <Row label="Toplam müşteri" value={stats.totalCustomersServed.toLocaleString('tr-TR')} accent="text-emerald-400" />
+              <Row label="Toplam müşteri" value={stats.totalCustomersServed.toLocaleString('tr-TR')} accent="!text-kgrn" />
               <Row label="Kaçan müşteri" value={stats.totalCustomersLost.toLocaleString('tr-TR')} />
               <Row
                 label="Toplam ciro"
                 value={`₺${Math.round(stats.totalRevenue).toLocaleString('tr-TR')}`}
-                accent="text-emerald-400"
+                accent="!text-kgrn"
               />
               <Row label="Seviye" value={`${player.level} · ${player.xp.toLocaleString('tr-TR')} XP`} />
               <Row label="Günlük görev" value={`${dailyDone}/${dailyTotal || 3}`} />
@@ -134,28 +131,35 @@ export const AccountModal: React.FC = () => {
 
           {/* Hesap */}
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hesap</div>
+            <div className="k-label mb-1">Hesap</div>
 
             {!accountReady && (
-              <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex items-start gap-3">
-                <CloudOff className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Çevrimiçi hesap henüz yapılandırılmadı; oyun <b className="text-slate-300">yerel kayıtla</b> oynanıyor.
-                  Google/e-posta girişi için <code className="text-sky-400">.env</code> dosyasına Firebase anahtarları
-                  eklenmeli (<code className="text-sky-400">.env.example</code>'a bakın).
+              <div className="bg-board border-2 border-ink rounded-md p-4 flex items-start gap-3">
+                <CloudOff className="w-4 h-4 text-mute mt-0.5 shrink-0" />
+                <p className="text-xs text-ink leading-relaxed">
+                  Çevrimiçi hesap henüz yapılandırılmadı; oyun <b className="text-ink font-black">yerel kayıtla</b> oynanıyor.
+                  Google/e-posta girişi için <code className="text-kblu">.env</code> dosyasına Firebase anahtarları
+                  eklenmeli (<code className="text-kblu">.env.example</code>'a bakın).
                 </p>
               </div>
             )}
 
             {accountReady && account && (
               <div className="flex flex-col gap-2">
-                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl px-4 py-1">
-                  <Row label="Giriş yöntemi" value={PROVIDER_LABEL[account.provider]} />
+                <div className="bg-board border-2 border-ink rounded-md px-4 py-1">
+                  <Row
+                    label="Giriş yöntemi"
+                    value={
+                      <span className="bg-card border border-ink text-ink rounded-sm text-[11px] font-black px-2">
+                        {PROVIDER_LABEL[account.provider]}
+                      </span>
+                    }
+                  />
                   {account.email && <Row label="E-posta" value={account.email} />}
                 </div>
                 <button
                   onClick={signOutAccount}
-                  className="game-btn rounded-xl px-4 py-3 text-sm font-extrabold bg-red-600/80 hover:bg-red-600 border-2 border-red-500 text-white flex items-center justify-center gap-2"
+                  className="game-btn px-4 py-3 font-display text-base tracking-wide bg-kred hover:bg-kred-dark text-white flex items-center justify-center gap-2"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Çıkış Yap</span>

@@ -256,7 +256,7 @@ export const CatalogPreview: React.FC<{ type: string }> = ({ type }) => {
   const shot = taken.get(type);
 
   return (
-    <div className="relative h-28 rounded-2xl overflow-hidden bg-gradient-to-b from-slate-800/70 to-slate-950/70 border border-slate-700/60">
+    <div className="relative h-28 rounded-md overflow-hidden bg-board border-2 border-ink">
       {shot ? (
         <img src={shot} alt="" className="w-full h-full object-contain" draggable={false} />
       ) : (
@@ -264,9 +264,9 @@ export const CatalogPreview: React.FC<{ type: string }> = ({ type }) => {
           {tried ? (
             // Tried and came back empty. The card still has its name, size and
             // description, so it stays usable — it just has no portrait.
-            <Package className="w-8 h-8 text-slate-600" />
+            <Package className="w-8 h-8 text-mute" />
           ) : (
-            <div className="w-7 h-7 rounded-full border-2 border-slate-600 border-t-slate-400 animate-spin" />
+            <div className="w-7 h-7 rounded-full border-2 border-card border-t-ink animate-spin" />
           )}
         </div>
       )}

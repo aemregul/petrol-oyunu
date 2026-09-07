@@ -3,22 +3,23 @@ import { useGameStore } from '../../store/gameStore';
 import { X, ArrowLeft, Bell, LogOut, RotateCcw } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { styleFor, timeAgo } from '../notificationStyle';
+import { TONE_DOT, TONE_TEXT } from '../gameStyle';
 
 /**
- * The settings card, in the office's dress: one dark card, sections with a
+ * The settings card, in the office's dress: one paper card, sections with a
  * small capitals heading, choices as a row of pills, switches as a wide
  * button that names its state. The notification log is a page inside the
  * card rather than a screen of its own (Emre, 2026-09-07).
  */
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-400 pt-5 pb-2">
+  <div className="k-label pt-5 pb-2">
     {children}
   </div>
 );
 
 const Hint: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p className="text-[12px] font-semibold text-slate-400 -mt-1 pb-2">{children}</p>
+  <p className="text-[12px] font-semibold text-mute -mt-1 pb-2">{children}</p>
 );
 
 /** A row of choices, one lit. */
@@ -41,14 +42,14 @@ const Choice: React.FC<{
           }}
           disabled={o.soon}
           title={o.soon ? 'Yakında' : undefined}
-          className={`py-3 rounded-2xl text-[14px] font-extrabold border transition-all ${
+          className={`game-btn py-3 rounded-md text-[14px] font-display tracking-wide ${
             active
               ? tone === 'green'
-                ? 'bg-[#1f9d55] border-emerald-300/40 text-white shadow-lg'
-                : 'bg-[#d64b4b] border-red-300/40 text-white shadow-lg'
+                ? 'bg-kgrn text-white'
+                : 'bg-kred text-white'
               : o.soon
-                ? 'bg-[#2a2427] border-white/5 text-slate-500 cursor-not-allowed'
-                : 'bg-[#2a2427] border-white/10 text-slate-200 hover:bg-[#362f33]'
+                ? 'bg-card text-mute cursor-not-allowed'
+                : 'bg-card text-ink hover:bg-board'
           }`}
         >
           {o.label}
@@ -69,14 +70,14 @@ const Switch: React.FC<{ label: string; onClick: () => void; tone?: 'plain' | 'r
       sounds.playClick();
       onClick();
     }}
-    className={`w-full py-3.5 rounded-2xl text-[14px] font-extrabold border transition-all ${
+    className={`game-btn w-full py-3.5 rounded-md text-[14px] font-display tracking-wide ${
       tone === 'red'
-        ? 'bg-[#d64b4b] hover:bg-[#c43f3f] border-red-300/30 text-white shadow-lg'
+        ? 'bg-kred hover:bg-kred-dark text-white'
         : tone === 'amber'
-          ? 'bg-[#e0851d] hover:bg-[#c97417] border-amber-200/30 text-white shadow-lg'
+          ? 'bg-kyel hover:bg-kyel-dark text-ink'
           : tone === 'green'
-            ? 'bg-[#1f9d55] hover:bg-[#1a8a4a] border-emerald-300/30 text-white shadow-lg'
-            : 'bg-[#2a2427] hover:bg-[#362f33] border-white/10 text-white'
+            ? 'bg-kgrn hover:bg-kgrn-dark text-white'
+            : 'bg-card hover:bg-board text-ink'
     }`}
   >
     {label}
@@ -89,7 +90,7 @@ const Slider: React.FC<{ label: string; value: number; onChange: (v: number) => 
   onChange
 }) => (
   <div className="flex items-center gap-4 py-2">
-    <span className="text-[15px] font-extrabold text-white w-20">{label}</span>
+    <span className="text-[15px] font-extrabold text-ink w-20">{label}</span>
     <input
       type="range"
       min={0}
@@ -97,9 +98,9 @@ const Slider: React.FC<{ label: string; value: number; onChange: (v: number) => 
       step={0.05}
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="flex-1 h-2 rounded-full appearance-none cursor-pointer accent-[#d64b4b] bg-[#1a1618]"
+      className="flex-1 h-2 cursor-pointer accent-kblu"
     />
-    <span className="text-[14px] font-extrabold font-mono tabular-nums text-slate-300 w-14 text-right">
+    <span className="text-[15px] font-display tabular-nums text-ink w-14 text-right">
       %{Math.round(value * 100)}
     </span>
   </div>
@@ -144,29 +145,27 @@ export const SettingsModal: React.FC = () => {
     account?.provider === 'google' ? 'Google' : account?.provider === 'email' ? 'E-posta' : 'Misafir';
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-[#231e21] border border-white/10 rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[88vh]">
-        <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center shrink-0">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-lg overflow-hidden flex flex-col max-h-[88vh]">
+        <div className="k-head k-head-vio shrink-0">
           <div className="flex items-center gap-3">
-            {page === 'log' ? (
+            {page === 'log' && (
               <button
                 onClick={() => {
                   sounds.playClick();
                   setPage('settings');
                 }}
-                className="w-10 h-10 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-slate-200 flex items-center justify-center"
+                className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
                 aria-label="Ayarlara dön"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-            ) : (
-              <span className="w-1.5 h-8 rounded-full bg-[#d64b4b]" />
             )}
-            <span className="text-2xl font-black text-white">{page === 'log' ? 'Bildirim Geçmişi' : 'Ayarlar'}</span>
+            <span className="font-display text-xl tracking-wide">{page === 'log' ? 'Bildirim Geçmişi' : 'Ayarlar'}</span>
           </div>
           <button
             onClick={handleClose}
-            className="w-11 h-11 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-slate-200 flex items-center justify-center transition-colors"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
             aria-label="Kapat"
           >
             <X className="w-5 h-5" />
@@ -177,25 +176,25 @@ export const SettingsModal: React.FC = () => {
           {page === 'log' ? (
             <div className="pt-3">
               {notifications.length === 0 ? (
-                <div className="text-center py-14 text-slate-500 text-sm font-bold">Henüz bildirim yok.</div>
+                <div className="text-center py-14 text-mute text-sm font-bold">Henüz bildirim yok.</div>
               ) : (
                 notifications.map((notif) => {
                   const style = styleFor(notif.type);
                   return (
-                    <div key={notif.id} className="flex items-start gap-3 py-2.5 border-b border-white/10">
-                      <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${style.dot}`} />
+                    <div key={notif.id} className="flex items-start gap-3 py-2.5 border-b-2 border-dotted border-mute/60">
+                      <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${TONE_DOT[style.tone]}`} />
                       <div className="min-w-0 flex-1">
-                        <div className={`text-[13px] font-bold leading-snug break-words ${style.tint}`}>
+                        <div className={`text-[13px] font-bold leading-snug break-words ${TONE_TEXT[style.tone]}`}>
                           {notif.title}
                           {notif.count > 1 && (
                             <span className="ml-1.5 text-[11px] font-extrabold tabular-nums opacity-80">×{notif.count}</span>
                           )}
                         </div>
-                        <div className="text-[12px] font-medium leading-[1.45] break-words text-slate-400 mt-0.5">
+                        <div className="text-[12px] font-medium leading-[1.45] break-words text-mute mt-0.5">
                           {notif.message}
                         </div>
                       </div>
-                      <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap shrink-0 mt-0.5">
+                      <span className="text-[11px] font-semibold text-mute whitespace-nowrap shrink-0 mt-0.5">
                         {timeAgo(notif.timestamp, now)}
                       </span>
                     </div>
@@ -239,7 +238,9 @@ export const SettingsModal: React.FC = () => {
               />
 
               <SectionTitle>Ses</SectionTitle>
-              <Slider label="Ses" value={settings.masterVolume} onChange={setVolume} />
+              <div className="bg-board border-2 border-ink rounded-md px-4 py-2">
+                <Slider label="Ses" value={settings.masterVolume} onChange={setVolume} />
+              </div>
               <div className="pt-2">
                 <Switch label={`Efektler: ${effectsOn ? 'Açık' : 'Kapalı'}`} onClick={toggleEffects} />
               </div>
@@ -251,17 +252,17 @@ export const SettingsModal: React.FC = () => {
                   sounds.playClick();
                   openLog();
                 }}
-                className="w-full py-3.5 rounded-2xl text-[14px] font-extrabold border bg-[#2a2427] hover:bg-[#362f33] border-white/10 text-white flex items-center justify-center gap-2"
+                className="game-btn w-full py-3.5 rounded-md text-[14px] font-display tracking-wide bg-card hover:bg-board text-ink flex items-center justify-center gap-2"
               >
                 <Bell className="w-4 h-4" />
                 <span>Bildirim Geçmişi{notifications.length > 0 ? ` (${notifications.length})` : ''}</span>
               </button>
 
               <SectionTitle>Hesap (kaydın bulutta saklanır)</SectionTitle>
-              <div className="flex items-center justify-between gap-3 py-1 pb-3">
+              <div className="bg-board border-2 border-ink rounded-md p-4 flex items-center justify-between gap-3 mb-3">
                 <div className="min-w-0">
-                  <div className="text-[15px] font-extrabold text-white truncate">{account?.name ?? 'Giriş yapılmadı'}</div>
-                  <div className="text-[12px] font-semibold text-slate-400 truncate">
+                  <div className="text-[15px] font-display text-ink truncate">{account?.name ?? 'Giriş yapılmadı'}</div>
+                  <div className="text-[12px] font-semibold text-mute truncate">
                     {account ? `${providerLabel}${account.email ? ` · ${account.email}` : ''}` : 'Kayıt bu cihazda tutulur.'}
                   </div>
                 </div>
@@ -271,7 +272,7 @@ export const SettingsModal: React.FC = () => {
                       sounds.playClick();
                       void signOutAccount();
                     }}
-                    className="px-4 py-2.5 rounded-xl bg-[#2a2427] hover:bg-[#362f33] border border-white/10 text-[13px] font-extrabold text-white flex items-center gap-1.5 shrink-0"
+                    className="game-btn px-4 py-2.5 rounded-md bg-card hover:bg-board text-[13px] font-display tracking-wide text-ink flex items-center gap-1.5 shrink-0"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Çıkış Yap</span>
@@ -291,10 +292,10 @@ export const SettingsModal: React.FC = () => {
                   if (!confirmReset) setConfirmReset(true);
                   else resetGameSave();
                 }}
-                className={`w-full py-3.5 rounded-2xl text-[14px] font-extrabold border transition-all text-white flex items-center justify-center gap-2 ${
+                className={`game-btn w-full py-3.5 rounded-md text-[14px] font-display tracking-wide text-white flex items-center justify-center gap-2 ${
                   confirmReset
-                    ? 'bg-[#b91c1c] border-red-300/40 animate-pulse'
-                    : 'bg-[#d64b4b] hover:bg-[#c43f3f] border-red-300/30 shadow-lg'
+                    ? 'bg-kred-dark animate-pulse'
+                    : 'bg-kred hover:bg-kred-dark'
                 }`}
               >
                 <RotateCcw className="w-4 h-4" />
@@ -306,7 +307,7 @@ export const SettingsModal: React.FC = () => {
                     sounds.playClick();
                     setConfirmReset(false);
                   }}
-                  className="w-full mt-2 py-2 text-[13px] font-bold text-slate-400 hover:text-white"
+                  className="w-full mt-2 py-2 text-[13px] font-bold text-mute hover:text-ink"
                 >
                   Vazgeç
                 </button>

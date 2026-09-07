@@ -350,10 +350,10 @@ const TillBadge: React.FC<{ building: BuildingEntity }> = ({ building }) => {
           e.stopPropagation();
           collectTill(building.id);
         }}
-        className="till-badge flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400 text-slate-950 font-black text-sm font-mono border-2 border-amber-200 shadow-xl shadow-amber-900/40 hover:bg-amber-300 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+        className="till-badge game-btn flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-kyel hover:bg-kyel-dark text-ink font-display text-sm tabular-nums whitespace-nowrap cursor-pointer"
         title="Kasayı topla"
       >
-        <span className="w-4 h-4 rounded-full bg-amber-600 border border-amber-800 flex items-center justify-center text-[10px] text-amber-100">₺</span>
+        <span className="w-4 h-4 rounded-full bg-paper border border-ink flex items-center justify-center text-[10px] text-ink">₺</span>
         <span>{till.toLocaleString('tr-TR')}</span>
       </button>
     </Html>

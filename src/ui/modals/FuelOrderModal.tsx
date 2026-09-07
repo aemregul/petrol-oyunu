@@ -8,10 +8,15 @@ import { isFuelDealOn, FUEL_DEAL_DISCOUNT } from '../../domain/services/simulati
 
 const FUEL_ORDER_STEP = 200;
 
-const FUEL_COLORS: Record<FuelType, string> = {
-  gasoline: '#22c55e',
-  diesel:   '#f97316',
-  lpg:      '#3b82f6'
+/**
+ * Karton: each fuel wears one of the sticker colours — green for petrol,
+ * the dark yellow for diesel, blue for LPG. Whole literal strings so
+ * Tailwind can find them.
+ */
+const FUEL_TONE: Record<FuelType, { text: string; bar: string; edge: string; btn: string }> = {
+  gasoline: { text: 'text-kgrn', bar: 'bg-kgrn', edge: 'border-l-kgrn', btn: 'bg-kgrn hover:bg-kgrn-dark text-white' },
+  diesel:   { text: 'text-kyel-dark', bar: 'bg-kyel-dark', edge: 'border-l-kyel-dark', btn: 'bg-kyel hover:bg-kyel-dark text-ink' },
+  lpg:      { text: 'text-kblu', bar: 'bg-kblu', edge: 'border-l-kblu', btn: 'bg-kblu hover:bg-kblu-dark text-white' }
 };
 
 const FUEL_LABEL: Record<FuelType, string> = {
@@ -67,7 +72,7 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
     // Modal kapanmaz, satır stok değeri güncellenir.
   };
 
-  const color = FUEL_COLORS[fuelType];
+  const tone = FUEL_TONE[fuelType];
   const fillPct = unlocked
     ? full
       ? 100
@@ -80,44 +85,40 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
 
   return (
     <div
-      className="rounded-2xl border border-slate-700/60 bg-slate-800/50 p-4 flex items-center gap-3"
-      style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+      className={`bg-board border-2 border-ink border-l-[6px] rounded-md p-4 flex items-center gap-3 ${tone.edge}`}
     >
       {/* Yakıt ikonu */}
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-black text-xs"
-        style={{ background: `${color}22`, border: `1.5px solid ${color}55` }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill={color}>
+      <div className={`game-icon-badge w-10 h-10 ${tone.text}`}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>
         </svg>
       </div>
 
       {/* İsim + stok */}
       <div className="flex-1 min-w-0">
-        <div className="font-bold text-white text-sm">{FUEL_LABEL[fuelType]}</div>
+        <div className="font-display text-base text-ink">{FUEL_LABEL[fuelType]}</div>
         {full ? (
-          <div className="text-xs text-slate-400">Tank dolu</div>
+          <div className="text-xs text-mute">Tank dolu</div>
         ) : (
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-mute">
             {tank.stock.toFixed(0)} / {tank.capacity} L
-            <span className="ml-1.5 text-emerald-400 font-medium">
+            <span className="ml-1.5 text-kgrn font-medium">
               +{diffLiters} L · alış {unitCost.toFixed(1)} TL/L
             </span>
           </div>
         )}
         {/* Bar */}
-        <div className="mt-1.5 w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+        <div className="mt-1.5 w-full k-bar">
           <div
-            className="h-full rounded-full transition-all"
-            style={{ width: `${fillPct}%`, background: color }}
+            className={`h-full transition-all ${tone.bar}`}
+            style={{ width: `${fillPct}%` }}
           />
         </div>
       </div>
 
       {/* Kontroller */}
       {full ? (
-        <div className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 bg-slate-700/60 border border-slate-600/40 select-none">
+        <div className="px-5 py-2.5 rounded-md text-sm font-display tracking-wide text-mute bg-card border-2 border-ink select-none">
           Dolu
         </div>
       ) : (
@@ -125,7 +126,7 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
           <button
             onClick={() => step(-FUEL_ORDER_STEP)}
             disabled={clampedLiters <= conf.orderMinLiters}
-            className="w-8 h-8 rounded-xl bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm transition-all"
+            className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
           >
             −
           </button>
@@ -136,18 +137,18 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
             step={FUEL_ORDER_STEP}
             value={clampedLiters}
             onChange={(e) => setLiters(Number(e.target.value))}
-            className="w-14 text-center bg-slate-900 border border-slate-600 rounded-xl text-white text-sm font-mono py-1 focus:outline-none focus:border-slate-400"
+            className="w-20 text-center bg-paper border-2 border-ink rounded-md text-ink font-display text-sm px-2 py-1 focus:outline-none"
           />
           <button
             onClick={() => step(FUEL_ORDER_STEP)}
             disabled={clampedLiters >= maxLiters}
-            className="w-8 h-8 rounded-xl bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm transition-all"
+            className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
           >
             +
           </button>
           <button
             onClick={handleMax}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-700 border border-slate-600 text-slate-300 hover:bg-slate-600 text-xs font-bold transition-all"
+            className="game-btn px-2.5 py-1.5 rounded-md bg-card hover:bg-board text-ink text-xs font-display tracking-wide"
           >
             MAX
           </button>
@@ -155,12 +156,11 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
           <button
             onClick={handleOrder}
             disabled={!canAfford}
-            className={`px-4 py-2 rounded-xl text-sm font-extrabold transition-all shadow-lg ${
+            className={`game-btn px-4 py-2 rounded-md text-sm font-display tracking-wide tabular-nums ${
               !canAfford
-                ? 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600'
-                : 'text-white hover:scale-[1.03]'
+                ? 'bg-card text-mute cursor-not-allowed'
+                : tone.btn
             }`}
-            style={canAfford ? { background: color, boxShadow: `0 4px 20px ${color}55` } : {}}
           >
             ₺{totalCost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
           </button>
@@ -192,20 +192,20 @@ export const FuelOrderModal: React.FC = () => {
     .reduce((sum, r) => sum + r.totalCost, 0);
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-xl shadow-2xl text-slate-100 flex flex-col max-h-[90vh]">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-xl flex flex-col max-h-[90vh]">
 
         {/* Başlık */}
-        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 shrink-0">
+        <div className="k-head k-head-grn shrink-0 rounded-t-md">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <div className="game-icon-badge w-9 h-9">
               <Truck className="w-4 h-4" />
             </div>
-            <span className="font-extrabold text-base text-white">Yakıt Siparişi</span>
+            <span className="font-display text-xl tracking-wide">Yakıt Siparişi</span>
           </div>
           <button
             onClick={() => { sounds.playClick(); setActiveModal('NONE'); }}
-            className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -223,7 +223,7 @@ export const FuelOrderModal: React.FC = () => {
 
           {/* Tedarikçi seçimi */}
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 k-label">
               <Truck className="w-3.5 h-3.5" />
               Tedarikçi
             </div>
@@ -234,18 +234,14 @@ export const FuelOrderModal: React.FC = () => {
                   <button
                     key={s.id}
                     onClick={() => { sounds.playClick(); setSupplierId(s.id as SupplierType); }}
-                    className={`rounded-2xl py-3 px-3 flex flex-col items-center gap-1 transition-all font-bold text-sm ${
+                    className={`game-btn rounded-md py-3 px-3 flex flex-col items-center gap-1 font-display tracking-wide text-sm ${
                       active
-                        ? 'text-white shadow-lg'
-                        : 'bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700'
+                        ? 'bg-kred text-white'
+                        : 'bg-card hover:bg-board text-ink'
                     }`}
-                    style={active ? {
-                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                      boxShadow: '0 4px 20px #ef444455'
-                    } : {}}
                   >
                     <span className="text-center leading-tight">{s.name}</span>
-                    <span className={`text-xs font-normal ${active ? 'text-red-200' : 'text-slate-400'}`}>
+                    <span className={`text-xs font-sans font-semibold tracking-normal ${active ? 'text-white/80' : 'text-mute'}`}>
                       {s.tag}
                     </span>
                   </button>
@@ -254,10 +250,10 @@ export const FuelOrderModal: React.FC = () => {
             </div>
 
             {/* Dinamik açıklama */}
-            <div className="text-sm text-slate-300 leading-snug">
+            <div className="text-sm text-ink leading-snug">
               {supplier.description}
             </div>
-            <div className="text-xs text-slate-500 leading-relaxed border-t border-dashed border-slate-700 pt-3">
+            <div className="text-xs text-mute leading-relaxed border-t-2 border-dashed border-mute/60 pt-3">
               Litreyi elle yazabilir, –/+ ile {FUEL_ORDER_STEP}L adımlayabilir ya da MAX ile depoyu fulleyebilirsin.
               Her yakıtın tankeri ayrı gelir ve boşaltır.
             </div>
@@ -265,38 +261,38 @@ export const FuelOrderModal: React.FC = () => {
 
           {/* Alım Defteri */}
           <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 k-label">
               <Calendar className="w-3.5 h-3.5" />
               Alım Defteri
             </div>
 
             {history.length === 0 ? (
-              <div className="text-center text-slate-500 text-xs py-6">
+              <div className="text-center text-mute text-xs py-6 bg-board border-2 border-dashed border-mute rounded-md">
                 Henüz tamamlanan teslimat yok.
               </div>
             ) : (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 bg-board border-2 border-ink rounded-md p-2">
                 {history.map((rec) => {
-                  const color = FUEL_COLORS[rec.fuelType];
+                  const tone = FUEL_TONE[rec.fuelType];
                   const label = FUEL_LABEL[rec.fuelType];
                   return (
                     <div
                       key={rec.id}
-                      className="flex items-center gap-3 py-1.5 px-3 rounded-xl hover:bg-slate-800/60 text-xs transition-all"
+                      className="flex items-center gap-3 py-1.5 px-3 rounded-md hover:bg-card text-xs transition-colors"
                     >
-                      <span className="text-slate-500 font-mono w-12 shrink-0">
+                      <span className="text-mute font-mono w-12 shrink-0">
                         Gün {rec.day}
                       </span>
-                      <span className="font-bold w-20 shrink-0" style={{ color }}>
+                      <span className={`font-bold w-20 shrink-0 ${tone.text}`}>
                         {label}
                       </span>
-                      <span className="text-slate-300 font-mono w-14 text-right shrink-0">
+                      <span className="text-ink font-mono w-14 text-right shrink-0">
                         {rec.liters.toLocaleString('tr-TR')}L
                       </span>
-                      <span className="text-slate-200 font-mono flex-1 text-right">
+                      <span className="text-ink font-mono font-bold flex-1 text-right">
                         ₺{rec.totalCost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
                       </span>
-                      <span className="text-slate-400 font-mono w-14 text-right shrink-0">
+                      <span className="text-mute font-mono w-14 text-right shrink-0">
                         ₺{rec.unitCost.toFixed(1)}/L
                       </span>
                     </div>
@@ -306,9 +302,9 @@ export const FuelOrderModal: React.FC = () => {
             )}
 
             {/* Son 7 gün özeti */}
-            <div className="text-right text-xs text-slate-400 border-t border-slate-800 pt-2 font-mono">
+            <div className="text-right text-xs text-mute border-t-2 border-dotted border-mute/60 pt-2 font-mono">
               Son 7 gün yakıt gideri:{' '}
-              <span className="text-slate-200 font-bold">
+              <span className="text-kred font-bold">
                 ₺{last7Cost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
               </span>
             </div>

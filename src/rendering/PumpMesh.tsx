@@ -381,7 +381,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump, neighbours }) => {
 
       {pump.health < 40 && (
         <Html position={[0, 3.3, 0]} center distanceFactor={25} zIndexRange={[5, 0]}>
-          <div className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full font-bold shadow-lg animate-bounce whitespace-nowrap">
+          <div className="game-glass bg-kred text-white text-xs px-2 py-0.5 rounded-md font-display animate-bounce whitespace-nowrap">
             ⚠️ {isBroken ? 'Arızalı' : 'Bakım Gerekli'}
           </div>
         </Html>

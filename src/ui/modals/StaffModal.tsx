@@ -30,38 +30,36 @@ export const StaffModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
+        <div className="k-head k-head-blu shrink-0">
           <div className="flex items-center gap-3">
-            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
+            <div className="game-icon-badge w-10 h-10">
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">İnsan Kaynakları & Otomasyon</div>
-              <div className="text-base font-extrabold text-white">Personel & İstasyon Müdürü</div>
+              <div className="text-[10px] uppercase font-bold font-sans text-white/80 tracking-wider">İnsan Kaynakları & Otomasyon</div>
+              <div className="font-display text-xl tracking-wide">Personel & İstasyon Müdürü</div>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-800 p-2 gap-2 bg-slate-950/40">
+        <div className="flex border-b-2 border-ink p-2 gap-2 bg-board">
           <button
             onClick={() => {
               sounds.playClick();
               setActiveTab('attendants');
             }}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-              activeTab === 'attendants'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            className={`k-tab flex-1 flex items-center justify-center gap-2 ${
+              activeTab === 'attendants' ? 'k-tab-on' : ''
             }`}
           >
             <UserCheck className="w-4 h-4" />
@@ -73,10 +71,8 @@ export const StaffModal: React.FC = () => {
               sounds.playClick();
               setActiveTab('manager');
             }}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-              activeTab === 'manager'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            className={`k-tab flex-1 flex items-center justify-center gap-2 ${
+              activeTab === 'manager' ? 'k-tab-on' : ''
             }`}
           >
             <Shield className="w-4 h-4" />
@@ -88,23 +84,23 @@ export const StaffModal: React.FC = () => {
         {activeTab === 'attendants' && (
           <div className="p-6 flex flex-col gap-4 overflow-y-auto flex-1">
             {/* Hire Action Card */}
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex justify-between items-center">
+            <div className="bg-board border-2 border-ink rounded-md p-4 flex justify-between items-center">
               <div>
-                <div className="font-extrabold text-sm text-white">Yeni Pompacı İşe Al</div>
-                <div className="text-xs text-slate-400">
+                <div className="font-display text-base text-ink">Yeni Pompacı İşe Al</div>
+                <div className="text-xs text-mute">
                   Gelen araçların akaryakıt dolumunu ve tahsilatını otomatik gerçekleştirir.
                 </div>
-                <div className="text-[11px] font-mono text-emerald-400 mt-1">
+                <div className="text-[11px] font-mono text-kgrn mt-1">
                   Maaş: 650 TL/gün • İşe Alım: 7.500 TL
                 </div>
               </div>
               <button
                 onClick={() => hirePumpAttendant()}
                 disabled={gameState.player.level < 3 || gameState.player.cash < 7500}
-                className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+                className={`game-btn px-5 py-2.5 rounded-md font-display tracking-wide text-xs uppercase ${
                   gameState.player.level < 3 || gameState.player.cash < 7500
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                    : 'game-btn bg-gradient-to-b from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 border-2 border-indigo-300/60 text-white shadow-lg shadow-indigo-600/30'
+                    ? 'bg-card text-mute cursor-not-allowed'
+                    : 'bg-kgrn hover:bg-kgrn-dark text-white'
                 }`}
               >
                 {gameState.player.level < 3 ? 'Seviye 3 Gerekli' : 'İşe Al (₺7.500)'}
@@ -113,9 +109,9 @@ export const StaffModal: React.FC = () => {
 
             {/* List of Attendants */}
             <div className="flex flex-col gap-3">
-              <div className="text-xs font-bold text-slate-400 uppercase">Mevcut Çalışanlar</div>
+              <div className="k-label">Mevcut Çalışanlar</div>
               {attendants.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-xs bg-slate-950/30 rounded-2xl border border-slate-800/80">
+                <div className="text-center py-8 text-mute text-xs bg-board rounded-md border-2 border-dashed border-mute">
                   Henüz işe alınmış pompacı bulunmuyor. İlk pompacıyı işe alarak dolumu otomatikleştirebilirsiniz.
                 </div>
               ) : (
@@ -131,32 +127,32 @@ export const StaffModal: React.FC = () => {
                   return (
                     <div
                       key={emp.id}
-                      className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3"
+                      className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3"
                     >
                       {/* Top Row: Info + Assignment + Actions */}
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-sm text-white">{emp.name}</span>
-                            <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/30">
+                            <span className="font-display text-base text-ink">{emp.name}</span>
+                            <span className="bg-kblu text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink">
                               Seviye {emp.level}
                             </span>
                             {emp.level === 3 && (
-                              <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                              <span className="bg-kyel text-ink text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink">
                                 ⭐ USTA
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] font-mono text-slate-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <div className="text-[11px] font-mono text-mute mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                             <span>Maaş: ₺{emp.wage}/gün</span>
                             <span>•</span>
                             <span>Hizmet: {emp.serviceCount}</span>
                             <span>•</span>
-                            <span className="text-emerald-400 font-semibold">
+                            <span className="text-kgrn font-semibold">
                               Dolum Hızı: %{Math.round(currentTier.speedMultiplier * 100)}
                             </span>
                             <span>•</span>
-                            <span className="text-sky-300 font-semibold">
+                            <span className="text-kblu font-semibold">
                               Tepki: {currentTier.actionDelaySeconds}s
                             </span>
                           </div>
@@ -167,7 +163,7 @@ export const StaffModal: React.FC = () => {
                           <select
                             value={emp.assignedPumpId || ''}
                             onChange={(e) => assignAttendantToPump(emp.id, e.target.value || null)}
-                            className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 outline-none cursor-pointer"
+                            className="bg-paper border-2 border-ink rounded-md text-ink font-display text-xs px-2 py-1 outline-none cursor-pointer"
                           >
                             <option value="">Atanmamış (Boşta)</option>
                             {Object.values(gameState.pumps).map((p) => (
@@ -182,10 +178,10 @@ export const StaffModal: React.FC = () => {
                             <button
                               onClick={() => upgradeAttendant(emp.id)}
                               disabled={!hasEnoughServices || !hasEnoughCash}
-                              className={`game-btn text-xs font-bold px-3 py-2 rounded-xl border flex items-center gap-1.5 whitespace-nowrap transition-all ${
+                              className={`game-btn text-xs font-display tracking-wide px-3 py-2 rounded-md flex items-center gap-1.5 whitespace-nowrap ${
                                 hasEnoughServices && hasEnoughCash
-                                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white border-indigo-400/40 shadow-lg shadow-indigo-600/30 active:scale-95'
-                                  : 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed'
+                                  ? 'bg-kblu hover:bg-kblu-dark text-white'
+                                  : 'bg-card text-mute cursor-not-allowed'
                               }`}
                             >
                               <ArrowUpCircle className="w-3.5 h-3.5" />
@@ -197,7 +193,7 @@ export const StaffModal: React.FC = () => {
                           <button
                             onClick={() => fireAttendant(emp.id)}
                             title="İşten Çıkar"
-                            className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-400 hover:text-red-300 transition-all flex items-center justify-center active:scale-95"
+                            className="game-btn p-2 rounded-md bg-kred hover:bg-kred-dark text-white flex items-center justify-center"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -206,28 +202,28 @@ export const StaffModal: React.FC = () => {
 
                       {/* Bottom Row: Next Level Perks Preview */}
                       {nextTier ? (
-                        <div className="pt-2.5 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-slate-900/40 px-3 py-2 rounded-xl">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-paper border-2 border-ink px-3 py-2 rounded-md">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-amber-400 font-bold flex items-center gap-1">
+                            <span className="text-kyel-dark font-bold flex items-center gap-1">
                               <span>⚡</span> Seviye {nextTier.level} Kazanımları:
                             </span>
-                            <span className="text-emerald-300 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                            <span className="text-kgrn font-mono font-bold bg-board px-2 py-0.5 rounded-md border-2 border-kgrn">
                               Dolum Hızı: %{Math.round(currentTier.speedMultiplier * 100)} ➔ %{Math.round(nextTier.speedMultiplier * 100)} (+%{Math.round((nextTier.speedMultiplier - currentTier.speedMultiplier) * 100)})
                             </span>
-                            <span className="text-sky-300 font-mono font-bold bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                            <span className="text-kblu font-mono font-bold bg-board px-2 py-0.5 rounded-md border-2 border-kblu">
                               Tepki: {currentTier.actionDelaySeconds}s ➔ {nextTier.actionDelaySeconds}s (-{(currentTier.actionDelaySeconds - nextTier.actionDelaySeconds).toFixed(1)}s)
                             </span>
                           </div>
-                          <div className="text-[11px] font-mono text-slate-400">
+                          <div className="text-[11px] font-mono text-mute">
                             {hasEnoughServices ? (
-                              <span className="text-emerald-400 font-bold">✓ Deneyim Yeterli ({emp.serviceCount}/{nextTier.requiredServices})</span>
+                              <span className="text-kgrn font-bold">✓ Deneyim Yeterli ({emp.serviceCount}/{nextTier.requiredServices})</span>
                             ) : (
                               <span>Şart: {emp.serviceCount}/{nextTier.requiredServices} Hizmet</span>
                             )}
                           </div>
                         </div>
                       ) : (
-                        <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs text-amber-300 font-semibold">
+                        <div className="pt-2 border-t-2 border-dotted border-mute/60 flex items-center gap-1.5 text-xs text-kyel-dark font-semibold">
                           <span>🏆</span> Maksimum Usta Seviyesi: En yüksek dolum hızı (%110) ve anında reaksiyon (0.6s).
                         </div>
                       )}
@@ -244,37 +240,37 @@ export const StaffModal: React.FC = () => {
           <div className="p-6 flex flex-col gap-4 overflow-y-auto flex-1">
             {!hasManager ? (
               // Hire Manager Requirements Screen
-              <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4">
+              <div className="bg-board border-2 border-ink rounded-md p-5 flex flex-col gap-4">
                 <div>
-                  <div className="font-extrabold text-base text-white">İstasyon Müdürü İşe Alımı</div>
-                  <div className="text-xs text-slate-400 mt-1">
+                  <div className="font-display text-lg text-ink">İstasyon Müdürü İşe Alımı</div>
+                  <div className="text-xs text-mute mt-1">
                     Müdür, belirlediğiniz kasa rezervi ve kurallar dahilinde otomatik yakıt siparişi verir,
                     fiyatları dengeler ve pompacıları yönetir.
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 text-xs text-ink">
                   <div className="flex items-center gap-2">
                     <CheckCircle2
-                      className={`w-4 h-4 ${gameState.player.level >= managerConf.minLevel ? 'text-emerald-400' : 'text-slate-600'}`}
+                      className={`w-4 h-4 ${gameState.player.level >= managerConf.minLevel ? 'text-kgrn' : 'text-mute'}`}
                     />
                     <span>Oyuncu Seviyesi: 10 ({gameState.player.level}/10)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
-                      className={`w-4 h-4 ${gameState.player.reputation >= managerConf.minReputation ? 'text-emerald-400' : 'text-slate-600'}`}
+                      className={`w-4 h-4 ${gameState.player.reputation >= managerConf.minReputation ? 'text-kgrn' : 'text-mute'}`}
                     />
                     <span>İstasyon İtibarı: 4.00 ({gameState.player.reputation.toFixed(2)}/4.00)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
-                      className={`w-4 h-4 ${attendants.length >= managerConf.minActiveAttendants ? 'text-emerald-400' : 'text-slate-600'}`}
+                      className={`w-4 h-4 ${attendants.length >= managerConf.minActiveAttendants ? 'text-kgrn' : 'text-mute'}`}
                     />
                     <span>Aktif Pompacı: 2 ({attendants.length}/2)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
-                      className={`w-4 h-4 ${profitBarMet ? 'text-emerald-400' : 'text-slate-600'}`}
+                      className={`w-4 h-4 ${profitBarMet ? 'text-kgrn' : 'text-mute'}`}
                     />
                     <span>
                       Son 3 günün {managerConf.minProfitableDaysInLast3}'si kârlı (
@@ -284,7 +280,7 @@ export const StaffModal: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
-                      className={`w-4 h-4 ${gameState.player.cash >= managerConf.hireCost ? 'text-emerald-400' : 'text-slate-600'}`}
+                      className={`w-4 h-4 ${gameState.player.cash >= managerConf.hireCost ? 'text-kgrn' : 'text-mute'}`}
                     />
                     <span>İşe Alım Bedeli: 45.000 TL</span>
                   </div>
@@ -292,7 +288,7 @@ export const StaffModal: React.FC = () => {
 
                 <button
                   onClick={hireManager}
-                  className="w-full py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider game-btn bg-gradient-to-b from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 border-2 border-indigo-300/60 text-white shadow-xl shadow-indigo-600/30 transition-all mt-2"
+                  className="game-btn w-full py-3.5 rounded-md font-display tracking-wide text-sm uppercase bg-kgrn hover:bg-kgrn-dark text-white mt-2"
                 >
                   Müdürü Göreve Başlat (₺45.000)
                 </button>
@@ -300,74 +296,74 @@ export const StaffModal: React.FC = () => {
             ) : (
               // Active Automation Rules Configuration
               <div className="flex flex-col gap-4">
-                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <span className="font-extrabold text-sm text-white">Otomatik Yakıt Siparişi</span>
+                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
+                  <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2">
+                    <span className="font-display text-base text-ink">Otomatik Yakıt Siparişi</span>
                     <input
                       type="checkbox"
                       checked={gameState.managerSettings.autoFuelOrder}
                       onChange={(e) => updateManagerSettings({ autoFuelOrder: e.target.checked })}
-                      className="w-4 h-4 accent-indigo-500 cursor-pointer"
+                      className="accent-kgrn w-4 h-4 cursor-pointer"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <span className="text-slate-400 block text-[10px] uppercase">Sipariş Eşiği</span>
-                      <span className="font-bold text-white font-mono">
+                      <span className="k-label block">Sipariş Eşiği</span>
+                      <span className="font-display text-ink tabular-nums">
                         Tank %{gameState.managerSettings.orderThresholdPercent} altına inince
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px] uppercase">Hedef Doluluk</span>
-                      <span className="font-bold text-white font-mono">
+                      <span className="k-label block">Hedef Doluluk</span>
+                      <span className="font-display text-ink tabular-nums">
                         %{gameState.managerSettings.orderTargetPercent} seviyesine kadar
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <span className="font-extrabold text-sm text-white">Tesis Kasalarını Topla</span>
+                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
+                  <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2">
+                    <span className="font-display text-base text-ink">Tesis Kasalarını Topla</span>
                     <input
                       type="checkbox"
                       checked={gameState.managerSettings.autoCollectTills ?? true}
                       onChange={(e) => updateManagerSettings({ autoCollectTills: e.target.checked })}
-                      className="w-4 h-4 accent-indigo-500 cursor-pointer"
+                      className="accent-kgrn w-4 h-4 cursor-pointer"
                     />
                   </div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="text-[11px] text-mute">
                     Müdür her {gameState.managerSettings.collectIntervalHours ?? 2} saatte bir WC, market,
                     kahveci, restoran ve otelin kasasını dolaşıp parayı istasyon kasasına aktarır.
                     Kapalıyken parayı yapıların üstündeki rozete tıklayarak sen toplarsın.
                   </div>
                 </div>
 
-                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <span className="font-extrabold text-sm text-white">Bataryayı Gece Doldur</span>
+                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
+                  <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2">
+                    <span className="font-display text-base text-ink">Bataryayı Gece Doldur</span>
                     <input
                       type="checkbox"
                       checked={gameState.managerSettings.nightGridFill ?? false}
                       onChange={(e) => updateManagerSettings({ nightGridFill: e.target.checked })}
-                      className="w-4 h-4 accent-indigo-500 cursor-pointer"
+                      className="accent-kgrn w-4 h-4 cursor-pointer"
                     />
                   </div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="text-[11px] text-mute">
                     Müdür şebekeden yalnızca gece tarifesinde ({GAME_CONFIG.ev.gridTariff.night.from}:00–
                     {GAME_CONFIG.ev.gridTariff.night.to}:00, ₺{GAME_CONFIG.ev.gridTariff.night.price.toFixed(1)}/kWh) çeker.
                     Batarya %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
                   </div>
                 </div>
 
-                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
+                <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
                   <div className="flex justify-between items-center">
-                    <span className="font-extrabold text-sm text-white">Kasa Rezervi Güvencesi</span>
-                    <span className="font-mono font-bold text-emerald-400">
+                    <span className="font-display text-base text-ink">Kasa Rezervi Güvencesi</span>
+                    <span className="font-display tabular-nums text-kgrn">
                       ₺{gameState.managerSettings.kasaReserve.toLocaleString('tr-TR')}
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="text-[11px] text-mute">
                     Müdür yapacağı hiçbir harcamada kasanızı bu tutarın altına düşüremez.
                   </div>
                 </div>

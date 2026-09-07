@@ -19,38 +19,38 @@ const MissionRow: React.FC<{ mission: MissionEntity; onClaim: () => void }> = ({
 
   return (
     <div
-      className={`bg-slate-950/80 border rounded-2xl p-4 flex flex-col gap-3 ${
+      className={`bg-paper border-2 rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118] ${
         mission.completed
-          ? 'border-emerald-600/60'
+          ? 'border-kgrn'
           : isMain
-            ? 'border-amber-600/50'
-            : 'border-slate-800'
+            ? 'border-kyel-dark'
+            : 'border-ink'
       }`}
     >
       <div className="flex items-start gap-3">
         {mission.completed ? (
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <CheckCircle2 className="w-5 h-5 text-kgrn shrink-0 mt-0.5" />
         ) : isMain ? (
-          <Star className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <Star className="w-5 h-5 text-kyel-dark shrink-0 mt-0.5" />
         ) : (
-          <Circle className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
+          <Circle className="w-5 h-5 text-mute shrink-0 mt-0.5" />
         )}
         <div className="flex-1">
-          <div className="text-sm font-extrabold text-white">{mission.description}</div>
-          <div className="text-xs text-slate-400 font-bold mt-0.5">
+          <div className="text-sm font-extrabold text-ink">{mission.description}</div>
+          <div className="text-xs text-mute font-bold mt-0.5">
             Ödül: ₺{mission.rewardCash.toLocaleString('tr-TR')} · {mission.rewardXp} XP
-            {isMain && <span className="text-amber-400"> · Ana Görev</span>}
+            {isMain && <span className="text-kyel-dark"> · Ana Görev</span>}
           </div>
         </div>
-        <span className="text-xs font-mono font-bold text-slate-300 shrink-0">
+        <span className="text-xs font-mono font-bold text-ink shrink-0">
           {formatValue(mission.progress)} / {formatValue(mission.target)}
         </span>
       </div>
 
-      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+      <div className="w-full k-bar">
         <div
           className={`h-full transition-all duration-300 ${
-            mission.completed ? 'bg-emerald-500' : isMain ? 'bg-amber-500' : 'bg-sky-500'
+            mission.completed ? 'bg-kgrn' : isMain ? 'bg-kyel' : 'bg-kblu'
           }`}
           style={{ width: `${ratio * 100}%` }}
         />
@@ -59,7 +59,7 @@ const MissionRow: React.FC<{ mission: MissionEntity; onClaim: () => void }> = ({
       {mission.completed && (
         <button
           onClick={onClaim}
-          className="game-btn bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 border-2 border-emerald-300/60 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+          className="game-btn bg-kgrn hover:bg-kgrn-dark text-white text-sm font-display tracking-wide px-4 py-2.5 flex items-center justify-center gap-2"
         >
           <Gift className="w-4 h-4" />
           <span>Ödülü Al</span>
@@ -86,25 +86,25 @@ export const MissionsModal: React.FC = () => {
   const dailies = pending.filter((m) => m.type !== 'TUTORIAL');
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="k-head k-head-grn shrink-0">
           <div className="flex items-center gap-3">
-            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+            <div className="game-icon-badge w-9 h-9">
               <Target className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">
+              <div className="text-[10px] uppercase font-black tracking-[0.12em] opacity-80 font-sans">
                 Görevler & İlerleme
               </div>
-              <div className="text-base font-extrabold text-white">
+              <div className="font-display text-xl tracking-wide leading-tight">
                 Eğitim Görevleri ({done.length}/{missions.length} tamamlandı)
               </div>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -112,14 +112,14 @@ export const MissionsModal: React.FC = () => {
 
         <div className="p-6 flex flex-col gap-3 overflow-y-auto flex-1">
           {pending.length === 0 && (
-            <div className="text-center py-10 text-slate-400 text-sm font-bold">
+            <div className="text-center py-10 text-mute text-sm font-bold">
               Tüm eğitim görevleri tamamlandı. İstasyonu büyütmeye devam edin!
             </div>
           )}
 
           {dailies.length > 0 && (
             <>
-              <div className="text-xs font-bold text-slate-500 uppercase">Günlük Görevler</div>
+              <div className="k-label text-[11px] border-b-2 border-ink pb-1">Günlük Görevler</div>
               {dailies.map((mission) => (
                 <MissionRow
                   key={mission.id}
@@ -132,7 +132,7 @@ export const MissionsModal: React.FC = () => {
 
           {tutorials.length > 0 && (
             <>
-              <div className="text-xs font-bold text-slate-500 uppercase mt-2">
+              <div className="k-label text-[11px] border-b-2 border-ink pb-1 mt-2">
                 Eğitim Görevleri
               </div>
               {tutorials.map((mission) => (
@@ -147,14 +147,14 @@ export const MissionsModal: React.FC = () => {
 
           {done.length > 0 && (
             <div className="flex flex-col gap-2 mt-2">
-              <div className="text-xs font-bold text-slate-500 uppercase">Tamamlananlar</div>
+              <div className="k-label text-[11px] border-b-2 border-ink pb-1">Tamamlananlar</div>
               {done.map((mission) => (
                 <div
                   key={mission.id}
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-950/50 border border-slate-800/60"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-md bg-board border-2 border-ink"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span className="text-xs font-bold text-slate-400 line-through">
+                  <CheckCircle2 className="w-4 h-4 text-kgrn shrink-0" />
+                  <span className="text-xs font-bold text-mute line-through">
                     {mission.description}
                   </span>
                 </div>

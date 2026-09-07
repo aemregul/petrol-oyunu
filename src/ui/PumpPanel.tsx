@@ -7,16 +7,16 @@ import { solarPrice, solarPeakKwhPerHour } from '../domain/services/energy';
 import { sounds } from '../audio/soundEffects';
 
 const STATE_LABELS: Record<string, { text: string; className: string }> = {
-  IDLE: { text: 'Boşta', className: 'text-emerald-400' },
-  RESERVED: { text: 'Müşteri geliyor', className: 'text-sky-400' },
-  FUELING: { text: 'Çalışıyor', className: 'text-emerald-400' },
-  VEHICLE_ARRIVING: { text: 'Müşteri geliyor', className: 'text-sky-400' },
-  REQUEST_READY: { text: 'Müşteri bekliyor', className: 'text-amber-400' },
+  IDLE: { text: 'Boşta', className: 'text-kgrn' },
+  RESERVED: { text: 'Müşteri geliyor', className: 'text-kblu' },
+  FUELING: { text: 'Çalışıyor', className: 'text-kgrn' },
+  VEHICLE_ARRIVING: { text: 'Müşteri geliyor', className: 'text-kblu' },
+  REQUEST_READY: { text: 'Müşteri bekliyor', className: 'text-kyel-dark' },
   // Held after the sale too: the driver may have walked off to the shop and
   // left the car standing in the bay.
-  PAYMENT: { text: 'Dolu', className: 'text-amber-400' },
-  BROKEN: { text: 'ARIZALI', className: 'text-red-400' },
-  MAINTENANCE: { text: 'Bakımda', className: 'text-amber-400' }
+  PAYMENT: { text: 'Dolu', className: 'text-kyel-dark' },
+  BROKEN: { text: 'ARIZALI', className: 'text-kred' },
+  MAINTENANCE: { text: 'Bakımda', className: 'text-kyel-dark' }
 };
 
 export const PumpPanel: React.FC = () => {
@@ -41,7 +41,7 @@ export const PumpPanel: React.FC = () => {
   if (!pump || activeModal !== 'NONE' || buildMode.active) return null;
 
   const pumpNo = pump.id.replace(/\D+/g, '') || '1';
-  const stateInfo = STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-slate-300' };
+  const stateInfo = STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-ink' };
 
   // Check if an attendant is assigned to this specific pump
   const attendant = Object.values(gameState.employees).find(
@@ -89,18 +89,18 @@ export const PumpPanel: React.FC = () => {
 
   return (
     <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center p-4">
-      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none rounded-[2rem] bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col">
+      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none game-surface animate-fade-in flex flex-col">
         {/* Header Red Banner */}
-        <div className="bg-[#d93f3f] px-5 py-3.5 flex items-center justify-between text-white shadow-md">
+        <div className="k-head k-head-red">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-              <Fuel className="w-4 h-4 text-white" />
+            <div className="game-icon-badge w-8 h-8">
+              <Fuel className="w-4 h-4" />
             </div>
-            <span className="font-extrabold text-base tracking-tight">Pompa #{pumpNo}</span>
+            <span>Pompa #{pumpNo}</span>
           </div>
           <button
             onClick={handleClose}
-            className="w-7 h-7 rounded-xl bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-colors"
+            className="game-btn bg-card text-ink w-8 h-8 rounded-md flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -109,32 +109,32 @@ export const PumpPanel: React.FC = () => {
         {/* Content Body */}
         <div className="p-5 flex flex-col gap-4 text-xs">
           {/* Subtitle description */}
-          <p className="text-slate-300 text-[11px] leading-relaxed font-medium">
+          <p className="text-ink/80 text-[12px] leading-relaxed font-semibold">
             Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.
           </p>
 
           {/* Stats Rows */}
-          <div className="flex flex-col divide-y divide-white/5 text-xs">
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Durum</span>
-              <span className={`font-extrabold ${stateInfo.className}`}>{stateInfo.text}</span>
+          <div className="flex flex-col text-xs">
+            <div className="k-row">
+              <span>Durum</span>
+              <span className={stateInfo.className}>{stateInfo.text}</span>
             </div>
 
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Dolum hızı</span>
-              <span className="font-extrabold text-white font-mono">{pump.flowRateLps.toFixed(1)} L/sn</span>
+            <div className="k-row">
+              <span>Dolum hızı</span>
+              <span>{pump.flowRateLps.toFixed(1)} L/sn</span>
             </div>
 
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Pompacı</span>
-              <span className={`font-extrabold uppercase ${attendant ? 'text-emerald-400' : 'text-slate-500'}`}>
+            <div className="k-row">
+              <span>Pompacı</span>
+              <span className={`uppercase ${attendant ? 'text-kgrn' : 'text-mute'}`}>
                 {attendant ? 'ÇALIŞIYOR (gelir senin)' : 'YOK'}
               </span>
             </div>
 
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Yovmiye</span>
-              <span className={`font-extrabold font-mono ${attendant ? 'text-rose-300' : 'text-slate-500'}`}>
+            <div className="k-row">
+              <span>Yovmiye</span>
+              <span className={attendant ? 'text-kred' : 'text-mute'}>
                 ₺{attendant ? attendant.wage : attendantConfig.dailyWage}/gün
               </span>
             </div>
@@ -144,9 +144,9 @@ export const PumpPanel: React.FC = () => {
               const conf = GAME_CONFIG.fuels[f];
               const price = gameState.pricing[f]?.playerPrice ?? 0;
               return (
-                <div key={f} className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-300 font-semibold">{conf?.shortName ?? f}</span>
-                  <span className="font-extrabold text-white font-mono">₺{price.toFixed(0)}/L</span>
+                <div key={f} className="k-row">
+                  <span>{conf?.shortName ?? f}</span>
+                  <span>₺{price.toFixed(0)}/L</span>
                 </div>
               );
             })}
@@ -158,7 +158,7 @@ export const PumpPanel: React.FC = () => {
             {repairCost !== null && (
               <button
                 onClick={() => repairPump(pump.id)}
-                className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
+                className="w-full py-3 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm flex items-center justify-center gap-1.5"
               >
                 <Wrench className="w-3.5 h-3.5" />
                 <span>Onar — ₺{repairCost.toLocaleString('tr-TR')}</span>
@@ -169,7 +169,7 @@ export const PumpPanel: React.FC = () => {
             {attendant ? (
               <button
                 onClick={handleHireOrFire}
-                className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
+                className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
               >
                 Pompacıyı İşten çıkar
               </button>
@@ -177,11 +177,7 @@ export const PumpPanel: React.FC = () => {
               <button
                 onClick={handleHireOrFire}
                 disabled={!canAffordHire}
-                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
-                  canAffordHire
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
-                    : 'bg-slate-800 text-slate-500 border border-white/5 cursor-not-allowed'
-                }`}
+                className="w-full py-3.5 game-btn bg-kgrn hover:bg-kgrn-dark text-white font-display tracking-wide text-sm"
               >
                 Pompacı Al — ₺{attendantConfig.hireCost.toLocaleString('tr-TR')}
               </button>
@@ -191,12 +187,12 @@ export const PumpPanel: React.FC = () => {
             {upgrade ? (
               <button
                 onClick={handleUpgrade}
-                className="w-full py-3.5 bg-[#27a85a] hover:bg-[#20924d] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg shadow-emerald-950/40"
+                className="w-full py-3.5 game-btn bg-kgrn hover:bg-kgrn-dark text-white font-display tracking-wide text-sm"
               >
                 Pompa #{pump.level + 1} — ₺{upgrade.cost.toLocaleString('tr-TR')}
               </button>
             ) : (
-              <div className="w-full py-2.5 rounded-2xl bg-slate-800/60 border border-white/5 text-slate-500 text-center font-bold text-xs">
+              <div className="w-full py-2.5 rounded-md bg-board border-2 border-dashed border-mute text-mute text-center font-extrabold text-xs">
                 Maksimum Seviye (S{pump.level})
               </div>
             )}
@@ -204,7 +200,7 @@ export const PumpPanel: React.FC = () => {
             {/* Taşı (Relocate) Button */}
             <button
               onClick={handleRelocate}
-              className="w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md"
+              className="w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm"
             >
               Taşı
             </button>
@@ -212,7 +208,7 @@ export const PumpPanel: React.FC = () => {
             {/* Döndür (Rotate) Button */}
             <button
               onClick={handleRotate}
-              className="w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md"
+              className="w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm"
             >
               Döndür
             </button>
@@ -221,7 +217,7 @@ export const PumpPanel: React.FC = () => {
             {!pump.supportedFuels.includes('diesel') && (
               <button
                 onClick={() => addPumpFuel(pump.id, 'diesel')}
-                className="w-full py-2.5 rounded-xl bg-orange-950/60 border border-orange-500/40 text-orange-300 font-bold text-xs hover:bg-orange-900/60 transition-all"
+                className="w-full py-2.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm"
               >
                 + Dizel Tabancası — ₺{GAME_CONFIG.pumpFuelModules.diesel.cost.toLocaleString('tr-TR')}
               </button>
@@ -229,7 +225,7 @@ export const PumpPanel: React.FC = () => {
             {!pump.supportedFuels.includes('lpg') && (
               <button
                 onClick={() => addPumpFuel(pump.id, 'lpg')}
-                className="w-full py-2.5 rounded-xl bg-blue-950/60 border border-blue-500/40 text-blue-300 font-bold text-xs hover:bg-blue-900/60 transition-all"
+                className="w-full py-2.5 game-btn bg-kblu hover:bg-kblu-dark text-white font-display tracking-wide text-sm"
               >
                 + LPG Tabancası — ₺{GAME_CONFIG.pumpFuelModules.lpg.cost.toLocaleString('tr-TR')}
               </button>
@@ -239,7 +235,7 @@ export const PumpPanel: React.FC = () => {
             {pump.hasCanopy && !pump.hasSolarCanopy && (
               <button
                 onClick={() => fitSolarCanopy(pump.id)}
-                className="w-full py-2.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-amber-300 font-bold text-xs hover:bg-amber-900/50 transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm flex items-center justify-center gap-1.5"
               >
                 <Sun className="w-3.5 h-3.5" />
                 <span>
@@ -249,14 +245,14 @@ export const PumpPanel: React.FC = () => {
             )}
             {pump.hasCanopy && pump.hasSolarCanopy && (
               <>
-                <div className="w-full py-2 rounded-xl bg-amber-950/30 border border-amber-500/20 text-amber-200/80 text-[11px] font-bold flex items-center justify-center gap-1.5">
-                  <Sun className="w-3.5 h-3.5" />
+                <div className="w-full py-2 rounded-md bg-board border-2 border-ink text-ink text-[11px] font-extrabold flex items-center justify-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5 text-kyel-dark" />
                   <span>Güneşli sundurma · öğlen {solarPeakKwhPerHour(GAME_CONFIG.buildings.canopy.size)} kWh/sa</span>
                 </div>
                 {/* The panels come off on their own; the roof stays. */}
                 <button
                   onClick={() => removeSolarCanopy(pump.id)}
-                  className="w-full py-2 rounded-xl text-slate-400 hover:text-amber-200 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+                  className="w-full py-2 text-mute hover:text-ink text-xs font-extrabold flex items-center justify-center gap-1 transition-colors"
                 >
                   <Sun className="w-3.5 h-3.5" />
                   <span>Panelleri Sök</span>
@@ -268,7 +264,7 @@ export const PumpPanel: React.FC = () => {
             {pump.hasCanopy ? (
               <button
                 onClick={() => removeCanopy(pump.id)}
-                className="w-full py-2 rounded-xl text-slate-400 hover:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+                className="w-full py-2 text-mute hover:text-ink text-xs font-extrabold flex items-center justify-center gap-1 transition-colors"
               >
                 <Umbrella className="w-3.5 h-3.5" />
                 <span>Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle birlikte)' : ''}</span>
@@ -276,7 +272,7 @@ export const PumpPanel: React.FC = () => {
             ) : (
               <button
                 onClick={() => fitCanopy(pump.id)}
-                className="w-full py-2 rounded-xl text-slate-400 hover:text-sky-300 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+                className="w-full py-2 text-mute hover:text-ink text-xs font-extrabold flex items-center justify-center gap-1 transition-colors"
               >
                 <Umbrella className="w-3.5 h-3.5" />
                 <span>+ Sundurma Ekle</span>

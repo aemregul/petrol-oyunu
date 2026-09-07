@@ -165,16 +165,16 @@ export const LandParcelLayer: React.FC<LandParcelLayerProps> = ({ pointerState }
           zIndexRange={[5, 0]}
         >
           <div
-            className={`px-3 py-1.5 rounded-xl font-bold text-xs shadow-2xl whitespace-nowrap border ${
+            className={`px-3 py-1.5 rounded-md font-display text-xs whitespace-nowrap ${
               landMode.canBuy
-                ? 'bg-slate-950/95 border-emerald-500 text-emerald-300'
-                : 'bg-slate-950/95 border-red-500 text-red-300'
+                ? 'game-glass bg-paper border-kgrn text-kgrn'
+                : 'game-glass bg-paper border-kred text-kred'
             }`}
           >
             {landMode.action === 'PAVE' ? 'Beton' : 'Arsa'}: ₺
             {landMode.price.toLocaleString('tr-TR')}
             {landMode.action === 'BUY' && hovered.row === 0 && (
-              <span className="text-slate-400"> · yol cephesi</span>
+              <span className="text-mute"> · yol cephesi</span>
             )}
             <span className="ml-1">{landMode.canBuy ? '✓' : '✕'}</span>
           </div>

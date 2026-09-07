@@ -34,15 +34,15 @@ export const TankerStatusBar: React.FC = () => {
             className="game-surface w-60 px-2.5 py-2 grid grid-cols-[auto_1fr_auto] items-center gap-2.5 text-[11px] tabular-nums animate-fade-in"
           >
             <span
-              className="game-icon-badge w-6 h-6 !bg-black/40"
+              className="game-icon-badge w-6 h-6"
               style={{ borderColor: fuel?.color ?? '#e2e8f0' }}
             >
               <Truck className="w-3.5 h-3.5" style={{ color: fuel?.color ?? '#e2e8f0' }} />
             </span>
-            <span className="game-title text-white text-[11px] truncate">
+            <span className="game-title text-ink text-[12px] truncate">
               {order.liters} L {fuel?.shortName ?? order.fuelType}
             </span>
-            <span className="text-slate-300 font-mono font-bold text-right whitespace-nowrap">
+            <span className="text-mute font-extrabold text-right whitespace-nowrap">
               {label(order)}
             </span>
           </div>

@@ -353,10 +353,18 @@
       "Bash(xargs -I{} npx vitest run {})",
       "Bash(grep -n \"^import.*simulationEngine\\\\|^} from '../domain/services/simulationEngine'\\\\|^import { GAME_CONFIG\" src/store/gameStore.ts)",
       "Bash(awk -F: '$1>5560 && $1<6000')",
-      "Bash(grep -E \"'[^']*[Bb]anka[^']*'|\\\\\"[^\\\\\"]*[Bb]anka[^\\\\\"]*\\\\\"|>[^<]*[Bb]anka[^<]*<|\\\\`[^\\\\`]*[Bb]anka[^\\\\`]*\\\\`\")"
+      "Bash(grep -E \"'[^']*[Bb]anka[^']*'|\\\\\"[^\\\\\"]*[Bb]anka[^\\\\\"]*\\\\\"|>[^<]*[Bb]anka[^<]*<|\\\\`[^\\\\`]*[Bb]anka[^\\\\`]*\\\\`\")",
+      "Bash(sed -n 1,60p tailwind.config.* ; sed -n 30,90p src/index.css)",
+      "Bash(npx tailwindcss *)",
+      "Bash(curl -s http://localhost:5199/src/index.css)",
+      "Bash(echo \"\\(exit $?\\)\")",
+      "Bash(echo \"grep exit: $?\")",
+      "Bash(echo \"GREP_EXIT=$?\")",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh\\) AppleWebKit/537.36 Chrome/120 Safari/537.36\" \"https://fonts.googleapis.com/css2?family=Lilita+One&display=swap\")"
     ],
     "additionalDirectories": [
-      "/private/tmp"
+      "/private/tmp",
+      "/Users/emre/petrol-oyunu"
     ]
   }
 }

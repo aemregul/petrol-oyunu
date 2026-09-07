@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  /* The display face is Baloo 2 at its heaviest: poster weight is the whole
+     point of it, so every display run gets it unless a utility says otherwise. */
+  .font-display {
+    font-weight: 800;
+  }
+
   body {
     user-select: none;
     -webkit-user-select: none;
@@ -174,49 +180,98 @@
     }
   }
 
-  /* Dark slab: HUD cards, side panels, modal shells. */
-  .game-surface {
-    @apply bg-slate-900 border-2 border-slate-700 rounded-2xl;
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.07),
-      0 4px 0 rgb(2 6 23 / 0.6),
-      0 8px 18px rgb(2 6 23 / 0.45);
-  }
-
   /*
-   * Coloured glass: notifications and live events. Lighter-handed than the
-   * slabs — the scene stays visible through it, a lit rim along the top edge
-   * does the work a hard drop shadow would do, and the colour comes from the
-   * tint rather than from shouting.
+   * Karton (Emre, 2026-09-07): every piece of interface is a card cut from
+   * cream board, drawn with an ink line and a hard offset shadow — a sticker
+   * on the scene, not a pane over it. Colour is spent on the header bands
+   * and the buttons; the card itself stays paper.
    */
-  .game-glass {
-    @apply rounded-2xl border backdrop-blur-xl;
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.12),
-      0 6px 20px rgb(2 6 23 / 0.45);
+  .game-surface {
+    @apply bg-paper border-[3px] border-ink rounded-lg text-ink;
+    box-shadow: 0.3rem 0.3rem 0 #2b2118;
   }
 
-  /* Anything meant to be pressed sinks onto its own shadow when held. */
+  /* The lighter card: chips, toasts, live events. Same paper, thinner line. */
+  .game-glass {
+    @apply rounded-lg border-2 border-ink text-ink bg-paper;
+    box-shadow: 0.2rem 0.2rem 0 #2b2118;
+  }
+
+  /* Anything meant to be pressed sits on its own hard shadow and drops onto it. */
   .game-btn {
-    @apply transition-all duration-75;
-    box-shadow:
-      0 3px 0 rgb(2 6 23 / 0.55),
-      0 6px 14px rgb(2 6 23 / 0.3);
+    @apply transition-all duration-75 border-2 border-ink rounded-md;
+    box-shadow: 0.2rem 0.2rem 0 #2b2118;
   }
   .game-btn:active:not(:disabled) {
-    @apply translate-y-[3px];
-    box-shadow: 0 1px 3px rgb(2 6 23 / 0.35);
+    transform: translate(0.2rem, 0.2rem);
+    box-shadow: 0 0 0 #2b2118;
+  }
+  .game-btn:disabled {
+    @apply opacity-60 cursor-not-allowed;
   }
 
-  /* The circle an icon sits in on a coloured pill. */
+  /* The circle an icon sits in. */
   .game-icon-badge {
-    @apply rounded-full bg-black/25 border border-white/30 flex items-center justify-center shrink-0;
+    @apply rounded-full bg-board border-2 border-ink flex items-center justify-center shrink-0 text-ink;
   }
 
-  /* Shouty label type: short, wide and set off the background. */
+  /* Poster type: the display face, set a touch wide. */
   .game-title {
-    @apply font-extrabold uppercase tracking-wide;
-    text-shadow: 0 1px 2px rgb(2 6 23 / 0.55);
+    @apply font-display font-extrabold uppercase tracking-wide;
+  }
+
+  /* A card's coloured header band: the one place a card shouts. */
+  .k-head {
+    @apply px-4 py-2.5 border-b-[3px] border-ink flex items-center justify-between gap-3 text-white font-display font-extrabold text-lg tracking-wide;
+  }
+  .k-head-red { @apply bg-kred; }
+  .k-head-grn { @apply bg-kgrn; }
+  .k-head-blu { @apply bg-kblu; }
+  .k-head-yel { @apply bg-kyel text-ink; }
+  .k-head-vio { @apply bg-kvio; }
+
+  /* A label/value row inside a card. */
+  .k-row {
+    @apply flex justify-between items-center gap-3 py-1.5 border-b-2 border-dotted border-mute/60 text-[13px];
+  }
+  .k-row > span:first-child { @apply text-mute font-extrabold; }
+  .k-row > span:last-child, .k-row > b { @apply font-display font-extrabold text-[15px] text-ink tabular-nums; }
+
+  /* Small uppercase label over a value. */
+  .k-label {
+    @apply text-[10px] font-black uppercase tracking-[0.12em] text-mute;
+  }
+
+  /* The pill tab strip: cardboard tabs, the live one inked in red. */
+  .k-tab {
+    @apply font-display font-extrabold text-[15px] tracking-wide px-4 py-2 rounded-md border-2 border-ink bg-card text-ink transition-colors;
+  }
+  .k-tab-on { @apply bg-kred text-white; }
+
+  /* A bar meter: board trough, ink line, coloured fill. */
+  .k-bar {
+    @apply h-2.5 border-2 border-ink bg-board overflow-hidden rounded-sm;
+  }
+  .k-bar > i { @apply block h-full; }
+
+  /* A strip of tape across a card's top edge. */
+  .k-tape {
+    position: absolute;
+    width: 4.5rem;
+    height: 1rem;
+    top: -0.55rem;
+    background: rgba(242, 194, 48, 0.8);
+    border: 1px solid rgba(43, 33, 24, 0.3);
+    transform: rotate(-4deg);
+    pointer-events: none;
+  }
+  .k-tape-r { right: 1.2rem; transform: rotate(3deg); }
+  .k-tape-l { left: 1.2rem; }
+
+  /* The dim behind a modal: paper-toned, so the scene reads as set aside. */
+  .k-dim {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background: rgba(43, 33, 24, 0.55);
   }
 }
 
@@ -226,12 +281,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: #f3e9d2;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.8);
+  background: #7b6a55;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 1);
+  background: #2b2118;
 }

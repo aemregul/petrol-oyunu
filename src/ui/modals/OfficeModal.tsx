@@ -96,17 +96,21 @@ const lira = (n: number) => `₺${Math.round(n).toLocaleString('tr-TR')}`;
 const Row: React.FC<{ label: string; value: React.ReactNode; tone?: string }> = ({
   label,
   value,
-  tone = 'text-white'
+  tone = 'text-ink'
 }) => (
-  <div className="flex justify-between items-center py-3 border-b border-white/10">
-    <span className="text-[15px] font-bold text-slate-400">{label}</span>
-    <span className={`text-[15px] font-extrabold font-mono tabular-nums ${tone}`}>{value}</span>
+  // The value's colour sits on an inner span so a tone can beat k-row's own
+  // ink without fighting its selector.
+  <div className="k-row py-3">
+    <span className="text-[15px]">{label}</span>
+    <span>
+      <span className={tone}>{value}</span>
+    </span>
   </div>
 );
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div>
-    <div className="text-[13px] font-extrabold uppercase tracking-[0.18em] text-slate-400 pt-4 pb-1 border-b border-white/10">
+    <div className="k-label text-[11px] pt-4 pb-1 border-b-2 border-ink">
       {title}
     </div>
     {children}
@@ -123,12 +127,12 @@ const ActionButton: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`w-full py-4 rounded-2xl font-extrabold text-[17px] flex items-center justify-center gap-2.5 transition-all border ${
+    className={`game-btn w-full py-3.5 font-display text-[17px] tracking-wide flex items-center justify-center gap-2.5 ${
       disabled
-        ? 'bg-[#2a2427] border-white/5 text-slate-500 cursor-not-allowed'
+        ? 'bg-card text-mute'
         : tone === 'red'
-          ? 'bg-[#d64b4b] hover:bg-[#c43f3f] border-red-300/30 text-white shadow-lg active:scale-[0.99]'
-          : 'bg-[#2f292c] hover:bg-[#3a3337] border-white/10 text-white shadow-md active:scale-[0.99]'
+          ? 'bg-kred hover:bg-kred-dark text-white'
+          : 'bg-card hover:bg-board text-ink'
     }`}
   >
     <Icon className="w-5 h-5" />
@@ -141,11 +145,11 @@ const MissionRow: React.FC<{
   icon: React.ElementType;
   onClaim: () => void;
 }> = ({ mission, icon: Icon, onClaim }) => (
-  <div className="flex items-center gap-3 py-3 border-b border-white/10">
-    <Icon className={`w-5 h-5 shrink-0 ${mission.completed ? 'text-emerald-400' : 'text-slate-400'}`} />
+  <div className="flex items-center gap-3 py-3 border-b-2 border-dotted border-mute/60">
+    <Icon className={`w-5 h-5 shrink-0 ${mission.completed ? 'text-kgrn' : 'text-mute'}`} />
     <div className="flex-1 min-w-0">
-      <div className="text-[15px] font-extrabold text-white truncate">{mission.description}</div>
-      <div className="text-[13px] font-bold text-slate-400 font-mono tabular-nums">
+      <div className="text-[15px] font-extrabold text-ink truncate">{mission.description}</div>
+      <div className="text-[13px] font-bold text-mute font-mono tabular-nums">
         {formatTarget(Math.min(mission.progress, mission.target))} / {formatTarget(mission.target)}
       </div>
     </div>
@@ -155,13 +159,13 @@ const MissionRow: React.FC<{
           sounds.playClick();
           onClaim();
         }}
-        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-extrabold flex items-center gap-1.5 shrink-0"
+        className="game-btn px-3.5 py-2 bg-kgrn hover:bg-kgrn-dark text-white text-[13px] font-display tracking-wide flex items-center gap-1.5 shrink-0"
       >
         <Gift className="w-4 h-4" />
         <span>+{lira(mission.rewardCash)}</span>
       </button>
     ) : (
-      <span className="text-[15px] font-extrabold font-mono tabular-nums text-emerald-400 shrink-0">
+      <span className="text-[15px] font-display tabular-nums text-kgrn shrink-0">
         +{lira(mission.rewardCash)}
       </span>
     )}
@@ -182,17 +186,17 @@ const LoansPage: React.FC<{
   onTake: (id: string) => void;
 }> = ({ activeLoans, level, reputation, onBack, onTake }) => (
   <div className="pt-4">
-    <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+    <div className="flex items-center gap-3 pb-3 border-b-2 border-ink">
       <button
         onClick={onBack}
-        className="w-10 h-10 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-slate-200 flex items-center justify-center"
+        className="game-btn bg-card text-ink w-10 h-10 rounded-md flex items-center justify-center"
         aria-label="Muhasebeye dön"
       >
         <ArrowLeft className="w-5 h-5" />
       </button>
       <div>
-        <div className="text-[13px] font-extrabold uppercase tracking-[0.18em] text-slate-400">Finans</div>
-        <div className="text-lg font-black text-white leading-tight">Krediler & Borç</div>
+        <div className="k-label text-[11px]">Finans</div>
+        <div className="font-display text-xl tracking-wide text-ink leading-tight">Krediler & Borç</div>
       </div>
     </div>
 
@@ -202,21 +206,21 @@ const LoansPage: React.FC<{
           {activeLoans.map((loan) => {
             const paid = Math.max(0, Math.min(1, 1 - loan.remaining / loan.totalDue));
             return (
-              <div key={loan.id} className="bg-[#2a2427] border border-white/10 rounded-2xl p-4">
+              <div key={loan.id} className="bg-paper border-2 border-ink rounded-md p-4 shadow-[0.2rem_0.2rem_0_#2b2118]">
                 <div className="flex justify-between items-start gap-3">
-                  <span className="text-[15px] font-extrabold text-white">{loan.name}</span>
-                  <span className="text-[14px] font-extrabold font-mono tabular-nums text-rose-300 shrink-0">
+                  <span className="font-display text-base text-ink tracking-wide">{loan.name}</span>
+                  <span className="text-[14px] font-display tabular-nums text-kred shrink-0">
                     {lira(loan.remaining)}
                   </span>
                 </div>
-                <div className="text-[12px] font-semibold text-slate-400 mt-1">
+                <div className="text-[12px] font-bold text-mute mt-1">
                   Günlük taksit {lira(loan.dailyPayment)}
                   {loan.missedCount > 0 ? ` · ${loan.missedCount} gecikme` : ''}
                 </div>
-                <div className="h-1.5 rounded-full bg-black/40 overflow-hidden mt-3">
-                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${paid * 100}%` }} />
+                <div className="k-bar mt-3">
+                  <div className="h-full bg-kgrn" style={{ width: `${paid * 100}%` }} />
                 </div>
-                <div className="text-[11px] font-bold text-slate-500 mt-1 text-right">%{Math.round(paid * 100)} ödendi</div>
+                <div className="text-[11px] font-bold text-mute mt-1 text-right">%{Math.round(paid * 100)} ödendi</div>
               </div>
             );
           })}
@@ -234,31 +238,31 @@ const LoansPage: React.FC<{
           return (
             <div
               key={loan.id}
-              className={`bg-[#2a2427] border rounded-2xl p-4 flex flex-col gap-3 ${
-                locked ? 'border-white/10' : 'border-emerald-500/40'
+              className={`bg-paper border-2 border-ink rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118] ${
+                locked ? 'opacity-70' : ''
               }`}
             >
               <div className="flex justify-between items-start gap-3">
-                <span className="text-[15px] font-extrabold text-white">{loan.name}</span>
-                <span className="text-[15px] font-extrabold font-mono tabular-nums text-emerald-400 shrink-0">
+                <span className="font-display text-base text-ink tracking-wide">{loan.name}</span>
+                <span className="text-[15px] font-display tabular-nums text-kgrn shrink-0">
                   {lira(loan.principal)}
                 </span>
               </div>
-              <div className="bg-[#1a1618] border border-white/5 rounded-xl p-3 grid grid-cols-2 gap-y-1.5 text-[12px] font-mono text-slate-300">
+              <div className="bg-board border-2 border-ink rounded-md p-3 grid grid-cols-2 gap-y-1.5 text-[12px] font-mono text-ink">
                 <span>Vade: {loan.termDays} Gün</span>
                 <span>Maliyet: %{Math.round(loan.totalCostRatio * 100)}</span>
                 <span className="col-span-2">Günlük Taksit: {lira(loan.dailyPayment)}</span>
               </div>
-              <div className="text-[11px] font-semibold text-slate-500">
+              <div className="text-[11px] font-bold text-mute">
                 Şartlar: Seviye {loan.minLevel} · {loan.minReputation.toFixed(1)} itibar
               </div>
               <button
                 onClick={() => onTake(loan.id)}
                 disabled={locked}
-                className={`w-full py-3 rounded-2xl text-[14px] font-extrabold flex items-center justify-center gap-2 border transition-all ${
+                className={`game-btn w-full py-3 text-[14px] font-display tracking-wide flex items-center justify-center gap-2 ${
                   locked
-                    ? 'bg-[#221d20] border-white/5 text-slate-500 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-300/30 text-white shadow-lg'
+                    ? 'bg-card text-mute'
+                    : 'bg-kgrn hover:bg-kgrn-dark text-white'
                 }`}
               >
                 <CreditCard className="w-4 h-4" />
@@ -373,18 +377,17 @@ export const OfficeModal: React.FC = () => {
       : `Bugünkü kayıplar itibarı ${figures.reputationTarget.toFixed(1)}'a çeker.`;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-[#231e21] border border-white/10 rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[88vh]">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center shrink-0">
+        <div className="k-head k-head-red shrink-0">
           <div className="flex items-center gap-3">
-            <span className="w-1.5 h-8 rounded-full bg-[#d64b4b]" />
-            <span className="text-2xl font-black text-white">Ofis</span>
+            <span className="font-display text-xl tracking-wide">Ofis</span>
             {editingName === null ? (
               <button
                 onClick={() => setEditingName(station.name)}
                 title="İstasyon adını değiştir — tabelalar da güncellenir"
-                className="ml-2 flex items-center gap-1.5 text-sm font-bold text-slate-400 hover:text-white transition-colors"
+                className="ml-2 flex items-center gap-1.5 text-sm font-bold font-sans opacity-80 hover:opacity-100 transition-opacity"
               >
                 <span>{station.name}</span>
                 <Pencil className="w-3.5 h-3.5" />
@@ -400,12 +403,12 @@ export const OfficeModal: React.FC = () => {
                     if (e.key === 'Enter') commitName();
                     if (e.key === 'Escape') setEditingName(null);
                   }}
-                  className="bg-black/40 border border-white/20 rounded-lg px-2 py-0.5 text-sm font-bold text-white w-44 outline-none focus:border-white/50"
+                  className="bg-board border-2 border-ink rounded-md px-2 py-0.5 text-sm font-display text-ink w-44 outline-none"
                 />
-                <button onClick={commitName} title="Kaydet" className="w-7 h-7 rounded-lg bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 flex items-center justify-center">
+                <button onClick={commitName} title="Kaydet" className="game-btn bg-kgrn text-white w-7 h-7 rounded-md flex items-center justify-center">
                   <Check className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => setEditingName(null)} title="Vazgeç" className="w-7 h-7 rounded-lg bg-white/10 border border-white/10 text-slate-300 flex items-center justify-center">
+                <button onClick={() => setEditingName(null)} title="Vazgeç" className="game-btn bg-card text-ink w-7 h-7 rounded-md flex items-center justify-center">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -413,7 +416,7 @@ export const OfficeModal: React.FC = () => {
           </div>
           <button
             onClick={handleClose}
-            className="w-11 h-11 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-slate-200 flex items-center justify-center transition-colors"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
             aria-label="Kapat"
           >
             <X className="w-5 h-5" />
@@ -435,17 +438,13 @@ export const OfficeModal: React.FC = () => {
                 }}
                 disabled={item.soon}
                 title={item.soon ? 'Yakında' : undefined}
-                className={`px-4 py-2.5 rounded-2xl text-[14px] font-extrabold border transition-all ${
-                  active
-                    ? 'bg-[#f3ede9] text-[#231e21] border-white/40 shadow-inner'
-                    : item.soon
-                      ? 'bg-[#2a2427] text-slate-500 border-white/5 cursor-not-allowed'
-                      : 'bg-[#2a2427] text-slate-300 border-white/10 hover:bg-[#362f33] hover:text-white'
-                }`}
+                className={
+                  active ? 'k-tab k-tab-on' : item.soon ? 'k-tab opacity-50 cursor-not-allowed' : 'k-tab'
+                }
               >
                 {item.label}
                 {item.id === 'missions' && claimable > 0 && (
-                  <span className="ml-1.5 inline-flex w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] items-center justify-center align-middle">
+                  <span className="ml-1.5 inline-flex w-4 h-4 rounded-full bg-kgrn border border-ink text-white text-[10px] font-sans font-black items-center justify-center align-middle">
                     {claimable}
                   </span>
                 )}
@@ -473,42 +472,42 @@ export const OfficeModal: React.FC = () => {
           ) : tab === 'summary' ? (
             <>
               <Section title="Finansal Durum">
-                <Row label="Aktif (varlık)" value={lira(figures.assets)} tone="text-emerald-400" />
+                <Row label="Aktif (varlık)" value={lira(figures.assets)} tone="text-kgrn" />
                 <Row label="İşletme Sermayesi (stok)" value={lira(figures.stockValue)} />
                 <Row label="Kasa" value={lira(figures.cash)} />
-                <Row label="Günlük gider (yovmiye+OPEX+kredi)" value={lira(figures.dailyExpenses)} tone="text-rose-300" />
+                <Row label="Günlük gider (yovmiye+OPEX+kredi)" value={lira(figures.dailyExpenses)} tone="text-kred" />
               </Section>
 
               <Section title="Müşteri & İtibar">
                 <Row
                   label="Yakıt müşteri etkisi"
                   value={`${figures.customerEffect >= 0 ? '+' : ''}${figures.customerEffect}%`}
-                  tone={figures.customerEffect >= 0 ? 'text-emerald-400' : 'text-rose-300'}
+                  tone={figures.customerEffect >= 0 ? 'text-kgrn' : 'text-kred'}
                 />
                 <Row label="İtibar" value={`${player.reputation.toFixed(1)} / 5`} />
                 <Row
                   label="Bugün servis / kaçan"
                   value={`${figures.served} / ${figures.failed}`}
-                  tone={figures.failed > figures.served ? 'text-rose-300' : 'text-emerald-400'}
+                  tone={figures.failed > figures.served ? 'text-kred' : 'text-kgrn'}
                 />
                 <Row label="Gün sonu itibar hedefi" value={figures.reputationTarget.toFixed(1)} />
-                <p className="text-[14px] font-semibold text-slate-300 py-3 border-b border-white/10">
+                <p className="text-[14px] font-semibold text-ink py-3 border-b-2 border-dotted border-mute/60">
                   {reputationNote}
                 </p>
-                <Row label="Toplam müşteri" value={player.statistics.totalCustomersServed} tone="text-emerald-400" />
+                <Row label="Toplam müşteri" value={player.statistics.totalCustomersServed} tone="text-kgrn" />
                 <Row label="Kaçan müşteri" value={player.statistics.totalCustomersLost} />
               </Section>
 
               <Section title="Personel">
                 <Row label="Pompacı" value={`${figures.attendants} / ${figures.pumps}`} />
-                <Row label="Günlük yovmiye" value={lira(figures.wages)} tone="text-rose-300" />
+                <Row label="Günlük yovmiye" value={lira(figures.wages)} tone="text-kred" />
               </Section>
 
               <Section title="Saha">
                 <Row
                   label="Saha temizliği"
                   value={`%${Math.round(station.cleanliness)}`}
-                  tone={station.cleanliness >= 70 ? 'text-emerald-400' : station.cleanliness >= 40 ? 'text-amber-300' : 'text-rose-300'}
+                  tone={station.cleanliness >= 70 ? 'text-kgrn' : station.cleanliness >= 40 ? 'text-kyel-dark' : 'text-kred'}
                 />
               </Section>
 
@@ -554,11 +553,11 @@ export const OfficeModal: React.FC = () => {
                   const aboveRegion = pricing.playerPrice > pricing.regionalAverage + 0.005;
                   const belowRegion = pricing.playerPrice < pricing.regionalAverage - 0.005;
                   return (
-                    <div key={fuel} className="flex items-center gap-3 py-2.5 border-b border-white/10">
-                      <span className="text-[15px] font-bold text-white flex-1">{conf.shortName}</span>
+                    <div key={fuel} className="flex items-center gap-3 py-2.5 border-b-2 border-dotted border-mute/60">
+                      <span className="text-[15px] font-display tracking-wide text-ink flex-1">{conf.shortName}</span>
                       <span
                         className={`text-[12px] font-bold font-mono tabular-nums ${
-                          aboveRegion ? 'text-rose-300' : belowRegion ? 'text-emerald-400' : 'text-slate-400'
+                          aboveRegion ? 'text-kred' : belowRegion ? 'text-kgrn' : 'text-mute'
                         }`}
                         title={`Alış ₺${pricing.todayWholesaleCost.toFixed(2)} · Bölge ₺${pricing.regionalAverage.toFixed(2)}`}
                       >
@@ -566,17 +565,17 @@ export const OfficeModal: React.FC = () => {
                       </span>
                       <button
                         onClick={() => adjustPrice(fuel, -0.1)}
-                        className="w-11 h-11 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-rose-400 flex items-center justify-center"
+                        className="game-btn bg-card hover:bg-board text-kred w-11 h-11 rounded-md flex items-center justify-center"
                         aria-label={`${conf.shortName} fiyatını düşür`}
                       >
                         <Minus className="w-5 h-5" />
                       </button>
-                      <span className="w-24 h-11 rounded-2xl bg-[#1a1618] border border-white/10 flex items-center justify-center text-[15px] font-extrabold font-mono tabular-nums text-white">
+                      <span className="w-24 h-11 rounded-md bg-board border-2 border-ink flex items-center justify-center text-[15px] font-display tabular-nums text-ink">
                         ₺{pricing.playerPrice.toFixed(2)}
                       </span>
                       <button
                         onClick={() => adjustPrice(fuel, 0.1)}
-                        className="w-11 h-11 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-rose-400 flex items-center justify-center"
+                        className="game-btn bg-card hover:bg-board text-kgrn w-11 h-11 rounded-md flex items-center justify-center"
                         aria-label={`${conf.shortName} fiyatını artır`}
                       >
                         <Plus className="w-5 h-5" />
@@ -584,11 +583,11 @@ export const OfficeModal: React.FC = () => {
                     </div>
                   );
                 })}
-                <p className="text-[13px] font-bold text-emerald-400 text-center py-3 flex items-center justify-center gap-1.5">
+                <p className="text-[13px] font-bold text-kgrn text-center py-3 flex items-center justify-center gap-1.5">
                   <Users className="w-4 h-4" />
                   <span>Bu fiyatlarla müşteri akışı: %{customerFlow}</span>
                 </p>
-                <p className="text-[12px] font-semibold text-slate-500 text-center pb-2">
+                <p className="text-[12px] font-semibold text-mute text-center pb-2">
                   Alış fiyatının yanındaki ok, satış fiyatının bölge ortalamasına göre yerini gösterir.
                 </p>
               </Section>
@@ -609,10 +608,10 @@ export const OfficeModal: React.FC = () => {
                         label={`Tabela Sv.${priceSign.level + 1} — ${lira(priceSignUpgrade.cost)}`}
                         disabled={player.cash < priceSignUpgrade.cost}
                       />
-                      <p className="text-[12px] font-semibold text-slate-500 pt-2">{priceSignUpgrade.effectsDescription}</p>
+                      <p className="text-[12px] font-semibold text-mute pt-2">{priceSignUpgrade.effectsDescription}</p>
                     </div>
                   ) : (
-                    <p className="text-[12px] font-semibold text-slate-500 py-2">Tabela son seviyede.</p>
+                    <p className="text-[12px] font-semibold text-mute py-2">Tabela son seviyede.</p>
                   )}
                 </Section>
               )}
@@ -620,40 +619,40 @@ export const OfficeModal: React.FC = () => {
           ) : tab === 'accounts' ? (
             <>
               <Section title="Satış & Faaliyet Kârı">
-                <div className="grid grid-cols-3 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 pt-2 pb-1">
+                <div className="grid grid-cols-3 k-label text-[11px] pt-2 pb-1">
                   <span>Dönem</span>
                   <span className="text-right">Satış</span>
                   <span className="text-right">Faaliyet Kârı</span>
                 </div>
-                <div className="grid grid-cols-3 py-2.5 border-b border-white/10 text-[15px] font-extrabold font-mono tabular-nums">
-                  <span className="font-sans text-white">Günlük</span>
-                  <span className="text-right text-white">{lira(todaySales)}</span>
-                  <span className={`text-right ${todayProfit >= 0 ? 'text-emerald-400' : 'text-rose-300'}`}>{lira(todayProfit)}</span>
+                <div className="grid grid-cols-3 py-2.5 border-b-2 border-dotted border-mute/60 text-[15px] font-extrabold font-mono tabular-nums text-ink">
+                  <span className="font-sans text-ink">Günlük</span>
+                  <span className="text-right text-ink">{lira(todaySales)}</span>
+                  <span className={`text-right ${todayProfit >= 0 ? 'text-kgrn' : 'text-kred'}`}>{lira(todayProfit)}</span>
                 </div>
-                <div className="grid grid-cols-3 py-2.5 border-b border-white/10 text-[15px] font-extrabold font-mono tabular-nums">
-                  <span className="font-sans text-white">Son 3 gün</span>
-                  <span className="text-right text-slate-500">—</span>
-                  <span className={`text-right ${recent.reduce((a, b) => a + b, 0) >= 0 ? 'text-emerald-400' : 'text-rose-300'}`}>
+                <div className="grid grid-cols-3 py-2.5 border-b-2 border-dotted border-mute/60 text-[15px] font-extrabold font-mono tabular-nums text-ink">
+                  <span className="font-sans text-ink">Son 3 gün</span>
+                  <span className="text-right text-mute">—</span>
+                  <span className={`text-right ${recent.reduce((a, b) => a + b, 0) >= 0 ? 'text-kgrn' : 'text-kred'}`}>
                     {recent.length > 0 ? lira(recent.reduce((a, b) => a + b, 0)) : '—'}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 py-2.5 border-b border-white/10 text-[15px] font-extrabold font-mono tabular-nums">
-                  <span className="font-sans text-white">Toplam</span>
-                  <span className="text-right text-white">{lira(player.statistics.totalRevenue)}</span>
-                  <span className="text-right text-slate-500">—</span>
+                <div className="grid grid-cols-3 py-2.5 border-b-2 border-dotted border-mute/60 text-[15px] font-extrabold font-mono tabular-nums text-ink">
+                  <span className="font-sans text-ink">Toplam</span>
+                  <span className="text-right text-ink">{lira(player.statistics.totalRevenue)}</span>
+                  <span className="text-right text-mute">—</span>
                 </div>
-                <Row label="Tesis kasalarında bekleyen" value={lira(figures.tills)} tone="text-amber-300" />
+                <Row label="Tesis kasalarında bekleyen" value={lira(figures.tills)} tone="text-kyel-dark" />
                 {(t.energyCost ?? 0) > 0 && (
-                  <Row label="Bugünkü enerji (şebeke + jeneratör)" value={lira(t.energyCost ?? 0)} tone="text-rose-300" />
+                  <Row label="Bugünkü enerji (şebeke + jeneratör)" value={lira(t.energyCost ?? 0)} tone="text-kred" />
                 )}
                 {(t.solarKwh ?? 0) > 0 && (
-                  <Row label="Bugünkü güneş üretimi" value={`${Math.round(t.solarKwh ?? 0)} kWh`} tone="text-amber-300" />
+                  <Row label="Bugünkü güneş üretimi" value={`${Math.round(t.solarKwh ?? 0)} kWh`} tone="text-kyel-dark" />
                 )}
                 {(t.generatorLiters ?? 0) > 0 && (
                   <Row
                     label="Jeneratörün yaktığı mazot"
                     value={`${Math.round(t.generatorLiters ?? 0)} L → ${Math.round(t.generatorKwh ?? 0)} kWh`}
-                    tone="text-amber-300"
+                    tone="text-kyel-dark"
                   />
                 )}
                 <Row label="Tamamlanan gün" value={player.statistics.daysCompleted} />
@@ -661,14 +660,14 @@ export const OfficeModal: React.FC = () => {
 
               <Section title="Yakıt Alım Geçmişi">
                 {purchases.length === 0 ? (
-                  <p className="text-[14px] font-semibold text-slate-400 py-3">Henüz yakıt siparişi verilmedi.</p>
+                  <p className="text-[14px] font-semibold text-mute py-3">Henüz yakıt siparişi verilmedi.</p>
                 ) : (
                   purchases.map((p) => (
-                    <div key={p.id} className="flex justify-between items-center py-2.5 border-b border-white/10 gap-4">
-                      <span className="text-[13px] font-semibold text-slate-400 truncate">
+                    <div key={p.id} className="flex justify-between items-center py-2.5 border-b-2 border-dotted border-mute/60 gap-4">
+                      <span className="text-[13px] font-semibold text-mute truncate">
                         Gün {p.day} · {p.liters.toLocaleString('tr-TR')} L {GAME_CONFIG.fuels[p.fuelType]?.shortName ?? p.fuelType}
                       </span>
-                      <span className="text-[14px] font-extrabold font-mono tabular-nums text-rose-300 shrink-0">
+                      <span className="text-[14px] font-extrabold font-mono tabular-nums text-kred shrink-0">
                         −{lira(p.totalCost)}
                       </span>
                     </div>
@@ -682,7 +681,7 @@ export const OfficeModal: React.FC = () => {
                     sounds.playClick();
                     setLoansOpen(true);
                   }}
-                  className="w-full py-4 rounded-2xl font-extrabold text-[17px] flex items-center justify-center gap-2.5 bg-[#1ea7c0] hover:bg-[#1993aa] border border-cyan-200/30 text-white shadow-lg active:scale-[0.99] transition-all"
+                  className="game-btn w-full py-3.5 font-display text-[17px] tracking-wide flex items-center justify-center gap-2.5 bg-kblu hover:bg-kblu-dark text-white"
                 >
                   <Landmark className="w-5 h-5" />
                   <span>Krediler{activeLoans.length > 0 ? ` (${activeLoans.length} açık)` : ''}</span>
@@ -693,11 +692,11 @@ export const OfficeModal: React.FC = () => {
             <>
               <Section title="Bugünün Görevleri">
                 {dailies.length === 0 ? (
-                  <p className="text-[14px] font-semibold text-slate-400 py-3">Bugün için görev yok; yarın sabah yenileri gelir.</p>
+                  <p className="text-[14px] font-semibold text-mute py-3">Bugün için görev yok; yarın sabah yenileri gelir.</p>
                 ) : (
                   dailies.map((mission) => <MissionRow key={mission.id} mission={mission} icon={CalendarDays} onClaim={() => claimMissionReward(mission.id)} />)
                 )}
-                <p className="text-[13px] font-semibold text-slate-400 py-3">
+                <p className="text-[13px] font-semibold text-mute py-3">
                   Görevler her gün yenilenir. Ödül tamamlandığı anda kasaya geçer.
                 </p>
               </Section>

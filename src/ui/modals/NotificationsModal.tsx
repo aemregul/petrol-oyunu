@@ -3,6 +3,7 @@ import { useGameStore } from '../../store/gameStore';
 import { X, Bell, Trash2 } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { styleFor, timeAgo } from '../notificationStyle';
+import { TONE_DOT, TONE_TEXT } from '../gameStyle';
 
 /**
  * Everything the corner showed and then took away. Toasts are a glance, not a
@@ -28,32 +29,30 @@ export const NotificationsModal: React.FC = () => {
   const now = Date.now();
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[80vh]">
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-sky-500/20 border border-sky-500/30 text-sky-400 flex items-center justify-center">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+        <div className="k-head k-head-yel shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="game-icon-badge w-10 h-10 bg-paper">
               <Bell className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">
-                İstasyon Günlüğü
-              </div>
-              <div className="text-base font-extrabold text-white">Bildirimler</div>
+            <div className="min-w-0">
+              <div className="k-label text-ink/70">İstasyon Günlüğü</div>
+              <div className="font-display text-xl tracking-wide">Bildirimler</div>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center shrink-0"
             aria-label="Kapat"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="px-3 py-2 overflow-y-auto flex-1">
+        <div className="px-3 py-3 overflow-y-auto flex-1 flex flex-col gap-2">
           {notifications.length === 0 ? (
-            <div className="text-center py-14 text-slate-500 text-sm font-bold">
+            <div className="text-center py-14 text-mute text-sm font-bold">
               Henüz bildirim yok.
             </div>
           ) : (
@@ -62,11 +61,11 @@ export const NotificationsModal: React.FC = () => {
               return (
                 <div
                   key={notif.id}
-                  className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800/60 transition-colors"
+                  className="flex items-start gap-3 bg-board border-2 border-ink rounded-md px-3 py-2"
                 >
-                  <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${style.dot}`} />
+                  <span className={`w-2.5 h-2.5 rounded-full border border-ink mt-1.5 shrink-0 ${TONE_DOT[style.tone]}`} />
                   <div className="min-w-0 flex-1">
-                    <div className={`text-[13px] font-bold leading-snug break-words ${style.tint}`}>
+                    <div className={`text-[13px] font-extrabold leading-snug break-words ${TONE_TEXT[style.tone]}`}>
                       {notif.title}
                       {notif.count > 1 && (
                         <span className="ml-1.5 text-[11px] font-extrabold tabular-nums opacity-80">
@@ -74,11 +73,11 @@ export const NotificationsModal: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-[12px] font-medium leading-[1.45] break-words text-slate-400 mt-0.5">
+                    <div className="text-[12px] font-medium leading-[1.45] break-words text-ink mt-0.5">
                       {notif.message}
                     </div>
                   </div>
-                  <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap shrink-0 mt-0.5">
+                  <span className="text-[11px] font-bold text-mute whitespace-nowrap shrink-0 mt-0.5">
                     {timeAgo(notif.timestamp, now)}
                   </span>
                 </div>
@@ -88,13 +87,13 @@ export const NotificationsModal: React.FC = () => {
         </div>
 
         {notifications.length > 0 && (
-          <div className="px-6 py-3 border-t border-slate-800 flex justify-end">
+          <div className="px-4 py-3 border-t-2 border-ink flex justify-end shrink-0">
             <button
               onClick={() => {
                 sounds.playClick();
                 clearNotifications();
               }}
-              className="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-800 transition-all"
+              className="game-btn bg-card hover:bg-board text-ink font-display text-sm tracking-wide flex items-center gap-1.5 px-3 py-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Günlüğü Temizle

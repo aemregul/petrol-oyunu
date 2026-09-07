@@ -20,9 +20,14 @@ import { useGameStore } from '../store/gameStore';
  * diesel, and never the reserve.
  */
 
+// One generator for the whole file, never reseeded per test: transaction
+// ids are the clock plus a random, and two tests a millisecond apart
+// drawing the same k-th random would share an id — the second cash move is
+// then silently dropped as a duplicate (see memory: pinned random collides
+// tx ids).
+let value = 7;
 let restore: (() => void) | null = null;
 beforeEach(() => {
-  let value = 7;
   const spy = vi.spyOn(Math, 'random').mockImplementation(() => {
     value = (value * 1664525 + 1013904223) % 4294967296;
     return value / 4294967296;

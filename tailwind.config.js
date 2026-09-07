@@ -9,12 +9,30 @@ export default {
       // The fonts index.html loads. `sans` carries the interface, `mono` every
       // number the player reads off a meter, and `display` matches the signage
       // already drawn on the canvas (PylonSign, FasciaSign, PriceTotem).
+      // Karton (Emre, 2026-09-07): the interface is card and paper, so the
+      // faces are a round, warm body and a poster-weight display. The
+      // canvas signage keeps Chakra Petch; `mono` stays for meters.
       fontFamily: {
-        sans: ['Rubik', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Nunito', 'Rubik', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-        display: ['"Chakra Petch"', 'Rubik', 'system-ui', 'sans-serif']
+        // Baloo 2 (Emre's pick, 2026-09-07). Lilita One had no İ, ş, ğ or ı
+        // and those fell back to another face mid-word.
+        display: ['"Baloo 2"', 'Nunito', 'system-ui', 'sans-serif'],
+        sign: ['"Chakra Petch"', 'Rubik', 'system-ui', 'sans-serif']
       },
       colors: {
+        // The Karton palette. `paper` is a card's face, `board` the cream
+        // ground behind rows and bars, `ink` every line and every word.
+        paper: '#fff8e8',
+        board: '#f3e9d2',
+        card: '#e9d8b4',
+        ink: '#2b2118',
+        mute: '#7b6a55',
+        kred: { DEFAULT: '#e0452b', dark: '#b8351f' },
+        kgrn: { DEFAULT: '#2f9e5b', dark: '#24804a' },
+        kblu: { DEFAULT: '#2f7fd6', dark: '#2566ae' },
+        kyel: { DEFAULT: '#f2c230', dark: '#d9a915' },
+        kvio: { DEFAULT: '#8c5fd6', dark: '#6f45b5' },
         gasoline: {
           light: '#4ade80',
           DEFAULT: '#22c55e',

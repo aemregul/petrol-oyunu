@@ -179,10 +179,8 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
       {awayLabel && (
         <Html position={[0, requestHeight, 0]} center distanceFactor={20} zIndexRange={[5, 0]}>
           <div
-            className={`text-[11px] px-2.5 py-1 rounded-xl shadow-xl backdrop-blur font-bold whitespace-nowrap border ${
-              holdsPump
-                ? 'bg-amber-500/95 border-amber-200 text-slate-950'
-                : 'bg-black/80 border-slate-700/80 text-slate-200'
+            className={`text-[11px] px-2.5 py-1 rounded-md border-2 border-ink text-ink font-display whitespace-nowrap game-glass ${
+              holdsPump ? 'bg-kyel' : 'bg-paper'
             }`}
           >
             {holdsPump ? `⚠ ${awayLabel} — pompa dolu` : awayLabel}
@@ -208,31 +206,31 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
             }}
           >
             {/* Meter Badge (like beneloil.com: 18.9L • ₺170) */}
-            <div className="bg-black/90 border border-slate-700/80 text-white text-xs px-3 py-1.5 rounded-xl shadow-2xl flex items-center gap-1.5 backdrop-blur font-mono whitespace-nowrap">
+            <div className="game-glass bg-paper border-2 border-ink text-ink text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 font-display tabular-nums whitespace-nowrap">
               {isFueling ? (
-                <span className="font-extrabold tracking-wide text-white">
-                  {vehicle.request.dispensedLiters.toFixed(1)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> ₺{Math.round(vehicle.request.dispensedLiters * unitPrice)}
+                <span className="tracking-wide text-ink">
+                  {vehicle.request.dispensedLiters.toFixed(1)}{serviceUnit} <span className="text-mute">•</span> ₺{Math.round(vehicle.request.dispensedLiters * unitPrice)}
                 </span>
               ) : (
-                <span className="font-extrabold tracking-wide text-slate-200">
+                <span className="tracking-wide text-ink">
                   {atCharger
-                    ? <>⚡ {vehicle.request.calculatedLiters.toFixed(0)} kWh{!isAttendantServing && <span className="text-emerald-400"> · Şarjı Başlat</span>}</>
+                    ? <>⚡ {vehicle.request.calculatedLiters.toFixed(0)} kWh{!isAttendantServing && <span className="text-kgrn"> · Şarjı Başlat</span>}</>
                     : vehicle.request.mode === 'MONEY'
                       ? `₺${vehicle.request.targetValue.toLocaleString('tr-TR')}`
-                      : <>{vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> FULL</>}
+                      : <>{vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-mute">•</span> FULL</>}
                 </span>
               )}
             </div>
 
             {/* Patience Bar */}
-            <div className="w-16 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden border border-slate-700">
+            <div className="w-16 h-1.5 bg-board rounded-full mt-1 overflow-hidden border border-ink">
               <div
                 className={`h-full transition-all duration-300 ${
                   patienceRatio > 0.5
-                    ? 'bg-emerald-500'
+                    ? 'bg-kgrn'
                     : patienceRatio > 0.25
-                      ? 'bg-amber-500'
-                      : 'bg-red-500'
+                      ? 'bg-kyel'
+                      : 'bg-kred'
                 }`}
                 style={{ width: `${patienceRatio * 100}%` }}
               />

@@ -81,10 +81,10 @@ export const StructurePanel: React.FC = () => {
     ? Object.values(gameState.vehicles).find((v) => v.chargingBuildingId === building.id)
     : undefined;
   const postStatus = !plugged
-    ? { text: 'Boşta', tone: 'text-emerald-400' }
+    ? { text: 'Boşta', tone: 'text-kgrn' }
     : plugged.state === 'FUELING'
-      ? { text: 'Şarj ediyor', tone: 'text-emerald-400' }
-      : { text: 'Müşteri bekliyor', tone: 'text-amber-400' };
+      ? { text: 'Şarj ediyor', tone: 'text-kgrn' }
+      : { text: 'Müşteri bekliyor', tone: 'text-kyel-dark' };
   const kwhPrice = building.type === 'ev_charger_dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
 
   // The contract on the substation, the sun on the roofs, the diesel in the
@@ -101,12 +101,12 @@ export const StructurePanel: React.FC = () => {
   const genStatus = !isGenerator
     ? null
     : building.generatorOff
-      ? { text: 'Kapalı', tone: 'text-slate-500' }
+      ? { text: 'Kapalı', tone: 'text-mute' }
       : genRunning
-        ? { text: 'Çalışıyor', tone: 'text-emerald-400' }
+        ? { text: 'Çalışıyor', tone: 'text-kgrn' }
         : dieselForGenerator(gameState.tanks.diesel) <= 0
-          ? { text: 'Mazot rezervde', tone: 'text-rose-300' }
-          : { text: 'Batarya yeterli, bekliyor', tone: 'text-amber-400' };
+          ? { text: 'Mazot rezervde', tone: 'text-kred' }
+          : { text: 'Batarya yeterli, bekliyor', tone: 'text-kyel-dark' };
   const t = gameState.dayState.todayStats;
 
   const handleClose = () => {
@@ -114,25 +114,31 @@ export const StructurePanel: React.FC = () => {
     selectBuilding(null);
   };
 
-  const dark =
-    'w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md';
+  // The electric line wears violet; everything else on the ground, green.
+  const isEnergy = building.type.startsWith('ev_') || isGenerator;
+  const headTone = isEnergy ? 'k-head-vio' : 'k-head-grn';
+
+  const neutral =
+    'w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm';
+  const note =
+    'w-full py-2.5 rounded-md bg-board border-2 border-dashed border-mute text-mute text-center font-extrabold text-xs';
 
   return (
     <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center p-4">
-      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none rounded-[2rem] bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col">
-        <div className="bg-[#2f5fa8] px-5 py-3.5 flex items-center justify-between text-white shadow-md">
+      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none game-surface animate-fade-in flex flex-col">
+        <div className={`k-head ${headTone}`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-              <IconComponent className="w-4 h-4 text-white" />
+            <div className="game-icon-badge w-8 h-8">
+              <IconComponent className="w-4 h-4" />
             </div>
-            <span className="font-extrabold text-base tracking-tight">
+            <span>
               {catalog.name}
               {upgrade || building.level > 1 ? ` Sv.${building.level}` : ''}
             </span>
           </div>
           <button
             onClick={handleClose}
-            className="w-7 h-7 rounded-xl bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-colors"
+            className="game-btn bg-card text-ink w-8 h-8 rounded-md flex items-center justify-center"
             aria-label="Kapat"
           >
             <Icons.X className="w-4 h-4" />
@@ -140,56 +146,56 @@ export const StructurePanel: React.FC = () => {
         </div>
 
         <div className="p-5 flex flex-col gap-4 text-xs">
-          <p className="text-slate-300 text-[11px] leading-relaxed font-medium">{catalog.description}</p>
+          <p className="text-ink/80 text-[12px] leading-relaxed font-semibold">{catalog.description}</p>
 
-          <div className="flex flex-col divide-y divide-white/5 text-xs">
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Günlük bakım</span>
-              <span className="font-extrabold font-mono text-rose-300">
+          <div className="flex flex-col text-xs">
+            <div className="k-row">
+              <span>Günlük bakım</span>
+              <span className="text-kred">
                 ₺{catalog.dailyUpkeep.toLocaleString('tr-TR')}
               </span>
             </div>
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Sağlık</span>
-              <span className={`font-extrabold font-mono ${building.health >= 60 ? 'text-emerald-400' : 'text-amber-400'}`}>
+            <div className="k-row">
+              <span>Sağlık</span>
+              <span className={building.health >= 60 ? 'text-kgrn' : 'text-kyel-dark'}>
                 %{Math.round(building.health)}
               </span>
             </div>
             {isPost && (
               <>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Durum</span>
-                  <span className={`font-extrabold ${postStatus.tone}`}>{postStatus.text}</span>
+                <div className="k-row">
+                  <span>Durum</span>
+                  <span className={postStatus.tone}>{postStatus.text}</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Tarife</span>
-                  <span className="font-extrabold font-mono text-white">₺{kwhPrice.toFixed(1)}/kWh</span>
+                <div className="k-row">
+                  <span>Tarife</span>
+                  <span>₺{kwhPrice.toFixed(1)}/kWh</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Şarjcı</span>
-                  <span className={`font-extrabold uppercase ${attendant ? 'text-emerald-400' : 'text-slate-500'}`}>
+                <div className="k-row">
+                  <span>Şarjcı</span>
+                  <span className={`uppercase ${attendant ? 'text-kgrn' : 'text-mute'}`}>
                     {attendant ? 'ÇALIŞIYOR' : 'YOK'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Yovmiye</span>
-                  <span className={`font-extrabold font-mono ${attendant ? 'text-rose-300' : 'text-slate-500'}`}>
+                <div className="k-row">
+                  <span>Yovmiye</span>
+                  <span className={attendant ? 'text-kred' : 'text-mute'}>
                     ₺{attendant ? attendant.wage : attendantConf.dailyWage}/gün
                   </span>
                 </div>
               </>
             )}
             {(isPost || isBank) && (
-              <div className="py-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-semibold">{isBank ? 'Dolu' : 'Batarya'}</span>
-                  <span className={`font-extrabold font-mono ${bankKwh < 1 ? 'text-rose-300' : 'text-sky-300'}`}>
+              <div className="py-1.5 border-b-2 border-dotted border-mute/60">
+                <div className="flex justify-between items-center gap-3 text-[13px]">
+                  <span className="text-mute font-extrabold">{isBank ? 'Dolu' : 'Batarya'}</span>
+                  <span className={`font-display text-[15px] tabular-nums ${bankKwh < 1 ? 'text-kred' : 'text-kblu'}`}>
                     {Math.round(bankKwh)} / {bankCapacity} kWh
                   </span>
                 </div>
-                <div className="h-1.5 rounded-full bg-black/40 overflow-hidden mt-1.5">
+                <div className="k-bar mt-1.5">
                   <div
-                    className="h-full rounded-full bg-sky-400"
+                    className="h-full bg-kblu"
                     style={{ width: `${bankCapacity > 0 ? Math.min(100, (bankKwh / bankCapacity) * 100) : 0}%` }}
                   />
                 </div>
@@ -197,17 +203,17 @@ export const StructurePanel: React.FC = () => {
             )}
             {isBank && (
               <>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Şebeke dolumu</span>
-                  <span className={`font-extrabold font-mono ${feeder ? 'text-white' : 'text-rose-300'}`}>
+                <div className="k-row">
+                  <span>Şebeke dolumu</span>
+                  <span className={feeder ? '' : 'text-kred'}>
                     {feeder
                       ? `${gridKwhPerHourFor(feeder.level)} kWh/sa · ₺${gridNow.toFixed(1)} (${tariffLabel})`
                       : 'Trafo yok'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Güneş</span>
-                  <span className={`font-extrabold font-mono ${solarNow > 0 ? 'text-amber-300' : 'text-slate-500'}`}>
+                <div className="k-row">
+                  <span>Güneş</span>
+                  <span className={solarNow > 0 ? 'text-kyel-dark' : 'text-mute'}>
                     {solarCells > 0 ? `${solarNow.toFixed(1)} kWh/sa` : 'Panel yok'}
                   </span>
                 </div>
@@ -215,74 +221,74 @@ export const StructurePanel: React.FC = () => {
             )}
             {isSubstation && (
               <>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Şebeke sözleşmesi</span>
-                  <span className="font-extrabold font-mono text-white">{gridKwhPerHourFor(building.level)} kWh/sa</span>
+                <div className="k-row">
+                  <span>Şebeke sözleşmesi</span>
+                  <span>{gridKwhPerHourFor(building.level)} kWh/sa</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Gece tarifesi</span>
-                  <span className="font-extrabold font-mono text-emerald-400">
+                <div className="k-row">
+                  <span>Gece tarifesi</span>
+                  <span className="text-kgrn">
                     ₺{GAME_CONFIG.ev.gridTariff.night.price.toFixed(1)}/kWh · {GAME_CONFIG.ev.gridTariff.night.from}:00–{GAME_CONFIG.ev.gridTariff.night.to}:00
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Gündüz</span>
-                  <span className="font-extrabold font-mono text-white">₺{GAME_CONFIG.ev.gridPricePerKwh.toFixed(1)}/kWh</span>
+                <div className="k-row">
+                  <span>Gündüz</span>
+                  <span>₺{GAME_CONFIG.ev.gridPricePerKwh.toFixed(1)}/kWh</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Pik</span>
-                  <span className="font-extrabold font-mono text-rose-300">
+                <div className="k-row">
+                  <span>Pik</span>
+                  <span className="text-kred">
                     ₺{GAME_CONFIG.ev.gridTariff.peak.price.toFixed(1)}/kWh · {GAME_CONFIG.ev.gridTariff.peak.from}:00–{GAME_CONFIG.ev.gridTariff.peak.to}:00
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Şu an</span>
-                  <span className="font-extrabold font-mono text-sky-300">₺{gridNow.toFixed(1)}/kWh ({tariffLabel})</span>
+                <div className="k-row">
+                  <span>Şu an</span>
+                  <span className="text-kblu">₺{gridNow.toFixed(1)}/kWh ({tariffLabel})</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Bugünkü enerji gideri</span>
-                  <span className="font-extrabold font-mono text-rose-300">₺{Math.round(t.energyCost ?? 0).toLocaleString('tr-TR')}</span>
+                <div className="k-row">
+                  <span>Bugünkü enerji gideri</span>
+                  <span className="text-kred">₺{Math.round(t.energyCost ?? 0).toLocaleString('tr-TR')}</span>
                 </div>
               </>
             )}
             {isGenerator && genStatus && (
               <>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Durum</span>
-                  <span className={`font-extrabold ${genStatus.tone}`}>{genStatus.text}</span>
+                <div className="k-row">
+                  <span>Durum</span>
+                  <span className={genStatus.tone}>{genStatus.text}</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Üretim</span>
-                  <span className="font-extrabold font-mono text-white">{GAME_CONFIG.ev.generator.kwhPerHour} kWh/sa</span>
+                <div className="k-row">
+                  <span>Üretim</span>
+                  <span>{GAME_CONFIG.ev.generator.kwhPerHour} kWh/sa</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Tüketim</span>
-                  <span className="font-extrabold font-mono text-white">
+                <div className="k-row">
+                  <span>Tüketim</span>
+                  <span>
                     {(GAME_CONFIG.ev.generator.kwhPerHour * GAME_CONFIG.ev.generator.litersPerKwh).toFixed(0)} L/sa mazot
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Devreye girer</span>
-                  <span className="font-extrabold font-mono text-white">batarya %{GAME_CONFIG.ev.generator.runBelowPercent} altında</span>
+                <div className="k-row">
+                  <span>Devreye girer</span>
+                  <span>batarya %{GAME_CONFIG.ev.generator.runBelowPercent} altında</span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Yakılabilir mazot</span>
-                  <span className="font-extrabold font-mono text-white">
+                <div className="k-row">
+                  <span>Yakılabilir mazot</span>
+                  <span>
                     {Math.round(dieselForGenerator(gameState.tanks.diesel)).toLocaleString('tr-TR')} L
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-slate-400 font-semibold">Bugün</span>
-                  <span className="font-extrabold font-mono text-amber-300">
+                <div className="k-row">
+                  <span>Bugün</span>
+                  <span className="text-kyel-dark">
                     {Math.round(t.generatorKwh ?? 0)} kWh · {Math.round(t.generatorLiters ?? 0)} L
                   </span>
                 </div>
               </>
             )}
             {!fixed && (
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-slate-400 font-semibold">Satış değeri</span>
-                <span className="font-extrabold font-mono text-white">₺{value.toLocaleString('tr-TR')}</span>
+              <div className="k-row">
+                <span>Satış değeri</span>
+                <span>₺{value.toLocaleString('tr-TR')}</span>
               </div>
             )}
           </div>
@@ -295,7 +301,7 @@ export const StructurePanel: React.FC = () => {
                     sounds.playClick();
                     fireAttendant(attendant.id);
                   }}
-                  className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
+                  className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
                 >
                   Şarjcıyı İşten Çıkar
                 </button>
@@ -306,11 +312,7 @@ export const StructurePanel: React.FC = () => {
                     hirePumpAttendant(building.id);
                   }}
                   disabled={gameState.player.cash < attendantConf.hireCost}
-                  className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
-                    gameState.player.cash >= attendantConf.hireCost
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
-                      : 'bg-slate-800 text-slate-500 border border-white/5 cursor-not-allowed'
-                  }`}
+                  className="w-full py-3.5 game-btn bg-kgrn hover:bg-kgrn-dark text-white font-display tracking-wide text-sm"
                 >
                   Şarjcı Al — ₺{attendantConf.hireCost.toLocaleString('tr-TR')}
                 </button>
@@ -318,10 +320,10 @@ export const StructurePanel: React.FC = () => {
             {isGenerator && (
               <button
                 onClick={() => toggleGenerator(building.id)}
-                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
+                className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
                   building.generatorOff
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
-                    : 'bg-[#d83f3f] hover:bg-[#c63232] text-white'
+                    ? 'bg-kgrn hover:bg-kgrn-dark text-white'
+                    : 'bg-kred hover:bg-kred-dark text-white'
                 }`}
               >
                 {building.generatorOff ? 'Jeneratörü Çalıştır' : 'Jeneratörü Durdur'}
@@ -331,17 +333,15 @@ export const StructurePanel: React.FC = () => {
               <button
                 onClick={() => upgradeBuilding(building.id)}
                 title={upgrade.effectsDescription}
-                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
-                  canAffordUpgrade
-                    ? 'bg-[#27a85a] hover:bg-[#20924d] text-white shadow-emerald-950/40'
-                    : 'bg-emerald-950/60 text-emerald-200/60 border border-emerald-500/20'
+                className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
+                  canAffordUpgrade ? 'bg-kgrn hover:bg-kgrn-dark text-white' : 'bg-card text-mute'
                 }`}
               >
                 Sv.{building.level + 1} Yükselt — ₺{upgrade.cost.toLocaleString('tr-TR')}
               </button>
             ) : (
               GAME_CONFIG.buildingUpgrades[upgradePathFor(building.type)] && (
-                <div className="w-full py-2.5 rounded-2xl bg-slate-800/60 border border-white/5 text-slate-500 text-center font-bold text-xs">
+                <div className={note}>
                   Maksimum Seviye (Sv.{building.level})
                 </div>
               )
@@ -353,14 +353,14 @@ export const StructurePanel: React.FC = () => {
                   sounds.playClick();
                   relocateStructure(building.id);
                 }}
-                className={dark}
+                className={neutral}
               >
                 Taşı
               </button>
             )}
 
             {!fixed && !square && (
-              <button onClick={() => rotateBuilding(building.id)} className={dark}>
+              <button onClick={() => rotateBuilding(building.id)} className={neutral}>
                 Döndür
               </button>
             )}
@@ -368,14 +368,14 @@ export const StructurePanel: React.FC = () => {
             {!fixed && (
               <button
                 onClick={() => sellStructure(building.id)}
-                className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
+                className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
               >
                 Yık — +₺{value.toLocaleString('tr-TR')}
               </button>
             )}
 
             {fixed && (
-              <div className="w-full py-2.5 rounded-2xl bg-slate-800/60 border border-white/5 text-slate-500 text-center font-bold text-xs">
+              <div className={note}>
                 İstasyonun sabit donanımı — taşınmaz, satılmaz
               </div>
             )}

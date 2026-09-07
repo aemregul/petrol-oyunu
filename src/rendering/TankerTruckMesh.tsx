@@ -121,11 +121,11 @@ export const TankerTruckMesh: React.FC<TankerTruckMeshProps> = ({ order }) => {
 
       {unloading && (
         <Html position={[0, 4.1, -1]} center distanceFactor={26} zIndexRange={[5, 0]}>
-          <div className="bg-slate-900/95 border border-slate-600 text-white text-xs px-2.5 py-1 rounded-xl font-mono font-bold shadow-2xl flex items-center gap-2 whitespace-nowrap">
+          <div className="game-glass bg-paper text-ink text-xs px-2.5 py-1 rounded-md font-display flex items-center gap-2 whitespace-nowrap">
             <span>⛽ {GAME_CONFIG.fuels[order.fuelType]?.shortName ?? order.fuelType}</span>
-            <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+            <div className="w-16 h-1.5 bg-board rounded-sm overflow-hidden border border-ink">
               <div
-                className="h-full bg-emerald-500 transition-all duration-300"
+                className="h-full bg-kgrn transition-all duration-300"
                 style={{ width: `${Math.max(0, Math.min(100, progress * 100))}%` }}
               />
             </div>

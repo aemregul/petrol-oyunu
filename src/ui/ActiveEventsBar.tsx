@@ -3,7 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { ActiveGameEvent } from '../domain/types/gameState';
 import { FUEL_DEAL_DISCOUNT } from '../domain/services/simulationEngine';
-import { TONE_GLASS, TONE_TEXT, type Tone } from './gameStyle';
+import { TONE_GLASS, TONE_TEXT, TONE_DOT, type Tone } from './gameStyle';
 import {
   TrendingUp,
   TrendingDown,
@@ -70,13 +70,13 @@ const EventChip: React.FC<{
         <span className={`game-title text-[12px] flex-1 leading-tight truncate ${TONE_TEXT[tone]}`}>
           {title}
         </span>
-        <span className={`text-[11px] font-mono font-extrabold shrink-0 tabular-nums ${TONE_TEXT[tone]}`}>
+        <span className={`text-[12px] font-display shrink-0 tabular-nums ${TONE_TEXT[tone]}`}>
           {timeLabel}
         </span>
       </div>
-      <div className="h-1 rounded-full bg-black/40 overflow-hidden">
+      <div className="h-1.5 rounded-sm bg-board border border-ink/40 overflow-hidden">
         <div
-          className="h-full rounded-full bg-white/60 transition-all duration-500"
+          className={`h-full transition-all duration-500 ${TONE_DOT[tone]}`}
           style={{ width: `${Math.max(0, Math.min(1, ratio)) * 100}%` }}
         />
       </div>

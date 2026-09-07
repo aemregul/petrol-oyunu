@@ -9,26 +9,26 @@ const PRESETS = [250, 400, 600, 800, 1000, 1250, 1600, 2000];
 
 const FUEL_ORDER: FuelType[] = ['gasoline', 'diesel', 'lpg'];
 
-/** The nozzle buttons wear their fuel's colour, muted until picked. */
+/** The nozzle buttons wear their fuel's colour, cardboard until picked. */
 const FUEL_TONES: Record<FuelType, { on: string; off: string }> = {
   gasoline: {
-    on: 'bg-emerald-500 text-white ring-2 ring-emerald-300 shadow-lg shadow-emerald-500/30',
-    off: 'bg-emerald-900/50 text-emerald-300 hover:bg-emerald-800/60 border border-emerald-700/50'
+    on: 'k-tab bg-kgrn text-white',
+    off: 'k-tab hover:bg-board'
   },
   diesel: {
-    on: 'bg-orange-500 text-white ring-2 ring-orange-300 shadow-lg shadow-orange-500/30',
-    off: 'bg-orange-900/50 text-orange-300 hover:bg-orange-800/60 border border-orange-700/50'
+    on: 'k-tab bg-kyel-dark text-white',
+    off: 'k-tab hover:bg-board'
   },
   lpg: {
-    on: 'bg-blue-500 text-white ring-2 ring-blue-300 shadow-lg shadow-blue-500/30',
-    off: 'bg-blue-900/50 text-blue-300 hover:bg-blue-800/60 border border-blue-700/50'
+    on: 'k-tab bg-kblu text-white',
+    off: 'k-tab hover:bg-board'
   }
 };
 
 const FUEL_CHIP: Record<FuelType, string> = {
-  gasoline: 'bg-emerald-500',
-  diesel: 'bg-orange-500',
-  lpg: 'bg-blue-500'
+  gasoline: 'bg-kgrn text-white',
+  diesel: 'bg-kyel-dark text-white',
+  lpg: 'bg-kblu text-white'
 };
 
 /** A licence plate the car can wear, derived from its id so it never changes. */
@@ -137,46 +137,46 @@ export const CustomerFuelModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center md:justify-start p-4 md:pl-20 z-50 animate-fade-in select-none pointer-events-none">
-      <div className="pointer-events-auto bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-sm shadow-2xl text-slate-100 flex flex-col overflow-hidden">
+      <div className="pointer-events-auto game-surface w-full max-w-sm flex flex-col overflow-hidden">
         {/* Header: who is at the pump */}
-        <div className="px-5 pt-4 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="bg-slate-950 border border-slate-700 text-white text-[11px] font-black font-mono px-2 py-0.5 rounded-md tracking-wider">
-                {plateFor(vehicle.id)}
-              </span>
-              <span className="text-xs font-bold text-slate-400">{conf?.name ?? vehicle.archetype}</span>
-            </div>
-            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mt-2.5">
-              Müşteri İsteği
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span
-                className={`${FUEL_CHIP[vehicle.fuelType]} text-white text-[11px] font-black px-2.5 py-1 rounded-lg`}
-              >
-                {fuelConf.shortName}
-              </span>
-              {wantsFull ? (
-                <>
-                  <span className="text-lg font-black text-white font-mono tracking-wide">FULL DEPO</span>
-                  <span className="text-xs text-slate-400 font-mono">{Math.round(demandLiters)} L</span>
-                </>
-              ) : (
-                <span className="text-lg font-black text-white font-mono">
-                  ₺{requestPrice.toLocaleString('tr-TR')}
-                </span>
-              )}
-            </div>
+        <div className="k-head k-head-red">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="bg-paper border-2 border-ink text-ink text-[11px] font-black font-mono px-2 py-0.5 rounded-md tracking-wider">
+              {plateFor(vehicle.id)}
+            </span>
+            <span className="font-display text-xl tracking-wide truncate">{conf?.name ?? vehicle.archetype}</span>
           </div>
           <button
             onClick={() => {
               sounds.playClick();
               setActiveModal('NONE');
             }}
-            className="w-7 h-7 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* The request */}
+        <div className="px-5 pt-4">
+          <div className="k-label">Müşteri İsteği</div>
+          <div className="flex items-center gap-2 mt-1">
+            <span
+              className={`${FUEL_CHIP[vehicle.fuelType]} border-2 border-ink text-[11px] font-black px-2.5 py-1 rounded-md`}
+            >
+              {fuelConf.shortName}
+            </span>
+            {wantsFull ? (
+              <>
+                <span className="font-display text-xl text-ink tracking-wide">FULL DEPO</span>
+                <span className="text-xs text-mute font-mono">{Math.round(demandLiters)} L</span>
+              </>
+            ) : (
+              <span className="font-display text-xl text-ink tabular-nums">
+                ₺{requestPrice.toLocaleString('tr-TR')}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="p-5 pt-4 flex flex-col gap-3">
@@ -193,9 +193,9 @@ export const CustomerFuelModal: React.FC = () => {
                     sounds.playClick();
                     setChosenFuel(f);
                   }}
-                  className={`py-2.5 rounded-xl font-black text-xs transition-all ${
+                  className={`py-2.5 px-2 text-center ${
                     !fitted
-                      ? 'bg-slate-800/60 text-slate-600 cursor-not-allowed'
+                      ? 'k-tab bg-board text-mute opacity-60 cursor-not-allowed'
                       : chosenFuel === f
                         ? tone.on
                         : tone.off
@@ -221,12 +221,12 @@ export const CustomerFuelModal: React.FC = () => {
                       sounds.playClick();
                       setAmountText(String(v));
                     }}
-                    className={`py-2 rounded-lg font-bold text-[11px] font-mono transition-all ${
+                    className={`game-btn py-2 font-display text-[13px] tabular-nums ${
                       !rightFuelChosen
-                        ? 'bg-slate-950/50 text-slate-600 border border-slate-800 cursor-not-allowed'
+                        ? 'bg-board text-mute'
                         : amount === v
-                          ? 'bg-slate-700 text-white border border-slate-400'
-                          : 'bg-slate-950 hover:bg-slate-800 text-white border border-slate-700'
+                          ? 'bg-kyel text-ink'
+                          : 'bg-card hover:bg-board text-ink'
                     }`}
                   >
                     ₺{v.toLocaleString('tr-TR')}
@@ -243,15 +243,13 @@ export const CustomerFuelModal: React.FC = () => {
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ''))}
                   placeholder="₺ tutar gir"
-                  className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-500"
+                  className="flex-1 min-w-0 bg-board border-2 border-ink rounded-md px-3 py-2.5 text-sm font-mono font-bold text-ink placeholder:text-mute focus:outline-none focus:bg-paper"
                 />
                 <button
                   disabled={!canStart}
                   onClick={() => start('MONEY', amount)}
-                  className={`px-4 rounded-xl font-black text-xs transition-all ${
-                    canStart
-                      ? 'game-btn bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 border-2 border-emerald-300/60 text-white shadow-lg'
-                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  className={`game-btn px-4 font-display text-sm tracking-wide ${
+                    canStart ? 'bg-kgrn hover:bg-kgrn-dark text-white' : 'bg-board text-mute'
                   }`}
                 >
                   BAŞLAT
@@ -260,10 +258,8 @@ export const CustomerFuelModal: React.FC = () => {
                   disabled={!canFill}
                   title={wantsFull ? undefined : 'Bu müşteri depo istemiyor'}
                   onClick={() => start('FULL', demandLiters)}
-                  className={`px-4 rounded-xl font-black text-xs transition-all ${
-                    canFill
-                      ? 'game-btn bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 border-2 border-red-300/60 text-white shadow-lg'
-                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  className={`game-btn px-4 font-display text-sm tracking-wide ${
+                    canFill ? 'bg-kred hover:bg-kred-dark text-white' : 'bg-board text-mute'
                   }`}
                 >
                   FULLE
@@ -273,35 +269,31 @@ export const CustomerFuelModal: React.FC = () => {
           )}
 
           {/* The meter */}
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 grid grid-cols-2 divide-x divide-slate-800">
+          <div className="bg-board border-2 border-ink rounded-md px-4 py-3 grid grid-cols-2 divide-x-2 divide-ink">
             <div className="pr-3">
-              <div className="text-[9px] uppercase font-black text-emerald-500/70 tracking-[0.2em]">
-                Litre
-              </div>
-              <div className="text-3xl font-black font-mono text-emerald-400 leading-tight">
+              <div className="k-label">Litre</div>
+              <div className={`text-3xl font-display tabular-nums leading-tight ${isFueling ? 'text-kgrn' : 'text-ink'}`}>
                 {dispensed.toFixed(1)}
               </div>
             </div>
             <div className="pl-4 text-right">
-              <div className="text-[9px] uppercase font-black text-amber-500/70 tracking-[0.2em]">
-                Tutar ₺
-              </div>
-              <div className="text-3xl font-black font-mono text-amber-400 leading-tight">
+              <div className="k-label">Tutar ₺</div>
+              <div className={`text-3xl font-display tabular-nums leading-tight ${isFueling ? 'text-kgrn' : 'text-ink'}`}>
                 {Math.round(runningTotal).toLocaleString('tr-TR')}
               </div>
             </div>
           </div>
 
-          <div className="text-center text-[11px] text-slate-500 font-bold">{hint}</div>
+          <div className="text-center text-[11px] text-mute font-bold">{hint}</div>
 
           {/* Squeegee */}
           <button
             disabled={!!vehicle.windowsCleaned}
             onClick={() => cleanVehicleWindows(vehicle.id)}
-            className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+            className={`w-full py-2.5 rounded-md font-display text-sm tracking-wide flex items-center justify-center gap-1.5 ${
               vehicle.windowsCleaned
-                ? 'bg-slate-800/60 text-emerald-400 cursor-default'
-                : 'game-btn bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                ? 'bg-board border-2 border-ink text-kgrn cursor-default'
+                : 'game-btn bg-kblu hover:bg-kblu-dark text-white'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -312,14 +304,14 @@ export const CustomerFuelModal: React.FC = () => {
           {isFinished ? (
             <button
               onClick={() => completeVehicleFueling(vehicle.id)}
-              className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider game-btn bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 border-2 border-red-300/60 text-white shadow-xl shadow-red-600/30 transition-all"
+              className="w-full py-3.5 font-display text-base uppercase tracking-wide game-btn bg-kgrn hover:bg-kgrn-dark text-white"
             >
               Teslim Et — ₺{Math.round(runningTotal).toLocaleString('tr-TR')}
             </button>
           ) : (
             <button
               onClick={() => dismissCustomer(vehicle.id)}
-              className="w-full py-2.5 rounded-xl font-bold text-xs game-btn bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
+              className="w-full py-2.5 font-display text-sm tracking-wide game-btn bg-card hover:bg-board text-ink"
             >
               Müşteriyi Gönder
             </button>

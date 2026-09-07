@@ -6,6 +6,9 @@ import { calculatePriceAttractiveness } from '../../domain/formulas/economy';
 import { X, Tag, TrendingUp, TrendingDown, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
+const TILE = 'bg-board p-2.5 rounded-md border-2 border-ink';
+const PRESET = 'px-2.5 py-1 game-btn text-[11px] font-display tracking-wide';
+
 export const PricingModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
@@ -35,22 +38,22 @@ export const PricingModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col">
+    <div className="k-dim animate-fade-in select-none">
+      <div className="game-surface w-full max-w-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
+        <div className="k-head k-head-yel shrink-0">
           <div className="flex items-center gap-3">
-            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-purple-500/20 border border-purple-500/30 text-purple-400 flex items-center justify-center">
+            <div className="game-icon-badge w-9 h-9">
               <Tag className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">Piyasa & Satış</div>
-              <div className="text-base font-extrabold text-white">Akaryakıt Fiyatlandırma Yönetimi</div>
+              <div className="text-[10px] uppercase font-black tracking-[0.12em] opacity-80 font-sans">Piyasa & Satış</div>
+              <div className="font-display text-xl tracking-wide leading-tight">Akaryakıt Fiyatlandırma Yönetimi</div>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -71,51 +74,51 @@ export const PricingModal: React.FC = () => {
             return (
               <div
                 key={fType}
-                className={`bg-slate-950/60 border rounded-2xl p-4 flex flex-col gap-3 transition-all ${
+                className={`bg-paper border-2 rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118] transition-all ${
                   !isUnlocked
-                    ? 'border-slate-800 opacity-50'
+                    ? 'border-ink opacity-50'
                     : isLoss
-                    ? 'border-red-500/50 bg-red-950/10'
-                    : 'border-slate-800 hover:border-purple-500/40'
+                    ? 'border-kred'
+                    : 'border-ink'
                 }`}
               >
-                <div className="flex justify-between items-center border-b border-slate-800/80 pb-2.5">
+                <div className="flex justify-between items-center border-b-2 border-dotted border-mute/60 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: conf.color }} />
-                    <span className="font-extrabold text-sm text-white">{conf.name}</span>
+                    <span className="w-3 h-3 rounded-full border border-ink" style={{ backgroundColor: conf.color }} />
+                    <span className="font-display text-base text-ink tracking-wide">{conf.name}</span>
                   </div>
-                  <div className="text-xs font-mono text-slate-400">
-                    Bölgesel Ortalama: <span className="text-white font-bold">{pricing.regionalAverage.toFixed(2)} TL</span>
+                  <div className="text-xs font-bold text-mute">
+                    Bölgesel Ortalama: <span className="text-ink font-display tabular-nums">{pricing.regionalAverage.toFixed(2)} TL</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   {/* Wholesale Cost */}
-                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-center">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Alış Maliyeti</div>
-                    <div className="text-sm font-black font-mono text-amber-400 mt-0.5">
+                  <div className={`${TILE} text-center`}>
+                    <div className="k-label">Alış Maliyeti</div>
+                    <div className="text-sm font-black font-mono text-kyel-dark mt-0.5">
                       ₺{pricing.todayWholesaleCost.toFixed(2)}
                     </div>
                   </div>
 
                   {/* Player Price & Steppers */}
-                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 flex flex-col items-center justify-between">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Satış Fiyatınız</div>
+                  <div className={`${TILE} flex flex-col items-center justify-between`}>
+                    <div className="k-label">Satış Fiyatınız</div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <button
                         onClick={() => adjustPrice(fType, -0.10)}
                         disabled={!isUnlocked}
-                        className="w-6 h-6 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+                        className="w-6 h-6 game-btn bg-card hover:bg-board text-ink font-display text-xs"
                       >
                         -
                       </button>
-                      <span className="text-sm font-black font-mono text-emerald-400">
+                      <span className="text-sm font-black font-mono text-kgrn">
                         ₺{pricing.playerPrice.toFixed(2)}
                       </span>
                       <button
                         onClick={() => adjustPrice(fType, 0.10)}
                         disabled={!isUnlocked}
-                        className="w-6 h-6 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+                        className="w-6 h-6 game-btn bg-card hover:bg-board text-ink font-display text-xs"
                       >
                         +
                       </button>
@@ -123,11 +126,11 @@ export const PricingModal: React.FC = () => {
                   </div>
 
                   {/* Profit Margin */}
-                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-center">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Litre Başı Marj</div>
+                  <div className={`${TILE} text-center`}>
+                    <div className="k-label">Litre Başı Marj</div>
                     <div
                       className={`text-sm font-black font-mono mt-0.5 ${
-                        margin > 0 ? 'text-emerald-400' : 'text-red-400'
+                        margin > 0 ? 'text-kgrn' : 'text-kred'
                       }`}
                     >
                       {margin > 0 ? `+₺${margin.toFixed(2)}` : `₺${margin.toFixed(2)}`}
@@ -138,11 +141,11 @@ export const PricingModal: React.FC = () => {
                 {/* Preset Strategy Buttons */}
                 {isUnlocked && (
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-mute">
                       {attr.trafficModifierPercent >= 0 ? (
-                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                        <TrendingUp className="w-3.5 h-3.5 text-kgrn" />
                       ) : (
-                        <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                        <TrendingDown className="w-3.5 h-3.5 text-kred" />
                       )}
                       <span>
                         Talep: {attr.trafficModifierPercent > 0 ? `+${attr.trafficModifierPercent}%` : `${attr.trafficModifierPercent}%`}
@@ -152,19 +155,19 @@ export const PricingModal: React.FC = () => {
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => handleApplyPreset(fType, 'CHEAP')}
-                        className="px-2.5 py-1 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-sky-400"
+                        className={`${PRESET} bg-kblu hover:bg-kblu-dark text-white`}
                       >
                         Ucuz
                       </button>
                       <button
                         onClick={() => handleApplyPreset(fType, 'BALANCED')}
-                        className="px-2.5 py-1 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-emerald-400"
+                        className={`${PRESET} bg-kgrn hover:bg-kgrn-dark text-white`}
                       >
                         Dengeli
                       </button>
                       <button
                         onClick={() => handleApplyPreset(fType, 'HIGH_MARGIN')}
-                        className="px-2.5 py-1 rounded-lg game-btn bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-purple-400"
+                        className={`${PRESET} bg-kvio hover:bg-kvio-dark text-white`}
                       >
                         Yüksek Marj
                       </button>

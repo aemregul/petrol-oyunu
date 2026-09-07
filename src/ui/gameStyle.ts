@@ -17,50 +17,46 @@ export type Tone = 'red' | 'amber' | 'green' | 'blue' | 'violet' | 'slate';
  * shows through. Pair with `game-glass`.
  */
 export const TONE_GLASS: Record<Tone, string> = {
-  red: 'bg-red-950/75 border-red-400/40',
-  amber: 'bg-amber-950/75 border-amber-400/40',
-  green: 'bg-emerald-950/75 border-emerald-400/40',
-  blue: 'bg-sky-950/75 border-sky-400/40',
-  violet: 'bg-violet-950/75 border-violet-400/40',
-  slate: 'bg-slate-900/75 border-slate-500/40'
+  red: 'bg-paper border-kred',
+  amber: 'bg-paper border-kyel-dark',
+  green: 'bg-paper border-kgrn',
+  blue: 'bg-paper border-kblu',
+  violet: 'bg-paper border-kvio',
+  slate: 'bg-paper border-ink'
 };
 
-/** Text on coloured glass: the tone at reading strength. */
+/** Text on a card: the tone at reading strength on cream. */
 export const TONE_TEXT: Record<Tone, string> = {
-  red: 'text-red-200',
-  amber: 'text-amber-200',
-  green: 'text-emerald-200',
-  blue: 'text-sky-200',
-  violet: 'text-violet-200',
-  slate: 'text-slate-200'
+  red: 'text-kred',
+  amber: 'text-kyel-dark',
+  green: 'text-kgrn',
+  blue: 'text-kblu',
+  violet: 'text-kvio',
+  slate: 'text-ink'
 };
 
 /** The dot marking a tone where there is no room for anything else. */
 export const TONE_DOT: Record<Tone, string> = {
-  red: 'bg-red-400',
-  amber: 'bg-amber-400',
-  green: 'bg-emerald-400',
-  blue: 'bg-sky-400',
-  violet: 'bg-violet-400',
-  slate: 'bg-slate-400'
+  red: 'bg-kred',
+  amber: 'bg-kyel',
+  green: 'bg-kgrn',
+  blue: 'bg-kblu',
+  violet: 'bg-kvio',
+  slate: 'bg-mute'
 };
 
 /**
- * The fill for a pressable button. Kept translucent and a stop deeper than the
- * pills so a screen full of buttons does not glow.
+ * The fill for a pressable button: a flat sticker colour, ink line, hard
+ * shadow (the shape comes from `game-btn`).
  */
 export const TONE_BUTTON: Record<Tone, string> = {
-  red: 'bg-gradient-to-b from-red-600/90 to-red-700/90 hover:from-red-500 hover:to-red-600 border-2 border-red-400/40 text-white',
-  amber:
-    'bg-gradient-to-b from-amber-600/90 to-orange-700/90 hover:from-amber-500 hover:to-orange-600 border-2 border-amber-400/40 text-white',
-  green:
-    'bg-gradient-to-b from-emerald-600/90 to-emerald-700/90 hover:from-emerald-500 hover:to-emerald-600 border-2 border-emerald-400/40 text-white',
-  blue: 'bg-gradient-to-b from-sky-600/90 to-blue-700/90 hover:from-sky-500 hover:to-blue-600 border-2 border-sky-400/40 text-white',
-  violet:
-    'bg-gradient-to-b from-violet-600/90 to-violet-700/90 hover:from-violet-500 hover:to-violet-600 border-2 border-violet-400/40 text-white',
-  slate:
-    'bg-gradient-to-b from-slate-700/90 to-slate-800/90 hover:from-slate-600 hover:to-slate-700 border-2 border-slate-500/50 text-white'
+  red: 'bg-kred hover:bg-kred-dark text-white',
+  amber: 'bg-kyel hover:bg-kyel-dark text-ink',
+  green: 'bg-kgrn hover:bg-kgrn-dark text-white',
+  blue: 'bg-kblu hover:bg-kblu-dark text-white',
+  violet: 'bg-kvio hover:bg-kvio-dark text-white',
+  slate: 'bg-card hover:bg-board text-ink'
 };
 
-/** Body text on a coloured pill — readable, but a step back from the title. */
-export const PILL_BODY = 'text-white/70';
+/** Body text on a card — readable, but a step back from the title. */
+export const PILL_BODY = 'text-mute';

@@ -13,12 +13,12 @@ import { sounds } from '../audio/soundEffects';
 
 /** The face and colour each facility's card wears. */
 const LOOK: Record<string, { icon: React.ElementType; banner: string; label: string }> = {
-  toilet: { icon: Bath, banner: 'bg-[#d93f3f]', label: 'Tuvalet' },
-  mini_market: { icon: ShoppingBag, banner: 'bg-[#d0021b]', label: 'Mini Market' },
-  cafe: { icon: Coffee, banner: 'bg-[#0b6b45]', label: 'Kahveci' },
-  restaurant: { icon: UtensilsCrossed, banner: 'bg-[#c2410c]', label: 'Restoran' },
-  hotel: { icon: BedDouble, banner: 'bg-[#4f46e5]', label: 'Otel' },
-  rest_complex: { icon: Building, banner: 'bg-[#0284c7]', label: 'Dinlenme Tesisi' }
+  toilet: { icon: Bath, banner: 'k-head-blu', label: 'Tuvalet' },
+  mini_market: { icon: ShoppingBag, banner: 'k-head-blu', label: 'Mini Market' },
+  cafe: { icon: Coffee, banner: 'k-head-blu', label: 'Kahveci' },
+  restaurant: { icon: UtensilsCrossed, banner: 'k-head-blu', label: 'Restoran' },
+  hotel: { icon: BedDouble, banner: 'k-head-blu', label: 'Otel' },
+  rest_complex: { icon: Building, banner: 'k-head-blu', label: 'Dinlenme Tesisi' }
 };
 
 /**
@@ -76,19 +76,19 @@ export const FacilityPanel: React.FC = () => {
 
   return (
     <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center p-4">
-      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none rounded-[2rem] bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col">
-        <div className={`${look.banner} px-5 py-3.5 flex items-center justify-between text-white shadow-md`}>
+      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none game-surface animate-fade-in flex flex-col">
+        <div className={`k-head ${look.banner}`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-              <Icon className="w-4 h-4 text-white" />
+            <div className="game-icon-badge w-8 h-8">
+              <Icon className="w-4 h-4" />
             </div>
-            <span className="font-extrabold text-base tracking-tight">
+            <span>
               {look.label} Sv.{building.level}
             </span>
           </div>
           <button
             onClick={handleClose}
-            className="w-7 h-7 rounded-xl bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-colors"
+            className="game-btn bg-card text-ink w-8 h-8 rounded-md flex items-center justify-center"
             aria-label="Kapat"
           >
             <X className="w-4 h-4" />
@@ -96,56 +96,56 @@ export const FacilityPanel: React.FC = () => {
         </div>
 
         <div className="p-5 flex flex-col gap-4 text-xs">
-          <p className="text-slate-300 text-[11px] leading-relaxed font-medium">{conf.blurb}</p>
+          <p className="text-ink/80 text-[12px] leading-relaxed font-semibold">{conf.blurb}</p>
 
-          <div className="flex flex-col divide-y divide-white/5 text-xs">
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Moral etkisi</span>
-              <span className={`font-extrabold font-mono ${moral > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+          <div className="flex flex-col text-xs">
+            <div className="k-row">
+              <span>Moral etkisi</span>
+              <span className={moral > 0 ? 'text-kgrn' : 'text-mute'}>
                 +{moral.toFixed(2)} puan
               </span>
             </div>
 
             {tariff && (
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-slate-400 font-semibold">
+              <div className="k-row">
+                <span>
                   {building.type === 'hotel' ? 'Oda ücreti' : 'Kullanım ücreti'}
                 </span>
-                <span className={`font-extrabold font-mono ${tariff.price > 0 ? 'text-emerald-400' : 'text-white'}`}>
+                <span className={tariff.price > 0 ? 'text-kgrn' : ''}>
                   {tariff.price > 0 ? `${tariff.label} · ₺${tariff.price.toLocaleString('tr-TR')}` : tariff.label}
                 </span>
               </div>
             )}
 
             {rooms > 0 && (
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-slate-400 font-semibold">Odalar</span>
-                <span className={`font-extrabold font-mono ${guests >= rooms ? 'text-amber-400' : 'text-white'}`}>
+              <div className="k-row">
+                <span>Odalar</span>
+                <span className={guests >= rooms ? 'text-kyel-dark' : ''}>
                   {guests}/{rooms} dolu
                 </span>
               </div>
             )}
 
             {building.type === 'mini_market' && (
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-slate-400 font-semibold">Raf stoğu</span>
-                <span className="font-extrabold font-mono text-white">{gameState.market.stock}</span>
+              <div className="k-row">
+                <span>Raf stoğu</span>
+                <span>{gameState.market.stock}</span>
               </div>
             )}
 
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Bugünkü ciro</span>
-              <span className="font-extrabold font-mono text-emerald-400">
+            <div className="k-row">
+              <span>Bugünkü ciro</span>
+              <span className="text-kgrn">
                 ₺{todayRevenue.toLocaleString('tr-TR')}
                 {todayVisits > 0 && (
-                  <span className="text-slate-500 font-semibold"> · {todayVisits} ziyaret</span>
+                  <span className="text-mute font-sans font-bold text-xs"> · {todayVisits} ziyaret</span>
                 )}
               </span>
             </div>
 
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">İçeride</span>
-              <span className="font-extrabold font-mono text-white">
+            <div className="k-row">
+              <span>İçeride</span>
+              <span>
                 {inside > 0 ? `${inside} kişi` : '—'}
               </span>
             </div>
@@ -157,10 +157,8 @@ export const FacilityPanel: React.FC = () => {
             <button
               onClick={() => collectTill(building.id)}
               disabled={till <= 0}
-              className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${
-                till > 0
-                  ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white shadow-emerald-900/30'
-                  : 'bg-slate-800/60 text-slate-500 border border-white/5 cursor-not-allowed'
+              className={`w-full py-3.5 game-btn font-display tracking-wide text-sm flex items-center justify-center gap-2 ${
+                till > 0 ? 'bg-kgrn hover:bg-kgrn-dark text-white' : 'bg-card text-mute'
               }`}
             >
               <Coins className="w-4 h-4" />
@@ -170,7 +168,7 @@ export const FacilityPanel: React.FC = () => {
             {tariff && nextTariff && (
               <button
                 onClick={() => cycleFacilityTariff(building.id)}
-                className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
+                className="w-full py-3.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm"
               >
                 Ücreti Değiştir ({tariff.label} → {nextTariff.label})
               </button>
@@ -180,16 +178,14 @@ export const FacilityPanel: React.FC = () => {
               <button
                 onClick={() => upgradeBuilding(building.id)}
                 title={upgrade.effectsDescription}
-                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
-                  canAffordUpgrade
-                    ? 'bg-[#27a85a] hover:bg-[#20924d] text-white shadow-emerald-950/40'
-                    : 'bg-emerald-950/60 text-emerald-200/60 border border-emerald-500/20'
+                className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
+                  canAffordUpgrade ? 'bg-kgrn hover:bg-kgrn-dark text-white' : 'bg-card text-mute'
                 }`}
               >
                 {look.label} Sv.{building.level + 1} — ₺{upgrade.cost.toLocaleString('tr-TR')}
               </button>
             ) : (
-              <div className="w-full py-2.5 rounded-2xl bg-slate-800/60 border border-white/5 text-slate-500 text-center font-bold text-xs">
+              <div className="w-full py-2.5 rounded-md bg-board border-2 border-dashed border-mute text-mute text-center font-extrabold text-xs">
                 Maksimum Seviye (Sv.{building.level})
               </div>
             )}
@@ -199,21 +195,21 @@ export const FacilityPanel: React.FC = () => {
                 sounds.playClick();
                 relocateStructure(building.id);
               }}
-              className="w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md"
+              className="w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm"
             >
               Taşı
             </button>
 
             <button
               onClick={() => rotateBuilding(building.id)}
-              className="w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md"
+              className="w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm"
             >
               Döndür
             </button>
 
             <button
               onClick={() => sellStructure(building.id)}
-              className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
+              className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
             >
               Yık — +₺{sellValue.toLocaleString('tr-TR')}
             </button>
