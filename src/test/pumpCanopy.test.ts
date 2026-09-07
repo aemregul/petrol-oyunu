@@ -196,6 +196,55 @@ describe('neighbouring pump roofs', () => {
     expect((8 + centreDistance) * 2 - secondRoof.leftExtent).toBe(sharedEdge);
   });
 
+  it('runs a straight edge down a column whose top piece reaches further along its row', () => {
+    // A row of two on top, and one island below the left one. The top-left
+    // piece reaches to the midpoint of its row neighbour; the piece below it
+    // meets nobody on that side and used to stop at stock width, leaving a
+    // step in the roof's edge at the join (Emre, 2026-09-07).
+    const topLeft = { ...pumpAt('a', [8, 8]), hasCanopy: true };
+    const topRight = { ...pumpAt('b', [8 + 6, 8]), hasCanopy: true };
+    const below = { ...pumpAt('c', [8, 8 + 6]), hasCanopy: true };
+    const all = [topLeft, topRight, below];
+
+    const top = getPumpCanopyLayout(topLeft, all);
+    const bottom = getPumpCanopyLayout(below, all);
+    expect(top.joinsRight).toBe(true);
+    expect(bottom.joinsRight).toBe(false);
+    // The same right edge, top and bottom — and the free left side stays stock.
+    expect(bottom.rightExtent).toBe(top.rightExtent);
+    expect(bottom.leftExtent).toBe(PUMP_CANOPY_BASE_WIDTH / 2);
+    // The column pieces still meet each other at the midpoint between them.
+    expect(top.positiveZExtent + bottom.negativeZExtent).toBe(6 * 2);
+    // And the row runs the column's depth: the top-right piece's near edge is
+    // where the top-left piece's is, not a stock margin beyond it.
+    const right = getPumpCanopyLayout(topRight, all);
+    expect(right.positiveZExtent).toBe(top.positiveZExtent);
+    expect(right.negativeZExtent).toBe(top.negativeZExtent);
+  });
+
+  it('shares one edge along a whole column when only its end meets a row', () => {
+    // Four in a column, a fifth beside the last: the roof's side edge used
+    // to step in by a stock margin's difference at the last piece, and the
+    // fifth piece stuck out past the column's edge (Emre, 2026-09-07).
+    const column = [0, 1, 2, 3].map((i) => ({ ...pumpAt(`c${i}`, [8, 8 + i * 5]), hasCanopy: true }));
+    const beside = { ...pumpAt('r', [8 + 6, 8 + 15]), hasCanopy: true };
+    const all = [...column, beside];
+
+    const layouts = column.map((p) => getPumpCanopyLayout(p, all));
+    const end = layouts[3];
+    expect(end.joinsRight).toBe(true);
+    // Every piece of the column ends on the right where the end piece does.
+    for (const piece of layouts) expect(piece.rightExtent).toBe(end.rightExtent);
+    for (const piece of layouts) expect(piece.leftExtent).toBe(PUMP_CANOPY_BASE_WIDTH / 2);
+    // The piece beside runs the column's depth on both sides: the midpoint
+    // toward the pump above the end, stock on the open side.
+    const side = getPumpCanopyLayout(beside, all);
+    expect(side.negativeZExtent).toBe(end.negativeZExtent);
+    expect(side.positiveZExtent).toBe(end.positiveZExtent);
+    expect(side.negativeZExtent).toBe(5);
+    expect(side.positiveZExtent).toBe(PUMP_CANOPY_BASE_DEPTH / 2);
+  });
+
   it('trims overlapping inner edges so close roofs become one clean deck', () => {
     const first = { ...pumpAt('a', [8, 8]), hasCanopy: true };
     const second = { ...pumpAt('b', [10, 8]), hasCanopy: true };

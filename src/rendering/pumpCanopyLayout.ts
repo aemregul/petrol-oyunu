@@ -48,20 +48,29 @@ const sameAxis = (a: PumpEntity, b: PumpEntity): boolean =>
  * across gaps on both axes and trims overlapping inner edges, leaving one
  * continuous deck without coplanar slabs fighting over the same pixels.
  */
-export function getPumpCanopyLayout(
-  pump: PumpEntity,
-  pumps: readonly PumpEntity[]
-): PumpCanopyLayout {
-  const baseHalfWidth = PUMP_CANOPY_BASE_WIDTH / 2;
-  const baseHalfDepth = PUMP_CANOPY_BASE_DEPTH / 2;
-  let nearestLeft: number | undefined;
-  let nearestRight: number | undefined;
-  let nearestNegativeZ: number | undefined;
-  let nearestPositiveZ: number | undefined;
+/** A frame of local axes: the way one pump group is turned. */
+interface Frame {
+  cos: number;
+  sin: number;
+}
 
-  const angle = (pump.rotation * Math.PI) / 180;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
+/** The joinable neighbours of `pump` along each local axis, as grid distances. */
+interface Neighbours {
+  left?: number;
+  right?: number;
+  negativeZ?: number;
+  positiveZ?: number;
+  /** The islands joined along local x and along local z, for the edge rule below. */
+  rowMates: PumpEntity[];
+  columnMates: PumpEntity[];
+}
+
+function nearestNeighbours(
+  pump: PumpEntity,
+  pumps: readonly PumpEntity[],
+  frame: Frame
+): Neighbours {
+  const found: Neighbours = { rowMates: [], columnMates: [] };
 
   for (const other of pumps) {
     if (other.id === pump.id || !other.hasCanopy || !sameAxis(pump, other)) continue;
@@ -69,20 +78,21 @@ export function getPumpCanopyLayout(
     const dx = other.position[0] - pump.position[0];
     const dz = other.position[1] - pump.position[1];
 
-    // Transform the neighbour into this pump group's local x/z axes.
-    const localX = dx * cos - dz * sin;
-    const localZ = dx * sin + dz * cos;
+    // Transform the neighbour into the frame's local x/z axes.
+    const localX = dx * frame.cos - dz * frame.sin;
+    const localZ = dx * frame.sin + dz * frame.cos;
 
     if (Math.abs(localZ) <= 0.01) {
       const distance = Math.abs(localX);
       const clearGap = distance - PUMP_FOOTPRINT_WIDTH;
       if (distance >= 0.01 && clearGap <= PUMP_CANOPY_MAX_CLEAR_GAP + 0.01) {
-        if (localX < 0 && (nearestLeft === undefined || distance < nearestLeft)) {
-          nearestLeft = distance;
+        if (localX < 0 && (found.left === undefined || distance < found.left)) {
+          found.left = distance;
         }
-        if (localX > 0 && (nearestRight === undefined || distance < nearestRight)) {
-          nearestRight = distance;
+        if (localX > 0 && (found.right === undefined || distance < found.right)) {
+          found.right = distance;
         }
+        found.rowMates.push(other);
       }
     }
 
@@ -90,38 +100,101 @@ export function getPumpCanopyLayout(
       const distance = Math.abs(localZ);
       const clearGap = distance - PUMP_FOOTPRINT_DEPTH;
       if (distance >= 0.01 && clearGap <= PUMP_CANOPY_MAX_CLEAR_GAP + 0.01) {
-        if (
-          localZ < 0 &&
-          (nearestNegativeZ === undefined || distance < nearestNegativeZ)
-        ) {
-          nearestNegativeZ = distance;
+        if (localZ < 0 && (found.negativeZ === undefined || distance < found.negativeZ)) {
+          found.negativeZ = distance;
         }
-        if (
-          localZ > 0 &&
-          (nearestPositiveZ === undefined || distance < nearestPositiveZ)
-        ) {
-          nearestPositiveZ = distance;
+        if (localZ > 0 && (found.positiveZ === undefined || distance < found.positiveZ)) {
+          found.positiveZ = distance;
         }
+        found.columnMates.push(other);
       }
     }
   }
 
+  return found;
+}
+
+/**
+ * Every island joined to `pump` along one axis, directly or through others,
+ * `pump` itself included — the run of roof that shares an edge.
+ */
+function chainAlong(
+  pump: PumpEntity,
+  pumps: readonly PumpEntity[],
+  frame: Frame,
+  along: 'rowMates' | 'columnMates'
+): PumpEntity[] {
+  const seen = new Map<string, PumpEntity>([[pump.id, pump]]);
+  const queue = [pump];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const mate of nearestNeighbours(current, pumps, frame)[along]) {
+      if (seen.has(mate.id)) continue;
+      seen.set(mate.id, mate);
+      queue.push(mate);
+    }
+  }
+  return [...seen.values()];
+}
+
+/** World half-extent on one side: to the midpoint of a neighbour, else stock. */
+function sideExtent(neighbour: number | undefined, base: number): number {
+  return neighbour === undefined ? base : (neighbour * WORLD_UNITS_PER_GRID_UNIT) / 2;
+}
+
+export function getPumpCanopyLayout(
+  pump: PumpEntity,
+  pumps: readonly PumpEntity[]
+): PumpCanopyLayout {
+  const baseHalfWidth = PUMP_CANOPY_BASE_WIDTH / 2;
+  const baseHalfDepth = PUMP_CANOPY_BASE_DEPTH / 2;
+
+  const angle = (pump.rotation * Math.PI) / 180;
+  const frame = { cos: Math.cos(angle), sin: Math.sin(angle) };
+  const near = nearestNeighbours(pump, pumps, frame);
+  const { left: nearestLeft, right: nearestRight } = near;
+  const { negativeZ: nearestNegativeZ, positiveZ: nearestPositiveZ } = near;
+
+  // A side that meets a neighbour ends at the midpoint between them. A side
+  // that meets nobody is stock width — unless the piece is part of a chain
+  // along the other axis in which SOME member meets a neighbour on that side:
+  // then every piece in the chain ends where that member does, and the edge
+  // runs straight the length of the chain. Stock width there left a step at
+  // every join between a row and a column of islands (Emre, 2026-09-07:
+  // "o pay hiç olmasın"). The shortest such reach wins, so no piece ever
+  // overlaps the neighbour a chain-mate is joined to. Measured in this
+  // pump's frame, so a mate turned the other way about still lines up.
+  const chainReach = (
+    chain: PumpEntity[],
+    side: 'left' | 'right' | 'negativeZ' | 'positiveZ',
+    base: number
+  ): number => {
+    const reach = chain.reduce((shortest, mate) => {
+      const joined = nearestNeighbours(mate, pumps, frame)[side];
+      return joined === undefined ? shortest : Math.min(shortest, sideExtent(joined, base));
+    }, Infinity);
+    return Number.isFinite(reach) ? reach : base;
+  };
+
+  const column = chainAlong(pump, pumps, frame, 'columnMates');
+  const row = chainAlong(pump, pumps, frame, 'rowMates');
+
   const leftExtent =
     nearestLeft === undefined
-      ? baseHalfWidth
-      : (nearestLeft * WORLD_UNITS_PER_GRID_UNIT) / 2;
+      ? chainReach(column, 'left', baseHalfWidth)
+      : sideExtent(nearestLeft, baseHalfWidth);
   const rightExtent =
     nearestRight === undefined
-      ? baseHalfWidth
-      : (nearestRight * WORLD_UNITS_PER_GRID_UNIT) / 2;
+      ? chainReach(column, 'right', baseHalfWidth)
+      : sideExtent(nearestRight, baseHalfWidth);
   const negativeZExtent =
     nearestNegativeZ === undefined
-      ? baseHalfDepth
-      : (nearestNegativeZ * WORLD_UNITS_PER_GRID_UNIT) / 2;
+      ? chainReach(row, 'negativeZ', baseHalfDepth)
+      : sideExtent(nearestNegativeZ, baseHalfDepth);
   const positiveZExtent =
     nearestPositiveZ === undefined
-      ? baseHalfDepth
-      : (nearestPositiveZ * WORLD_UNITS_PER_GRID_UNIT) / 2;
+      ? chainReach(row, 'positiveZ', baseHalfDepth)
+      : sideExtent(nearestPositiveZ, baseHalfDepth);
 
   return {
     width: leftExtent + rightExtent,
