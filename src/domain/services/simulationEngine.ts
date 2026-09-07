@@ -5312,6 +5312,29 @@ function releaseOrphanedHolds(state: GameState): void {
   }
 }
 
+/**
+ * The mirror of releaseOrphanedHolds: a vehicle standing in a pump state
+ * whose pump now belongs to somebody else. Nothing in those states asks
+ * whether the pump is still yours, so such a car stood at the bay for ever
+ * while the next customer was served through it (Emre, 2026-09-07: a lorry
+ * that neither fuelled nor left). It gives back what it holds — never the
+ * pump, which is not its to give — and goes. A driver holding no pump at all
+ * is the walk-up to a dead bay, which has its own rule and its own cost.
+ */
+const PUMP_STATES: VehicleState[] = ['AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT'];
+
+function dismissOrphanedAtPump(state: GameState): void {
+  for (const vehicle of Object.values(state.vehicles)) {
+    if (!PUMP_STATES.includes(vehicle.state) || !vehicle.targetPumpId) continue;
+    if (vehicle.chargingBuildingId) continue;
+    const pump = state.pumps[vehicle.targetPumpId];
+    if (pump && pump.currentVehicleId && pump.currentVehicleId !== vehicle.id) {
+      vehicle.targetPumpId = null;
+      dismissVehicle(state, vehicle);
+    }
+  }
+}
+
 function tickVehicles(
   state: GameState,
   dt: number,
@@ -5319,6 +5342,7 @@ function tickVehicles(
   mods: EventModifiers
 ): void {
   releaseOrphanedHolds(state);
+  dismissOrphanedAtPump(state);
   const vehicles = Object.values(state.vehicles);
 
   // Queue order is stable by arrival so slots do not shuffle between ticks,
