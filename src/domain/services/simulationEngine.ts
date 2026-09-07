@@ -1849,15 +1849,58 @@ function queueSlotAt(block: BlockLayout, index: number): [number, number, number
   return [raw[0], 0, clampToApron(block, raw)[2]];
 }
 
+/** Half the length of the car the queue's spacing was measured for. */
+const QUEUE_CAR_HALF_LENGTH = 0.9;
+
+/** What a body sticks out beyond a car's, at each end. */
+function queueExtra(vehicle: Pick<VehicleEntity, 'archetype' | 'modelVariant'>): number {
+  return Math.max(0, vehicleBodyHalfExtents(vehicle).length - QUEUE_CAR_HALF_LENGTH);
+}
+
+/**
+ * How far behind its standard slot the vehicle at `index` of this queue
+ * stands, in grid units.
+ *
+ * The slots are a car-length apart and the head is one car-length behind the
+ * bay — measured for a car. A bus is more than twice as long, and put on a
+ * car's slot it stood with its nose against the car being served and against
+ * the island's corner, hunting for another way in (Emre, 2026-09-07). So a
+ * long body steps back by what it is longer than a car, and everything
+ * behind it steps back by that twice over: the tail is further back, and so
+ * is the gap it leaves.
+ */
+export function queueSetback(
+  queued: Array<Pick<VehicleEntity, 'archetype' | 'modelVariant'>>,
+  index: number
+): number {
+  let setback = queueExtra(queued[index]);
+  for (let ahead = 0; ahead < index; ahead++) setback += 2 * queueExtra(queued[ahead]);
+  return setback;
+}
+
 export function queueSlotPosition(
   state: GameState,
   index: number,
-  side: DrivewaySide = 'near'
+  side: DrivewaySide = 'near',
+  setback = 0
 ): [number, number, number] {
   const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
   // Only walls: a car queueing right beside a pump island is exactly where it
   // is meant to be waiting.
   const rects = wallRects(state, block.side);
+
+  // Along the line, against the flow, by what a long body needs; held onto
+  // the lay-by, which can leave a very long vehicle short of room — the join
+  // route is what refuses it a place then.
+  const setBack = (at: [number, number, number]): [number, number, number] => [
+    clamp(
+      at[0] + Math.sign(block.queueStep) * setback,
+      block.minX + LANE_HALF_WIDTH,
+      Math.max(block.minX + LANE_HALF_WIDTH, block.maxX - LANE_HALF_WIDTH)
+    ),
+    at[1],
+    at[2]
+  ];
 
   // The lay-by is a straight line, and on a built-up forecourt part of that
   // line can be inside a shop. The queue keeps its line and steps past the
@@ -1872,12 +1915,12 @@ export function queueSlotPosition(
     const at = queueSlotAt(block, slot);
     if (!at || inRects(rects, at[0], at[2])) continue;
     last = at;
-    if (++clear === index) return at;
+    if (++clear === index) return setBack(at);
   }
 
   // Asked for a place further back than the lay-by has: the queue is capped to
   // the slots that exist, so this is the tail rather than a spot in a wall.
-  return last ?? clampToApron(block, [block.queueHeadX, 0, block.queueZ]);
+  return setBack(last ?? clampToApron(block, [block.queueHeadX, 0, block.queueZ]));
 }
 
 /**
@@ -1895,9 +1938,15 @@ function queueJoinRoute(
   vehicle: VehicleEntity,
   block: BlockLayout,
   index: number,
-  side: DrivewaySide
+  side: DrivewaySide,
+  queued: VehicleEntity[]
 ): Array<[number, number, number]> | null {
-  const slot = queueSlotPosition(state, index, side);
+  const setback = queueSetback([...queued.slice(0, index), vehicle], index);
+  const slot = queueSlotPosition(state, index, side, setback);
+  // A long body whose slot had to be held onto the lay-by has no room to
+  // stand there: it would sit on the tail of whatever is in front. No place.
+  const unheld = queueSlotPosition(state, index, side)[0] + Math.sign(block.queueStep) * setback;
+  if (Math.abs(unheld - slot[0]) > 0.01) return null;
   const behindX = clamp(
     slot[0] + block.queueStep,
     block.minX + LANE_HALF_WIDTH,
@@ -5318,7 +5367,7 @@ function tickVehicles(
           const toCharger = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           const toQueue =
             queued.length < maxQueueLength(state, block)
-              ? queueJoinRoute(state, vehicle, block, queued.length, side)
+              ? queueJoinRoute(state, vehicle, block, queued.length, side, queued)
               : null;
 
           if (point && toCharger) {
@@ -5369,7 +5418,7 @@ function tickVehicles(
         } else {
           const joining =
             queued.length < maxQueueLength(state, block)
-              ? queueJoinRoute(state, vehicle, block, queued.length, side)
+              ? queueJoinRoute(state, vehicle, block, queued.length, side, queued)
               : null;
 
           if (joining) {
@@ -5427,7 +5476,7 @@ function tickVehicles(
 
         const slot = queued.indexOf(vehicle);
         if (slot >= 0) {
-          const slotPos = queueSlotPosition(state, slot, side);
+          const slotPos = queueSlotPosition(state, slot, side, queueSetback(queued, slot));
           // Judged by where the car is ultimately headed, not by its next
           // waypoint: with something to steer round, the next waypoint is a
           // corner of the way round rather than the slot itself.
