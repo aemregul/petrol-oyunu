@@ -345,7 +345,9 @@
       "Bash(node hud_shot.mjs)",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/42bbea7a-00c9-4923-89e5-62922b14ba34/scratchpad/frustum.mjs)",
       "Bash(ps -o pid,pcpu,etime,args -p 64334,70098)",
-      "Bash(ps -eo pcpu,args)"
+      "Bash(ps -eo pcpu,args)",
+      "Bash(sed -i '' '/^\\\\/\\\\/ Trash2 stays imported/,$d' src/ui/modals/SettingsModal.tsx)",
+      "Bash(sed -i '' \"s/import { X, ArrowLeft, Trash2, Bell, LogOut, RotateCcw } from 'lucide-react';/import { X, ArrowLeft, Bell, LogOut, RotateCcw } from 'lucide-react';/\" src/ui/modals/SettingsModal.tsx)"
     ],
     "additionalDirectories": [
       "/private/tmp"

@@ -448,6 +448,8 @@ interface GameStore {
   renameStation: (name: string) => boolean;
   /** Development aid: unlocks every level-gated feature for testing. */
   devUnlockEverything: () => void;
+  /** Changes one or more player settings and keeps them in the save. */
+  updateSettings: (settings: Partial<GameState['settings']>) => void;
 
   // Fueling Actions
   openFuelingPanelForVehicle: (vehicleId: string) => void;
@@ -2752,6 +2754,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     });
 
     return true;
+  },
+
+  updateSettings: (settings) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    state.settings = { ...state.settings, ...settings };
+    SaveManager.saveGame(state);
+    set({ gameState: state });
   },
 
   updateManagerSettings: (settings) => {

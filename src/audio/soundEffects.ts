@@ -7,6 +7,8 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
   private masterGain: GainNode | null = null;
+  /** The level asked for, kept until the context exists to receive it. */
+  private volume = 0.8;
 
   private initCtx() {
     if (typeof window === 'undefined') return;
@@ -15,7 +17,7 @@ class SoundEngine {
       if (AudioCtx) {
         this.ctx = new AudioCtx();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
         this.masterGain.connect(this.ctx.destination);
       }
     }
@@ -24,10 +26,16 @@ class SoundEngine {
     }
   }
 
+  /**
+   * Remembers the level and applies it if the context is already running.
+   * Deliberately does not create the context: this is called at start-up
+   * from the save, before the player has clicked anything, and a context
+   * made then would only sit suspended until the first click resumes it.
+   */
   public setMasterVolume(vol: number) {
-    this.initCtx();
+    this.volume = Math.max(0, Math.min(1, vol));
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(Math.max(0, Math.min(1, vol)), this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
     }
   }
 

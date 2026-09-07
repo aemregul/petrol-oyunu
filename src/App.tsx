@@ -7,6 +7,7 @@ import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
 import { watchAccount } from './services/account';
+import { sounds } from './audio/soundEffects';
 import { WelcomeGate, gateIsOpen } from './ui/WelcomeGate';
 import {
   ElectricVehicleShowcase,
@@ -27,6 +28,16 @@ export const App: React.FC = () => {
   // Oturum, oyunun değil tarayıcının ömrünü yaşar: Firebase kim olduğumuzu
   // söyledikçe store'a işlenir. Yapılandırma yoksa watchAccount tek seferlik
   // null der ve bir daha ses çıkarmaz — oyun yerel kayıtla oynanır.
+  // The sound settings live in the save; the engine has to be told them at
+  // start-up and whenever they change, or a muted station comes back loud
+  // after a refresh (Emre, 2026-09-07).
+  const masterVolume = useGameStore((s) => s.gameState.settings.masterVolume);
+  const sfxVolume = useGameStore((s) => s.gameState.settings.sfxVolume);
+  useEffect(() => {
+    sounds.setMasterVolume(masterVolume);
+    sounds.toggleMute(sfxVolume <= 0);
+  }, [masterVolume, sfxVolume]);
+
   useEffect(
     () => watchAccount((profile) => useGameStore.setState({ account: profile, accountResolved: true })),
     []
