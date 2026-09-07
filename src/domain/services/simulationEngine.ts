@@ -580,7 +580,8 @@ function queueLayByZ(
   pumps: Array<{ position: [number, number]; rotation?: number }>,
   side: DrivewaySide,
   spans: Array<[number, number]>,
-  buildingSpans: Array<[number, number]>
+  /** The z-spans of the buildings standing over a given stretch of x. */
+  buildingSpansOver: (fromX: number, toX: number) => Array<[number, number]>
 ): number {
   const relevant = pumps.filter((p) => drivewaySideAt(p.position[1]) === side);
   const clearance = (z: number) =>
@@ -606,16 +607,24 @@ function queueLayByZ(
       const dir = bayApproachDir(p as { rotation?: number });
       return Math.abs(dir[1]) < 0.01 && dir[0] === flowX;
     })
-    .map((p) => p.position[1] + pumpBayOffset(p as { rotation?: number })[1])
+    .map((p) => ({
+      z: p.position[1] + pumpBayOffset(p as { rotation?: number })[1],
+      bayX: p.position[0],
+      // The head slot: one queue step behind the bay, against the flow.
+      headX: p.position[0] - flowX * LAYOUT.queueSpacing
+    }))
     .filter(
-      (z) =>
+      ({ z, bayX, headX }) =>
         (z - laneZ) * inward > 0.8 &&
         Math.abs(exitLaneZ - z) > 1.5 &&
         // Yalnızca BİNALARA bakılır: bay tanım gereği pompasına bitişiktir,
         // pompaları da sayan span listesi kendi hattını her seferinde veto
-        // ediyordu.
-        laneClearance(z, buildingSpans) > 0
-    );
+        // ediyordu. Ve yalnızca kuyruğun BAŞINDAN bay'e kadar olan parçaya:
+        // hattın kuyruğunda duran bir bina kuyruğu kısaltır, hattı iptal
+        // etmez.
+        laneClearance(z, buildingSpansOver(headX, bayX)) > 0
+    )
+    .map(({ z }) => z);
   if (frontBayLines.length > 0) {
     // Birden fazla dönük pompa: yola en yakın hat, akışın ilk karşılaştığı.
     return frontBayLines.reduce((best, z) => ((z - best) * inward < 0 ? z : best));
@@ -777,10 +786,18 @@ export function blockLayout(
   const laneZ = front + inward * frontLane;
   const exitLaneZ = front + inward * backLane;
   const laneClear = laneClearance(laneZ, padded);
-  const buildingSpans = solidSpans({ buildings: state.buildings }, side, drivenX).map(
-    ([a, b]) => [a - CAR_HALF_SPAN, b + CAR_HALF_SPAN] as [number, number]
-  );
-  const layByZ = queueLayByZ(laneZ, exitLaneZ, inward, pumps, side, padded, buildingSpans);
+  // What stands on a bay line only matters where the queue actually forms:
+  // the stretch from the head slot up to the bay. Measured over the whole
+  // driven front, a toilet in the far corner vetoed the line (Emre,
+  // 2026-09-07) — the queue moved four tenths behind it, the head car turned
+  // in at that slight angle and caught its corner on the island, and every
+  // slot behind it was inside the toilet's margin, so the queue collapsed
+  // onto one spot. A building on the tail merely shortens the queue.
+  const buildingSpansOver = (fromX: number, toX: number) =>
+    solidSpans({ buildings: state.buildings }, side, [fromX, toX]).map(
+      ([a, b]) => [a - CAR_HALF_SPAN, b + CAR_HALF_SPAN] as [number, number]
+    );
+  const layByZ = queueLayByZ(laneZ, exitLaneZ, inward, pumps, side, padded, buildingSpansOver);
 
   // The head of the queue stays BEHIND any bay that sits on the queue's own
   // line: a head beyond one is a line whose front car has to squeeze past
@@ -1360,14 +1377,8 @@ function isWedged(vehicle: VehicleEntity): boolean {
  */
 const SOLID_SHRINK = -0.15;
 
-function bodyInSolid(
-  state: GameState,
-  vehicle: VehicleEntity,
-  side: DrivewaySide,
-  x: number,
-  z: number,
-  heading: number
-): boolean {
+/** Everything on a block a car body may not enter, at solid tolerance. */
+function solidRects(state: GameState, side: DrivewaySide): PathRect[] {
   // Binalar sıfır toleransla katıdır. Küçültme payı yalnız araç dibinde
   // durulan yapılara — pompa adaları VE şarj direkleri: bay'e yanaşan aracın
   // santimlik sürtünmesi takılma sayılmasın. (Şarj direği bina listesinde
@@ -1392,6 +1403,28 @@ function bodyInSolid(
     rects.push(hole);
   }
   rects.push(...pumpRects(state, side, undefined, SOLID_SHRINK));
+  return rects;
+}
+
+function bodyInSolid(
+  state: GameState,
+  vehicle: VehicleEntity,
+  side: DrivewaySide,
+  x: number,
+  z: number,
+  heading: number
+): boolean {
+  return bodyInRects(solidRects(state, side), vehicle, x, z, heading);
+}
+
+/** Whether any corner of the body, posed here, falls inside one of these. */
+function bodyInRects(
+  rects: PathRect[],
+  vehicle: VehicleEntity,
+  x: number,
+  z: number,
+  heading: number
+): boolean {
   if (rects.length === 0) return false;
 
   const body = vehicleBodyHalfExtents(vehicle);
@@ -1405,6 +1438,37 @@ function bodyInSolid(
     }
   }
   return false;
+}
+
+/**
+ * Whether a car's body stays out of every solid the whole way along one
+ * straight leg, facing the way it travels. Sampled from just past the start:
+ * where the car already stands is its own business — a long body at the head
+ * of the queue may overlap an island's margin, and driving straight out of
+ * that is allowed — but nothing it would drive INTO is.
+ */
+function bodyClearAlong(
+  state: GameState,
+  vehicle: VehicleEntity,
+  side: DrivewaySide,
+  from: [number, number],
+  to: [number, number]
+): boolean {
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const length = Math.hypot(dx, dz);
+  if (length < 1e-6) return true;
+
+  const rects = solidRects(state, side);
+  if (rects.length === 0) return true;
+
+  const heading = Math.atan2(dx, dz);
+  const steps = Math.max(1, Math.ceil(length / 0.4));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    if (bodyInRects(rects, vehicle, from[0] + dx * t, from[1] + dz * t, heading)) return false;
+  }
+  return true;
 }
 
 /**
@@ -2201,7 +2265,21 @@ function approachBay(
   if (
     sideways < 0.7 &&
     ahead > 0.5 &&
-    legIsClear(walls, [vehicle.worldPosition[0], vehicle.worldPosition[2]], [bay[0], bay[2]])
+    legIsClear(walls, [vehicle.worldPosition[0], vehicle.worldPosition[2]], [bay[0], bay[2]]) &&
+    // Tek düz hamle ancak gövde yol boyunca hiçbir katıya girmiyorsa: hatta
+    // hafif açıyla yanaşan aracın ön köşesi adaya takılıyor ve araç sabrı
+    // bitene dek orada kalıyordu (Emre, 2026-09-07). Girecekse planlı
+    // yanaşma devreye girer — son iki bacağı düz olan. Tam hat üstünde
+    // (kuyruk başının olağan hali) tarama gereksiz: gövdenin yanal uzanımı
+    // bay'dekiyle aynıdır, bay sığıyorsa yol da sığar.
+    (sideways < 0.05 ||
+      bodyClearAlong(
+        state,
+        vehicle,
+        block.side,
+        [vehicle.worldPosition[0], vehicle.worldPosition[2]],
+        [bay[0], bay[2]]
+      ))
   ) {
     return [bay];
   }
