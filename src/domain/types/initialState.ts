@@ -222,7 +222,9 @@ export function createInitialGameState(): GameState {
       maxRegionalDiff: 1.0,
       autoAssignAttendants: true,
       autoMaintenanceAlert: true,
-      minHealthThreshold: 40
+      minHealthThreshold: 40,
+      autoCollectTills: true,
+      collectIntervalHours: 2
     },
     managerLogs: [],
     settings: {

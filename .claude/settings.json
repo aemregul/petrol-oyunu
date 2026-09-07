@@ -332,7 +332,17 @@
       "Bash(echo \"tsc exit=$?\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
       "Bash(NODE_PATH=/Users/emre/petrol-oyunu/node_modules node panel_shot.mjs panel)",
-      "Bash(node panel_shot.mjs panel)"
+      "Bash(node panel_shot.mjs panel)",
+      "Bash(node fleet_shot.mjs)",
+      "Bash(git -c user.name=\"Arda Emre\" -c user.email=\"ardaegul@gmail.com\" commit -q -F -)",
+      "Bash(node limo_shot.mjs limo)",
+      "Bash(node measure_models.mjs '{ *)",
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(node limo_shot.mjs sizes)",
+      "Bash(node build_shot.mjs \"Mini Market\" \"Standart Akaryakıt\")",
+      "Bash(node probe_ui.mjs)",
+      "Bash(awk '/^    [a-z_]+: \\\\{$/{t=$1} /price:/{p=$2} /unlockLevel: 1,/{print t, p}' src/config/gameConfig.ts)",
+      "Bash(node hud_shot.mjs)"
     ],
     "additionalDirectories": [
       "/private/tmp"

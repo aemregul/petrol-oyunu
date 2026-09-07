@@ -6,6 +6,7 @@ import { useGameStore } from '../store/gameStore';
 import { Html } from '@react-three/drei';
 import { VehicleModel } from './models/VehicleModel';
 import { ModelErrorBoundary } from './models/ModelErrorBoundary';
+import { GAME_CONFIG } from '../config/gameConfig';
 
 /** Shown for the frame or two before a vehicle's model finishes loading. */
 const FallbackBody: React.FC<{ color: string }> = ({ color }) => (
@@ -91,8 +92,23 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
     vehicle.state === 'ROAD_APPROACH' ||
     vehicle.state === 'QUEUE' ||
     vehicle.state === 'PUMP_RESERVED' ||
+    vehicle.state === 'TO_PARK' ||
     vehicle.state === 'EXIT';
   const isFueling = vehicle.state === 'FUELING';
+
+  // A card over a car whose driver has gone in — and it is a warning when
+  // the car is standing at a pump, because that pump is out of action until
+  // they come back.
+  const visitBuilding = vehicle.visitBuildingId ? gameState.buildings[vehicle.visitBuildingId] : null;
+  const awayLabel =
+    vehicle.state === 'VISITING' && visitBuilding
+      ? vehicle.visitor?.phase === 'TO_CAR'
+        ? 'Sürücü dönüyor'
+        : GAME_CONFIG.facilities[visitBuilding.type]?.driverAway ?? 'Sürücü içeride'
+      : vehicle.state === 'TO_PARK'
+        ? 'Park ediyor'
+        : null;
+  const holdsPump = vehicle.state === 'VISITING' && vehicle.visitMode === 'PUMP';
   const isElectric = vehicle.archetype === 'ev';
   const serviceUnit = isElectric ? 'kWh' : 'L';
   const unitPrice = gameState.pricing[vehicle.fuelType]?.playerPrice ?? 0;
@@ -151,6 +167,20 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
           />
         </Suspense>
       </ModelErrorBoundary>
+
+      {awayLabel && (
+        <Html position={[0, requestHeight, 0]} center distanceFactor={20} zIndexRange={[5, 0]}>
+          <div
+            className={`text-[11px] px-2.5 py-1 rounded-xl shadow-xl backdrop-blur font-bold whitespace-nowrap border ${
+              holdsPump
+                ? 'bg-amber-500/95 border-amber-200 text-slate-950'
+                : 'bg-black/80 border-slate-700/80 text-slate-200'
+            }`}
+          >
+            {holdsPump ? `⚠ ${awayLabel} — pompa dolu` : awayLabel}
+          </div>
+        </Html>
+      )}
 
       {/* Request bubble, only while the customer is waiting to be served */}
       {(needsService || isFueling) && (

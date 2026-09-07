@@ -254,7 +254,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
     const valid: VehicleState[] = [
       'SPAWN', 'PASSING', 'ROAD_APPROACH', 'QUEUE', 'PUMP_RESERVED', 'AT_PUMP',
-      'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'EXIT', 'DESPAWN'
+      'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'TO_PARK', 'VISITING', 'EXIT', 'DESPAWN'
     ];
 
     advance(state, 400);

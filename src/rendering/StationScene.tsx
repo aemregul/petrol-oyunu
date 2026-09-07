@@ -4,6 +4,7 @@ import { IsometricCamera } from './IsometricCamera';
 import { GroundGrid } from './GroundGrid';
 import { PumpMesh } from './PumpMesh';
 import { VehicleMesh } from './VehicleMesh';
+import { VisitorMesh } from './VisitorMesh';
 import { BuildingMesh } from './BuildingMesh';
 import { TankerTruckMesh } from './TankerTruckMesh';
 import { BuildPreviewMesh } from './BuildPreviewMesh';
@@ -172,6 +173,13 @@ export const StationScene: React.FC = () => {
         {Object.values(vehicles).map((vehicle) => (
           <VehicleMesh key={vehicle.id} vehicle={vehicle} />
         ))}
+
+        {/* Drivers on foot, between their car and a building. */}
+        {Object.values(vehicles)
+          .filter((vehicle) => vehicle.visitor)
+          .map((vehicle) => (
+            <VisitorMesh key={`walk_${vehicle.id}`} vehicle={vehicle} />
+          ))}
 
         {Object.values(buildings).map((bld) => (
           <BuildingMesh key={bld.id} building={bld} />

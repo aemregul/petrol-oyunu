@@ -1,6 +1,8 @@
 import React, { useState, useMemo, Suspense } from 'react';
+import { Html } from '@react-three/drei';
 import { BuildingEntity } from '../domain/types/gameState';
 import { useGameStore } from '../store/gameStore';
+import { isFacility } from '../domain/services/facilities';
 import { BuildingModel } from './models/BuildingModel';
 import { hasBuildingModel } from './models/buildingModels';
 import { ModelErrorBoundary } from './models/ModelErrorBoundary';
@@ -310,6 +312,51 @@ export const BuildingBody: React.FC<{ building: BuildingEntity }> = ({ building 
   );
 };
 
+/**
+ * How high over a facility its takings float, in world units: over the roof
+ * of the tall ones, just over the door of the low ones.
+ */
+const TILL_HEIGHT: Record<string, number> = {
+  hotel: 12.5,
+  restaurant: 8.6,
+  rest_complex: 9.4,
+  mini_market: 6.4,
+  cafe: 6,
+  toilet: 5
+};
+
+/**
+ * The money a facility has taken, hanging over it until the player fetches
+ * it. One click brings it in — the idle-game gesture, and the reason to keep
+ * an eye on the forecourt rather than only on the pumps.
+ */
+const TillBadge: React.FC<{ building: BuildingEntity }> = ({ building }) => {
+  const collectTill = useGameStore((s) => s.collectTill);
+  const till = Math.round(building.till ?? 0);
+  if (till <= 0) return null;
+
+  return (
+    <Html
+      position={[0, TILL_HEIGHT[building.type] ?? 6, 0]}
+      center
+      distanceFactor={22}
+      zIndexRange={[6, 0]}
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          collectTill(building.id);
+        }}
+        className="till-badge flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400 text-slate-950 font-black text-sm font-mono border-2 border-amber-200 shadow-xl shadow-amber-900/40 hover:bg-amber-300 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+        title="Kasayı topla"
+      >
+        <span className="w-4 h-4 rounded-full bg-amber-600 border border-amber-800 flex items-center justify-center text-[10px] text-amber-100">₺</span>
+        <span>{till.toLocaleString('tr-TR')}</span>
+      </button>
+    </Html>
+  );
+};
+
 export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const [hovered, setHovered] = useState(false);
   const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
@@ -369,6 +416,8 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
       onPointerOut={() => setHovered(false)}
     >
       <BuildingBody building={building} />
+
+      {isFacility(building.type) && !placing && <TillBadge building={building} />}
 
       {/* Only while rearranging does a structure show that it can be picked
           up, and it shows it as the ground it stands on rather than as a ring

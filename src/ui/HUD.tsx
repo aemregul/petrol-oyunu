@@ -8,6 +8,8 @@ import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 import { TankerStatusBar } from './TankerStatusBar';
 import { PumpPanel } from './PumpPanel';
+import { FacilityPanel } from './FacilityPanel';
+import { isFacility } from '../domain/services/facilities';
 import { CAMERA_VIEWS, type CameraViewId } from '../rendering/cameraFrame';
 import { TONE_BUTTON } from './gameStyle';
 
@@ -99,11 +101,12 @@ export const HUD: React.FC = () => {
       ? absorbedByRestComplex(gameState, drivewaySideAt(buildMode.position[1]))
       : [];
 
-  // Pumps open their own card (PumpPanel); this bar serves buildings only.
+  // Pumps open their own card (PumpPanel), and so do the buildings people
+  // walk into (FacilityPanel); this bar serves everything else.
   const selected = (() => {
     if (selectedPumpId) return null;
     const building = selectedBuildingId ? gameState.buildings[selectedBuildingId] : null;
-    if (!building) return null;
+    if (!building || isFacility(building.type)) return null;
 
     return {
       id: building.id,
@@ -489,6 +492,7 @@ export const HUD: React.FC = () => {
 
       <TankerStatusBar />
       <PumpPanel />
+      <FacilityPanel />
 
       {/* ================= BOTTOM ACTION BAR ================= */}
       <div ref={bottomBarRef} className="hud-bottom flex justify-center items-center w-full">

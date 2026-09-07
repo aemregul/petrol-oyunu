@@ -9,6 +9,11 @@ const STATE_LABELS: Record<string, { text: string; className: string }> = {
   IDLE: { text: 'Boşta', className: 'text-emerald-400' },
   RESERVED: { text: 'Müşteri geliyor', className: 'text-sky-400' },
   FUELING: { text: 'Çalışıyor', className: 'text-emerald-400' },
+  VEHICLE_ARRIVING: { text: 'Müşteri geliyor', className: 'text-sky-400' },
+  REQUEST_READY: { text: 'Müşteri bekliyor', className: 'text-amber-400' },
+  // Held after the sale too: the driver may have walked off to the shop and
+  // left the car standing in the bay.
+  PAYMENT: { text: 'Dolu', className: 'text-amber-400' },
   BROKEN: { text: 'ARIZALI', className: 'text-red-400' },
   MAINTENANCE: { text: 'Bakımda', className: 'text-amber-400' }
 };

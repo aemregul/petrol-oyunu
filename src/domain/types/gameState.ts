@@ -65,7 +65,15 @@ export type VehicleState =
   | 'REQUEST'
   | 'FUELING'
   | 'PAYMENT'
+  /**
+   * A visit the driver never got out of the car for: no room to park, so the
+   * facility earns a fraction and the car pauses a moment before leaving.
+   */
   | 'OPTIONAL_SHOP'
+  /** Driving to a bay in a car park, to walk over to a facility from there. */
+  | 'TO_PARK'
+  /** Standing still — in a park bay or at the pump — while the driver is inside a facility. */
+  | 'VISITING'
   | 'EXIT'
   | 'DESPAWN';
 
@@ -212,6 +220,26 @@ export interface VehicleEntity {
    * if the player sells that building, it is this visitor who storms off.
    */
   visitBuildingId?: string | null;
+  /**
+   * How this driver is using the facility they came for. PARK: left the car
+   * in a bay and walked. PUMP: left it standing at the pump — holding the bay
+   * for everyone behind. VIRTUAL: could not park, so the visit is booked
+   * without anyone getting out.
+   */
+  visitMode?: 'PARK' | 'PUMP' | 'VIRTUAL' | null;
+  /**
+   * Came for the toilet, the café or a bed rather than for fuel. Decided on
+   * the road, like everything else about a driver: such a car never joins the
+   * pump queue at all.
+   */
+  facilityIntent?: boolean;
+  /** The car park and bay this car is in, or on its way to. */
+  parkingBuildingId?: string | null;
+  parkingSlot?: number | null;
+  /** Backing out of a bay: the nose keeps pointing where it was. */
+  reversing?: boolean;
+  /** The driver, once they have got out of the car. */
+  visitor?: FacilityVisitor;
   /** The player wiped this customer's windscreen — service they remember. */
   windowsCleaned?: boolean;
   /** Seconds of charging still to go. */
@@ -223,6 +251,25 @@ export interface VehicleEntity {
    */
   noServiceSeconds?: number;
   shoppingIntent: boolean;
+}
+
+/**
+ * A driver on foot: out of the car, across the forecourt, into the building
+ * and back. Lives on the vehicle rather than in a collection of its own, so a
+ * car that leaves takes its driver with it and nothing is ever orphaned.
+ */
+export interface FacilityVisitor {
+  phase: 'TO_BUILDING' | 'INSIDE' | 'TO_CAR';
+  worldPosition: [number, number, number];
+  heading: number;
+  route: Array<[number, number, number]>;
+  targetWaypoint: [number, number, number] | null;
+  /** Seconds still to spend inside. */
+  insideSecondsLeft: number;
+  /** Where the car door is, so the walk back ends beside the car. */
+  carDoor: [number, number, number];
+  /** A small stable number drawn from the car, for the clothes they wear. */
+  look: number;
 }
 
 export interface EmployeeEntity {
@@ -254,6 +301,18 @@ export interface BuildingEntity {
   health: number;
   constructionState: 'CONSTRUCTING' | 'ACTIVE';
   builtAtTimestamp: number;
+  /**
+   * Money a facility has taken and nobody has come to collect. It stays in the
+   * building until the player clicks it out — or, with a manager on the
+   * payroll, until the manager does the rounds.
+   */
+  till?: number;
+  /** What the facility has taken today, collected or not. Reset each morning. */
+  todayRevenue?: number;
+  /** Visitors through the door today. */
+  todayVisits?: number;
+  /** Which price on the facility's tariff card is up: an index into its config. */
+  tariff?: number;
 }
 
 export interface FuelOrderEntity {
@@ -373,13 +432,21 @@ export interface ManagerAutomationSettings {
   autoAssignAttendants: boolean;
   autoMaintenanceAlert: boolean;
   minHealthThreshold: number;
+  /**
+   * The manager does the rounds of the facility tills. Optional because saves
+   * written before facilities had tills carry no such setting; absent reads
+   * as on, which is what hiring a manager is for.
+   */
+  autoCollectTills?: boolean;
+  /** Game hours between rounds. */
+  collectIntervalHours?: number;
 }
 
 export interface ManagerLogEntry {
   id: string;
   timestamp: number;
   gameTimeStr: string;
-  category: 'FUEL_ORDER' | 'PRICING' | 'STAFF' | 'MAINTENANCE' | 'ALERT';
+  category: 'FUEL_ORDER' | 'PRICING' | 'STAFF' | 'MAINTENANCE' | 'ALERT' | 'FINANCE';
   reason: string;
   amount?: number;
   result: 'SUCCESS' | 'SKIPPED_RESERVE' | 'FAILED';
@@ -439,7 +506,7 @@ export interface DayState {
 export interface TransactionRecord {
   id: string;
   timestamp: number;
-  type: 'FUEL_SALE' | 'FUEL_ORDER' | 'MARKET_SALE' | 'WAGE_PAYMENT' | 'UPKEEP' | 'LOAN_TAKEOUT' | 'LOAN_INSTALLMENT' | 'BUILD' | 'UPGRADE' | 'REPAIR' | 'CLEAN' | 'TUTORIAL_REWARD' | 'MISSION_REWARD' | 'REFUND';
+  type: 'FUEL_SALE' | 'FUEL_ORDER' | 'MARKET_SALE' | 'FACILITY_INCOME' | 'WAGE_PAYMENT' | 'UPKEEP' | 'LOAN_TAKEOUT' | 'LOAN_INSTALLMENT' | 'BUILD' | 'UPGRADE' | 'REPAIR' | 'CLEAN' | 'TUTORIAL_REWARD' | 'MISSION_REWARD' | 'REFUND';
   amount: number; // + for income, - for expense
   cashBefore: number;
   cashAfter: number;
@@ -520,6 +587,8 @@ export interface GameState {
      * 2 = dual carriageway; the land across the road opens up.
      */
     roadLevel: 1 | 2;
+    /** Game time of the manager's last round of the tills. */
+    lastTillCollectAt?: number;
   };
   tanks: Record<FuelType, FuelTankEntity>;
   pricing: Record<FuelType, FuelPricingState>;

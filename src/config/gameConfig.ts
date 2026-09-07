@@ -68,6 +68,54 @@ export interface BuildingUpgradeConfig {
   bonusSpeed?: number;
 }
 
+/** One price on a facility's tariff card, and what charging it does. */
+export interface FacilityTariff {
+  label: string;
+  /** What one visit pays, in TL. */
+  price: number;
+  /** How the price sways demand: 1 is the base odds. */
+  demand: number;
+  /** How much of the facility's goodwill survives the price: 1 is all of it. */
+  moral: number;
+}
+
+/**
+ * A building people walk into and pay at.
+ *
+ * These earn on their own — coins into the building's till, not the station's
+ * cash — and the player (or the manager) collects. What a visit is worth, how
+ * long it takes, and whether a driver may leave the car at the pump to make
+ * it are all data here rather than cases in the engine.
+ */
+export interface FacilityConfig {
+  /** Base odds a driver on this block wants this facility. */
+  visitChance: number;
+  /** What a visit brings in before level and tariff, in TL. Zero when the tariff sets it. */
+  avgSpend: number;
+  /** Share of a sale that is stock or running cost, for the books. */
+  costRatio: number;
+  /** How long a visitor is inside, in game seconds. */
+  visitSeconds: number;
+  /** Income multiplier by level (index = level - 1). */
+  levelIncome: number[];
+  /** Demand multiplier by level (index = level - 1); absent reads as flat. */
+  levelDemand?: number[];
+  /** What a visit still earns when nobody can park, as a share of a real one. */
+  virtualShare: number;
+  /** May a driver leave the car standing at the pump to walk over? */
+  walkFromPump: boolean;
+  tariffs?: FacilityTariff[];
+  defaultTariff?: number;
+  /** Demand multiplier in the evening and at night — a hotel's hours. */
+  nightBoost?: number;
+  /** Rooms by level; a visitor is a guest and needs one free. */
+  rooms?: number[];
+  /** Words for the card over a car whose driver has gone in. */
+  driverAway: string;
+  /** What the panel says about the place. */
+  blurb: string;
+}
+
 export interface CustomerTypeConfig {
   type: VehicleArchetype;
   name: string;
@@ -138,6 +186,8 @@ export interface GameConfig {
     }
   >;
   buildingUpgrades: Record<string, Record<number, BuildingUpgradeConfig>>;
+  /** The buildings customers walk into, keyed by catalogue type. */
+  facilities: Record<string, FacilityConfig>;
   customerTypes: Record<string, CustomerTypeConfig>;
   employees: {
     pumpAttendant: EmployeeConfig;
@@ -726,6 +776,170 @@ export const GAME_CONFIG: GameConfig = {
         cost: 15000,
         effectsDescription: 'Büyük Dijital Pylon; promosyon ışıklandırması ve yüksek görünürlük.'
       }
+    },
+    toilet: {
+      2: {
+        type: 'toilet',
+        level: 2,
+        cost: 5000,
+        effectsDescription: 'Daha fazla kabin: ziyaretçi sayısı +%30, moral etkisi +%25 artar.'
+      },
+      3: {
+        type: 'toilet',
+        level: 3,
+        cost: 12000,
+        effectsDescription: 'Engelli kabini ve bebek bakım odası: ziyaretçi +%60, moral etkisi +%50.'
+      }
+    },
+    cafe: {
+      2: {
+        type: 'cafe',
+        level: 2,
+        cost: 12000,
+        effectsDescription: 'Espresso makinesi ve vitrin: fiş başı harcama +%25 artar.'
+      },
+      3: {
+        type: 'cafe',
+        level: 3,
+        cost: 28000,
+        effectsDescription: 'Oturma alanı ve fırın: fiş başı harcama +%55 artar.'
+      }
+    },
+    restaurant: {
+      2: {
+        type: 'restaurant',
+        level: 2,
+        cost: 25000,
+        effectsDescription: 'Geniş menü ve teras: hesap başı harcama +%25 artar.'
+      },
+      3: {
+        type: 'restaurant',
+        level: 3,
+        cost: 60000,
+        effectsDescription: 'Şef mutfağı ve açık büfe: hesap başı harcama +%55 artar.'
+      }
+    },
+    hotel: {
+      2: {
+        type: 'hotel',
+        level: 2,
+        cost: 50000,
+        effectsDescription: '10 oda; yenilenen odalarla konaklama geliri +%20 artar.'
+      },
+      3: {
+        type: 'hotel',
+        level: 3,
+        cost: 120000,
+        effectsDescription: '16 oda, spa ve kahvaltı salonu; konaklama geliri +%40 artar.'
+      }
+    },
+    rest_complex: {
+      2: {
+        type: 'rest_complex',
+        level: 2,
+        cost: 90000,
+        effectsDescription: 'Tüm birimler yenilenir: ziyaret başı harcama +%25 artar.'
+      },
+      3: {
+        type: 'rest_complex',
+        level: 3,
+        cost: 200000,
+        effectsDescription: 'Bölgenin en büyük tesisi: ziyaret başı harcama +%55 artar.'
+      }
+    }
+  },
+  /**
+   * What a customer does inside each of these, and what it costs them.
+   *
+   * The odds are per driver on the block, before the tariff and the hour have
+   * their say; a driver wants at most one of them per visit. Times are game
+   * seconds — a game hour is ten of them, so a hotel guest's forty-five is
+   * most of an evening, and the bay their car takes up is the price of that.
+   */
+  facilities: {
+    toilet: {
+      visitChance: 0.22,
+      avgSpend: 0,
+      costRatio: 0.1,
+      visitSeconds: 5,
+      levelIncome: [1, 1, 1],
+      levelDemand: [1, 1.3, 1.6],
+      virtualShare: 0.3,
+      walkFromPump: true,
+      tariffs: [
+        { label: 'Ücretsiz', price: 0, demand: 1, moral: 1 },
+        { label: '₺5', price: 5, demand: 0.8, moral: 0.5 },
+        { label: '₺10', price: 10, demand: 0.6, moral: 0 }
+      ],
+      defaultTariff: 0,
+      driverAway: "Sürücü WC'ye gitti",
+      blurb: 'Yol yorgunları için. Ücret koyarsan gelir gelir ama memnuniyet biraz düşer.'
+    },
+    mini_market: {
+      // The odds and the basket come from the driver — a family fills a
+      // trolley where a courier grabs a coffee — so these are only the
+      // fallback for an archetype the table does not know.
+      visitChance: 0.18,
+      avgSpend: 120,
+      costRatio: 0.65,
+      visitSeconds: 8,
+      levelIncome: [1, 1.2, 1.45],
+      virtualShare: 0.35,
+      walkFromPump: true,
+      driverAway: 'Sürücü markete gitti',
+      blurb: 'Yakıt alan ve park eden müşterilere sepet satışı. Raflar her sabah dolar.'
+    },
+    cafe: {
+      visitChance: 0.16,
+      avgSpend: 95,
+      costRatio: 0.45,
+      visitSeconds: 9,
+      levelIncome: [1, 1.25, 1.55],
+      virtualShare: 0.35,
+      walkFromPump: true,
+      driverAway: 'Sürücü kahveciye gitti',
+      blurb: 'Yol kahvesi ve atıştırmalık. Park yeri olan istasyonda çok daha fazla müşteri uğrar.'
+    },
+    restaurant: {
+      visitChance: 0.12,
+      avgSpend: 240,
+      costRatio: 0.5,
+      visitSeconds: 16,
+      levelIncome: [1, 1.25, 1.55],
+      virtualShare: 0.3,
+      walkFromPump: true,
+      driverAway: 'Sürücü restorana gitti',
+      blurb: 'Oturmalı yol restoranı; müşteri uzun kalır, hesap büyük gelir.'
+    },
+    hotel: {
+      visitChance: 0.05,
+      avgSpend: 0,
+      costRatio: 0.3,
+      visitSeconds: 45,
+      levelIncome: [1, 1.2, 1.4],
+      virtualShare: 0.25,
+      walkFromPump: false,
+      tariffs: [
+        { label: 'Ekonomik', price: 900, demand: 1.3, moral: 0.6 },
+        { label: 'Standart', price: 1400, demand: 1, moral: 1 },
+        { label: 'Lüks', price: 2100, demand: 0.65, moral: 1.3 }
+      ],
+      defaultTariff: 1,
+      nightBoost: 2.2,
+      rooms: [6, 10, 16],
+      driverAway: 'Sürücü otele yerleşti',
+      blurb: 'Uzun yol yolcuları için konaklama. Akşam saatlerinde dolar; her misafir bir oda ve bir park yeri tutar.'
+    },
+    rest_complex: {
+      visitChance: 0.3,
+      avgSpend: 430,
+      costRatio: 0.5,
+      visitSeconds: 12,
+      levelIncome: [1, 1.25, 1.55],
+      virtualShare: 0.35,
+      walkFromPump: true,
+      driverAway: 'Sürücü tesise gitti',
+      blurb: 'Market, restoran, kahveci ve WC tek çatı altında; her ziyaret büyük hesap yazar.'
     }
   },
   customerTypes: {

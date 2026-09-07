@@ -35,9 +35,26 @@ import {
   pumpRects,
   legIsClear,
   inRects,
+  detour,
+  straighten,
   FLAT_TYPES,
   Rect as PathRect
 } from './pathfinding';
+import {
+  facilityConfig,
+  isFacility,
+  facilityTariff,
+  facilityMoralFactor,
+  facilityLevelDemand,
+  facilityRooms,
+  facilityDoor,
+  facilitySpend,
+  creditFacility,
+  collectAllTills,
+  parkingBay,
+  parkingBayCount,
+  parkingTypeFor
+} from './facilities';
 import {
   GAME_EVENTS,
   GameEventConfig,
@@ -2332,14 +2349,37 @@ function offWalls(
  * simply goes, rather than going through the wall in front of everybody.
  */
 function sendAway(state: GameState, vehicle: VehicleEntity): void {
-  const route = exitRoute(state, vehicle);
+  // A car standing in a park bay backs out to the spot it turned in from
+  // before it goes anywhere: the kerb is in front of it, and a route drawn
+  // from the bay itself would drive straight over it. The bay is given up
+  // here, not on arrival at the road — the next driver may have it.
+  const backOut = parkedBackOut(state, vehicle);
+  vehicle.parkingBuildingId = null;
+  vehicle.parkingSlot = null;
+
+  const route = backOut
+    ? exitRoute(state, { ...vehicle, worldPosition: backOut })
+    : exitRoute(state, vehicle);
   if (route === null) {
     setVehicleState(vehicle, 'DESPAWN');
     return;
   }
 
   setVehicleState(vehicle, 'EXIT');
-  setRoute(vehicle, route);
+  setRoute(vehicle, backOut ? [backOut, ...route] : route);
+  vehicle.reversing = !!backOut;
+}
+
+/**
+ * The point behind its bay a parked car reverses to, or null for a car that
+ * is not actually standing in one — a car still on its way to the bay leaves
+ * from wherever it is, nose first like anyone else.
+ */
+function parkedBackOut(state: GameState, vehicle: VehicleEntity): [number, number, number] | null {
+  if (!inParkingBay(state, vehicle)) return null;
+  const park = state.buildings[vehicle.parkingBuildingId!];
+  const bay = parkingBay(park, vehicle.parkingSlot!, vehicleBodyHalfExtents(vehicle));
+  return clampLaneToApron(blockFor(state, vehicle), bay.runUp);
 }
 
 /** Pump -> return lane -> exit driveway -> off down the highway. */
@@ -2547,8 +2587,9 @@ function driveToward(vehicle: VehicleEntity, deltaSeconds: number): boolean {
     const dz = target[2] - z;
     const distance = Math.hypot(dx, dz);
 
-    if (distance > 0.001) {
-      // Face the way we are going; the mesh reads this straight off.
+    if (distance > 0.001 && !vehicle.reversing) {
+      // Face the way we are going; the mesh reads this straight off. A car
+      // backing out of a bay keeps its nose where it was.
       vehicle.heading = Math.atan2(dx, dz);
     }
 
@@ -2558,8 +2599,10 @@ function driveToward(vehicle: VehicleEntity, deltaSeconds: number): boolean {
       return false;
     }
 
-    // Reached this waypoint; spend what is left on the next leg.
+    // Reached this waypoint; spend what is left on the next leg. Reversing
+    // only ever lasts one leg: out of the bay, then forward like anyone.
     vehicle.worldPosition = [target[0], y, target[2]];
+    vehicle.reversing = false;
     budget -= distance;
 
     const next = vehicle.route.shift();
@@ -3038,7 +3081,9 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
 
   vehicle.chargingBuildingId = null;
   vehicle.chargeSecondsLeft = 0;
-  sendAway(state, vehicle);
+  // A charger is not a pump, so there is no bay to hold: the driver either
+  // moves the car to the park or has the visit booked from the road.
+  afterService(state, vehicle, null, effects);
 }
 
 /**
@@ -3145,30 +3190,17 @@ export function finalizeSale(
     100
   );
 
-  const conf = GAME_CONFIG.customerTypes[vehicle.archetype];
-  vehicle.shoppingIntent =
-    state.market.active &&
-    state.market.stock > 0 &&
-    Math.random() < (conf ? conf.marketBaseProbability : 0.2);
-
   let xpEarned = 20;
   if (serviceScore >= 85) xpEarned += 5;
   state.player.xp += xpEarned;
   applyLevelProgression(state, effects);
 
   const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
-  if (pump) releasePump(pump);
   vehicle.assignedActor = null;
-  vehicle.targetPumpId = null;
 
-  // PAYMENT -> OPTIONAL_SHOP -> EXIT, or straight out when not shopping.
-  if (vehicle.shoppingIntent) {
-    setVehicleState(vehicle, 'OPTIONAL_SHOP');
-    vehicle.waitingTimeSeconds = 0;
-    vehicle.visitBuildingId = pickVisitBuilding(state, vehicleSide(vehicle));
-  } else {
-    sendAway(state, vehicle);
-  }
+  // Paid up. Whether the driver now goes in for a coffee, and how, is the
+  // facilities' decision — and it is the same decision for a car that charged.
+  afterService(state, vehicle, pump, effects);
 
   trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
   trackMissionMetric(state, 'FUEL_LITERS_SOLD', dispensed, effects);
@@ -3177,56 +3209,531 @@ export function finalizeSale(
   if (served >= 1) playCue(effects, 'cash');
 }
 
+/* ------------------------------------------------------------------ */
+/* Facilities: the buildings people walk into                          */
+/* ------------------------------------------------------------------ */
+
 /**
- * Which of the side's facilities this customer walks into.
- *
- * Revenue is billed in aggregate, but a customer is one person inside one
- * building — and when the player sells that building out from under them, it
- * is that building's visitor who leaves unserved. Weighted by the same service
- * odds the till uses, so the busy facilities hold the most customers.
+ * How often a driver who bought fuel leaves the car standing at the pump to
+ * walk over, rather than moving it to the park first. Rare on purpose: it is
+ * the mechanic that holds a bay hostage and nudges the player toward another
+ * pump, and it would be a nuisance rather than a nudge if it were common.
  */
-function pickVisitBuilding(state: GameState, side: DrivewaySide): string | null {
-  const weight = (type: string) =>
-    GAME_CONFIG.buildingEffects[type]?.service?.chance ??
-    (type === 'mini_market' || type === 'toilet' ? 0.2 : 0);
+export const PUMP_WALK_SHARE = 0.3;
 
-  const candidates = Object.values(state.buildings).filter(
-    (b) => drivewaySideAt(b.position[1]) === side && weight(b.type) > 0
-  );
-  if (candidates.length === 0) return null;
+/** How fast a driver walks, in grid units per game second. */
+const WALK_SPEED = 1.15;
 
-  let roll = Math.random() * candidates.reduce((sum, b) => sum + weight(b.type), 0);
-  for (const b of candidates) {
-    roll -= weight(b.type);
-    if (roll <= 0) return b.id;
-  }
-  return candidates[candidates.length - 1].id;
+/**
+ * How long a car may stand in a bay or at a pump on a visit before it is sent
+ * on regardless. A safety valve, well past the longest stay a facility asks
+ * for; it is never the thing that ends an ordinary visit.
+ */
+const VISIT_TIMEOUT_SECONDS = 150;
+
+/** How long a car pauses on a visit nobody got out for. */
+const VIRTUAL_VISIT_SECONDS = 6;
+
+/** Hours a hotel counts as evening: from six until two in the morning. */
+function isHotelHour(state: GameState): boolean {
+  const hour = hourOfDay(state.dayState.gameTime);
+  return hour >= 18 || hour < 2;
 }
 
-/** Rings up the mini-market basket for a customer leaving the shop. */
-function completeMarketVisit(
+/** Guests in the hotel right now: cars parked or paused on a visit to it. */
+function facilityOccupancy(state: GameState, buildingId: string): number {
+  return Object.values(state.vehicles).filter(
+    (v) =>
+      v.visitBuildingId === buildingId &&
+      (v.state === 'TO_PARK' || v.state === 'VISITING' || v.state === 'OPTIONAL_SHOP')
+  ).length;
+}
+
+/**
+ * The odds this driver wants this building, before anyone rolls a die:
+ * the catalogue figure, moved by the price on the card, the building's level,
+ * and — for a hotel — the hour.
+ */
+function facilityDraw(state: GameState, building: BuildingEntity, archetype: VehicleArchetype): number {
+  const conf = facilityConfig(building.type);
+  if (!conf || building.constructionState !== 'ACTIVE') return 0;
+
+  // A shop that has not opened its doors sells nothing. Bare shelves are not
+  // the same thing: the shelf count is a day's bookkeeping, and a customer
+  // who walks in is still served — that is how the shop has always behaved.
+  if (building.type === 'mini_market' && !state.market.active) return 0;
+  // A full hotel turns guests away at the desk.
+  if (conf.rooms && facilityOccupancy(state, building.id) >= facilityRooms(building)) return 0;
+
+  const base =
+    building.type === 'mini_market'
+      ? GAME_CONFIG.customerTypes[archetype]?.marketBaseProbability ?? conf.visitChance
+      : conf.visitChance;
+  const tariff = facilityTariff(building)?.demand ?? 1;
+  const hour = conf.nightBoost ? (isHotelHour(state) ? conf.nightBoost : 0.5) : 1;
+
+  return base * tariff * facilityLevelDemand(building) * hour;
+}
+
+/** Every open facility on this block. */
+function facilitiesOn(state: GameState, side: DrivewaySide): BuildingEntity[] {
+  return Object.values(state.buildings).filter(
+    (b) => isFacility(b.type) && drivewaySideAt(b.position[1]) === side
+  );
+}
+
+/**
+ * Which facility, if any, this driver goes into.
+ *
+ * One roll for whether they go in at all — the odds of the block's buildings
+ * added up, capped so a forecourt lined with shops still lets some drivers
+ * simply leave — and then a weighted pick among them. A driver who turned in
+ * FOR the buildings skips the first roll: they are going in somewhere.
+ */
+export function pickFacility(
+  state: GameState,
+  side: DrivewaySide,
+  archetype: VehicleArchetype,
+  cameForOne = false
+): BuildingEntity | null {
+  const candidates = facilitiesOn(state, side)
+    .map((b) => ({ b, weight: facilityDraw(state, b, archetype) }))
+    .filter((c) => c.weight > 0);
+  if (candidates.length === 0) return null;
+
+  const total = candidates.reduce((sum, c) => sum + c.weight, 0);
+  if (!cameForOne && Math.random() >= Math.min(0.85, total)) return null;
+
+  let roll = Math.random() * total;
+  for (const c of candidates) {
+    roll -= c.weight;
+    if (roll <= 0) return c.b;
+  }
+  return candidates[candidates.length - 1].b;
+}
+
+/**
+ * How many of the drivers who stop here came for a facility and nothing else.
+ *
+ * Follows what there is to come for: a toilet on its own draws a few, a row
+ * of shops draws many. Without somewhere to park, most of them keep driving —
+ * a coffee is not worth blocking a pump for, and the driver knows it from the
+ * road. With no pumps at all, everyone who stops is here for the buildings.
+ */
+export function facilityOnlyShare(state: GameState, side: DrivewaySide): number {
+  const facilities = facilitiesOn(state, side);
+  if (facilities.length === 0) return 0;
+  if (!blockHasPumps(state, side)) return 1;
+
+  const draw = facilities.reduce((sum, b) => sum + facilityDraw(state, b, 'commuter'), 0);
+  const parking = Object.values(state.buildings).some(
+    (b) => (b.type === 'car_park' || b.type === 'truck_park') && drivewaySideAt(b.position[1]) === side
+  );
+  return Math.min(0.5, draw * 0.8) * (parking ? 1 : 0.4);
+}
+
+/** What this visit brings in, with the day's luck rolled for an open bill. */
+function rollFacilitySpend(building: BuildingEntity, vehicle: VehicleEntity): number {
+  const base = facilitySpend(building, vehicle.archetype);
+  if (base <= 0) return 0;
+  // A price on the card is the price; a bill has a little give in it.
+  const luck = facilityTariff(building) ? 1 : 0.8 + Math.random() * 0.4;
+  return Math.round(base * luck);
+}
+
+/**
+ * The visit itself, booked: the shelf is emptied by one, the till fills, the
+ * day's figures move. Nothing reaches the station's cash until somebody
+ * collects.
+ */
+function bookVisit(
+  state: GameState,
+  building: BuildingEntity,
+  vehicle: VehicleEntity,
+  share: number,
+  effects: SimEffects
+): number {
+  if (building.type === 'mini_market' || building.type === 'rest_complex') {
+    if (state.market.stock > 0) state.market.stock -= 1;
+    trackMissionMetric(state, 'MARKET_SALES', 1, effects);
+  }
+  building.todayVisits = (building.todayVisits ?? 0) + 1;
+
+  const amount = Math.round(rollFacilitySpend(building, vehicle) * share);
+  creditFacility(state, building, amount);
+  return amount;
+}
+
+/**
+ * A route on foot from one point to another: straight when nothing is in the
+ * way, round the buildings and islands when something is. People need far
+ * less room than cars, so the walls are barely grown.
+ */
+function walkRoute(
+  state: GameState,
+  block: BlockLayout,
+  from: [number, number, number],
+  to: [number, number, number],
+  ignoreBuildingId?: string
+): Array<[number, number, number]> {
+  const rects = [
+    ...wallRects(state, block.side, 0.3, ignoreBuildingId),
+    ...pumpRects(state, block.side, undefined, 0.3)
+  ];
+  const a: [number, number] = [from[0], from[2]];
+  const b: [number, number] = [to[0], to[2]];
+  if (legIsClear(rects, a, b)) return [to];
+
+  const bounds = { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ };
+  const path = detour(rects, a, b, bounds);
+  if (!path) return [to];
+
+  const out: Array<[number, number, number]> = [];
+  for (const [x, z] of straighten(rects, a, path)) {
+    if (Math.hypot(x - b[0], z - b[1]) < 0.5) continue;
+    out.push([x, 0, z]);
+  }
+  out.push(to);
+  return out;
+}
+
+/** Where the driver's door is: beside the car, on its left. */
+function carDoor(vehicle: VehicleEntity): [number, number, number] {
+  const body = vehicleBodyHalfExtents(vehicle);
+  const side = body.width + 0.35;
+  return [
+    vehicle.worldPosition[0] + Math.cos(vehicle.heading) * side,
+    0,
+    vehicle.worldPosition[2] - Math.sin(vehicle.heading) * side
+  ];
+}
+
+/** The driver gets out and sets off for the building. */
+function spawnVisitor(state: GameState, vehicle: VehicleEntity, building: BuildingEntity): void {
+  const block = blockFor(state, vehicle);
+  const door = carDoor(vehicle);
+  const route = walkRoute(state, block, door, facilityDoor(building), building.id);
+
+  let look = 0;
+  for (const char of vehicle.id) look = (look * 31 + char.charCodeAt(0)) | 0;
+
+  vehicle.visitor = {
+    phase: 'TO_BUILDING',
+    worldPosition: [door[0], 0, door[2]],
+    heading: vehicle.heading,
+    route: route.slice(1),
+    targetWaypoint: route[0] ?? null,
+    insideSecondsLeft: 0,
+    carDoor: door,
+    look: Math.abs(look)
+  };
+}
+
+/** Moves a walker along their route; true once the last point is reached. */
+function walkToward(
+  visitor: NonNullable<VehicleEntity['visitor']>,
+  dt: number
+): boolean {
+  let budget = WALK_SPEED * dt;
+
+  while (budget > 0) {
+    const target = visitor.targetWaypoint;
+    if (!target) return true;
+
+    const dx = target[0] - visitor.worldPosition[0];
+    const dz = target[2] - visitor.worldPosition[2];
+    const distance = Math.hypot(dx, dz);
+    if (distance > 0.001) visitor.heading = Math.atan2(dx, dz);
+
+    if (distance > budget) {
+      visitor.worldPosition = [
+        visitor.worldPosition[0] + (dx / distance) * budget,
+        0,
+        visitor.worldPosition[2] + (dz / distance) * budget
+      ];
+      return false;
+    }
+
+    visitor.worldPosition = [target[0], 0, target[2]];
+    budget -= distance;
+    const next = visitor.route.shift();
+    visitor.targetWaypoint = next ?? null;
+    if (!next) return true;
+  }
+  return false;
+}
+
+/**
+ * The driver's walk, one tick of it. Money changes hands at the door on the
+ * way in; the walk back starts when their time inside is up. True once they
+ * are back at the car.
+ */
+function advanceVisitor(
   state: GameState,
   vehicle: VehicleEntity,
+  building: BuildingEntity,
+  dt: number,
+  effects: SimEffects
+): boolean {
+  const visitor = vehicle.visitor;
+  if (!visitor) return true;
+
+  switch (visitor.phase) {
+    case 'TO_BUILDING': {
+      if (!walkToward(visitor, dt)) return false;
+      visitor.phase = 'INSIDE';
+      visitor.insideSecondsLeft = facilityConfig(building.type)?.visitSeconds ?? 6;
+      bookVisit(state, building, vehicle, 1, effects);
+      return false;
+    }
+    case 'INSIDE': {
+      visitor.insideSecondsLeft -= dt;
+      if (visitor.insideSecondsLeft > 0) return false;
+      visitor.phase = 'TO_CAR';
+      const back = walkRoute(
+        state,
+        blockFor(state, vehicle),
+        facilityDoor(building),
+        visitor.carDoor,
+        building.id
+      );
+      visitor.route = back.slice(1);
+      visitor.targetWaypoint = back[0] ?? null;
+      return false;
+    }
+    case 'TO_CAR':
+      return walkToward(visitor, dt);
+  }
+  return true;
+}
+
+/** Whether this car is standing in the bay it was given, or near enough. */
+function inParkingBay(state: GameState, vehicle: VehicleEntity): boolean {
+  if (!vehicle.parkingBuildingId || vehicle.parkingSlot == null) return false;
+  const park = state.buildings[vehicle.parkingBuildingId];
+  if (!park) return false;
+  const bay = parkingBay(park, vehicle.parkingSlot, vehicleBodyHalfExtents(vehicle));
+  return (
+    Math.hypot(vehicle.worldPosition[0] - bay.pose[0], vehicle.worldPosition[2] - bay.pose[2]) < 0.6
+  );
+}
+
+/**
+ * A free bay in a park on this block that the car can actually drive to,
+ * nearest first. Null when every bay is taken, walled off, or there is no
+ * park of the right kind at all.
+ */
+function findParkingBay(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout
+): {
+  buildingId: string;
+  slot: number;
+  route: Array<[number, number, number]>;
+} | null {
+  const kind = parkingTypeFor(vehicle);
+  const body = vehicleBodyHalfExtents(vehicle);
+  const walls = wallRects(state, block.side, 0);
+
+  const taken = new Set<string>();
+  for (const other of Object.values(state.vehicles)) {
+    if (other.id !== vehicle.id && other.parkingBuildingId && other.parkingSlot != null) {
+      taken.add(`${other.parkingBuildingId}:${other.parkingSlot}`);
+    }
+  }
+
+  const options: Array<{ buildingId: string; slot: number; distance: number }> = [];
+  for (const park of Object.values(state.buildings)) {
+    if (park.type !== kind || drivewaySideAt(park.position[1]) !== block.side) continue;
+    const count = parkingBayCount(park);
+    for (let slot = 0; slot < count; slot++) {
+      if (taken.has(`${park.id}:${slot}`)) continue;
+      const bay = parkingBay(park, slot, body);
+      options.push({
+        buildingId: park.id,
+        slot,
+        distance: Math.hypot(
+          bay.pose[0] - vehicle.worldPosition[0],
+          bay.pose[2] - vehicle.worldPosition[2]
+        )
+      });
+    }
+  }
+  options.sort((a, b) => a.distance - b.distance);
+
+  // A car standing at a pump rolls clear of the island nose first, and the
+  // rest of the way is planned from THERE. Planned from the bay itself, the
+  // planner excuses the island the car stands in — it has to, or the car
+  // could never set off — and then draws the whole route through it.
+  const rollOut = bayRollOut(state, block, vehicle);
+  const planner = rollOut ? { ...vehicle, worldPosition: rollOut } : vehicle;
+
+  for (const option of options) {
+    const park = state.buildings[option.buildingId];
+    const bay = parkingBay(park, option.slot, body);
+    const runUp = clampLaneToApron(block, bay.runUp);
+    // The spot behind the bay is where the car turns in from; a building
+    // standing on it makes the bay a bay nobody can use.
+    if (inRects(walls, runUp[0], runUp[2])) continue;
+
+    const legs = parkApproachLegs(state, block, runUp, bay.pose);
+    const route = driveable(state, planner, block, legs);
+    if (route) {
+      return {
+        buildingId: option.buildingId,
+        slot: option.slot,
+        route: rollOut ? [rollOut, ...route] : route
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * The way into a bay from wherever the planning starts: along the front lane
+ * to a point behind the park, and in. The last leg is straight so the car
+ * stops square in its lines.
+ */
+function parkApproachLegs(
+  state: GameState,
+  block: BlockLayout,
+  runUp: [number, number, number],
+  pose: [number, number, number]
+): Array<[number, number, number]> {
+  const legs: Array<[number, number, number]> = [];
+  if (Math.abs(runUp[2] - block.laneZ) > 1) {
+    legs.push(offWalls(state, block, clampToApron(block, [runUp[0], 0, block.laneZ])));
+  }
+  legs.push(runUp, pose);
+  return legs;
+}
+
+/**
+ * Where a car standing at a pump gets to by rolling straight out of the bay,
+ * nose first, until it is clear of the island's margin — or null when it is
+ * not at a bay, or something stands in the way of rolling out at all.
+ */
+function bayRollOut(
+  state: GameState,
+  block: BlockLayout,
+  vehicle: VehicleEntity
+): [number, number, number] | null {
+  const bay = standingAtBay(state, block, vehicle);
+  if (!bay) return null;
+
+  const walls = [...wallRects(state, block.side, 0), ...pumpRects(state, block.side, undefined, 0)];
+  const islands = pumpRects(state, block.side);
+  const from: [number, number] = [vehicle.worldPosition[0], vehicle.worldPosition[2]];
+
+  for (const run of [2.4, 3.2, 4, 4.8]) {
+    const point = clampLaneToApron(block, [
+      vehicle.worldPosition[0] + bay.dir[0] * run,
+      0,
+      vehicle.worldPosition[2] + bay.dir[1] * run
+    ]);
+    // Through a wall, or into the next island: no rolling out this way.
+    if (!legIsClear(walls, from, [point[0], point[2]])) return null;
+    if (!inRects(islands, point[0], point[2])) return point;
+  }
+  return null;
+}
+
+/**
+ * The pump bay this car is standing in, if it is in one: which face of the
+ * island, and the way its nose points. Leaving a bay is done nose first
+ * whatever comes after, or the tail sweeps through the island.
+ */
+function standingAtBay(
+  state: GameState,
+  block: BlockLayout,
+  vehicle: VehicleEntity
+): { kind: 'front' | 'other'; dir: [number, number] } | null {
+  const inward = block.side === 'far' ? -1 : 1;
+  for (const pump of Object.values(state.pumps)) {
+    if (pumpSide(pump) !== block.side) continue;
+    const bay = pumpBay(block, pump, vehicle);
+    if (Math.hypot(vehicle.worldPosition[0] - bay[0], vehicle.worldPosition[2] - bay[2]) >= 1) {
+      continue;
+    }
+    return {
+      kind: (pump.position[1] - bay[2]) * inward > 0 ? 'front' : 'other',
+      dir: bayApproachDir(pump)
+    };
+  }
+  return null;
+}
+
+/**
+ * What a driver does once they are served — or once they have arrived, if
+ * they came for the buildings rather than the pumps.
+ *
+ * Three ways in. Most drivers who want a facility move the car to a park bay
+ * and walk from there. A few leave it where it stands at the pump and hold
+ * the bay for the duration. And a driver who wants the facility but finds
+ * nowhere to park has the visit booked at a fraction without getting out —
+ * the building still earns something, the player is told what a park would
+ * be worth. The pump is released on every path but the one that keeps it.
+ */
+function afterService(
+  state: GameState,
+  vehicle: VehicleEntity,
+  pump: PumpEntity | null,
   effects: SimEffects
 ): void {
-  const conf = GAME_CONFIG.customerTypes[vehicle.archetype];
-  const marketBuilding = Object.values(state.buildings).find((b) => b.type === 'mini_market');
-  const levelBonus = marketBuilding
-    ? [1, 1, 1.2, 1.45][Math.min(3, marketBuilding.level)] || 1
-    : 1;
+  const side = vehicleSide(vehicle);
+  const building = pickFacility(state, side, vehicle.archetype, !!vehicle.facilityIntent);
 
-  const basket = Math.round((conf ? conf.marketAvgBasket : 120) * levelBonus);
-  state.market.stock = Math.max(0, state.market.stock - 1);
-  state.dayState.todayStats.marketRevenue += basket;
-  state.dayState.todayStats.marketCost += basket * 0.65;
+  if (!building) {
+    if (pump) releasePump(pump);
+    vehicle.targetPumpId = null;
+    vehicle.visitBuildingId = null;
+    vehicle.visitMode = null;
+    sendAway(state, vehicle);
+    return;
+  }
 
-  TransactionService.executeCashTransaction(state, {
-    type: 'MARKET_SALE',
-    amount: basket,
-    description: `Market satışı (${conf?.name || 'Müşteri'})`
-  });
-  trackMissionMetric(state, 'MARKET_SALES', 1, effects);
-  playCue(effects, 'cash');
+  vehicle.visitBuildingId = building.id;
+  vehicle.waitingTimeSeconds = 0;
+  vehicle.shoppingIntent = true;
+  const conf = facilityConfig(building.type)!;
+
+  if (pump && conf.walkFromPump && Math.random() < PUMP_WALK_SHARE) {
+    // The car stays put and so does the pump's claim on it.
+    vehicle.visitMode = 'PUMP';
+    setVehicleState(vehicle, 'VISITING');
+    spawnVisitor(state, vehicle, building);
+    return;
+  }
+
+  if (pump) releasePump(pump);
+  vehicle.targetPumpId = null;
+
+  const bay = findParkingBay(state, vehicle, blockFor(state, vehicle));
+  if (bay) {
+    vehicle.visitMode = 'PARK';
+    vehicle.parkingBuildingId = bay.buildingId;
+    vehicle.parkingSlot = bay.slot;
+    setVehicleState(vehicle, 'TO_PARK');
+    setRoute(vehicle, bay.route);
+    return;
+  }
+
+  vehicle.visitMode = 'VIRTUAL';
+  bookVisit(state, building, vehicle, conf.virtualShare, effects);
+  setVehicleState(vehicle, 'OPTIONAL_SHOP');
+}
+
+/** The visit is over, one way or another: the driver is back in and the car goes. */
+function endVisit(state: GameState, vehicle: VehicleEntity): void {
+  vehicle.visitor = undefined;
+  vehicle.visitBuildingId = null;
+  vehicle.visitMode = null;
+  if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {
+    releasePump(state.pumps[vehicle.targetPumpId]);
+  }
+  vehicle.targetPumpId = null;
+  sendAway(state, vehicle);
 }
 
 export function applyLevelProgression(state: GameState, effects: SimEffects): void {
@@ -3870,9 +4377,13 @@ export function blockFacilities(
 
     appeal += (effect.appeal ?? 0) * weight;
     patience += (effect.patience ?? 0) * weight;
-    satisfaction += (effect.satisfaction ?? 0) * weight;
+    // A toilet that charges for the door is a toilet people grumble about:
+    // the price on the card decides how much of the goodwill survives.
+    satisfaction += (effect.satisfaction ?? 0) * weight * facilityMoralFactor(building);
 
-    if (effect.service) {
+    // The buildings people walk into earn at their own door, into their own
+    // till, one visitor at a time — not as a side sale rung up at the pump.
+    if (effect.service && !isFacility(building.type)) {
       services.push({
         name: GAME_CONFIG.buildings[building.type]?.name ?? building.type,
         chance: effect.service.chance,
@@ -4002,13 +4513,16 @@ function blockAppeal(state: GameState, side: DrivewaySide): number {
 
   if (blockHasPumps(state, side)) return facilities;
 
-  const hasShop =
-    state.market.active &&
-    Object.values(state.buildings).some(
-      (b) => b.type === 'mini_market' && drivewaySideAt(b.position[1]) === side
-    );
+  // No pumps: the buildings are the only reason to stop. Any one people can
+  // walk into will do — a café on its own pulls drivers in as a shop does.
+  const hasFacility = Object.values(state.buildings).some(
+    (b) =>
+      isFacility(b.type) &&
+      drivewaySideAt(b.position[1]) === side &&
+      (b.type !== 'mini_market' || state.market.active)
+  );
 
-  return hasShop ? SHOP_ONLY_APPEAL * facilities : 0;
+  return hasFacility ? SHOP_ONLY_APPEAL * facilities : 0;
 }
 
 /**
@@ -4275,6 +4789,14 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     shoppingIntent: false
   };
 
+  // Not everyone who turns in wants fuel. Some are here for the toilet, the
+  // coffee or a bed for the night, and they head for the park rather than
+  // the pumps — decided now, on the road, like everything else about them.
+  // An electric driver came for the socket; the shop is an afterthought.
+  if (stops && !conf.requiresCharger && Math.random() < facilityOnlyShare(state, side)) {
+    state.vehicles[id].facilityIntent = true;
+  }
+
   // Through traffic gets its whole route up front: down the carriageway and
   // off the map. It never touches the forecourt, so nothing else has to know
   // about it beyond driving it along.
@@ -4461,6 +4983,8 @@ function loseCustomer(
   vehicle.chargingBuildingId = null;
   vehicle.chargeSecondsLeft = 0;
   vehicle.visitBuildingId = null;
+  vehicle.visitMode = null;
+  vehicle.visitor = undefined;
   vehicle.assignedActor = null;
   sendAway(state, vehicle);
 
@@ -4545,6 +5069,10 @@ export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number
 
   vehicle.assignedActor = null;
   vehicle.shoppingIntent = false;
+  // A driver inside a shop when the doors close is simply back in the car.
+  vehicle.visitor = undefined;
+  vehicle.visitBuildingId = null;
+  vehicle.visitMode = null;
   sendAway(state, vehicle);
 
   return unpaid;
@@ -4669,6 +5197,7 @@ function tickVehicles(
         const stillOnRoad = Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1;
         if (
           stillOnRoad &&
+          !vehicle.facilityIntent &&
           !findAvailablePump(state, vehicle.fuelType, mods, side) &&
           queued.length >= maxQueueLength(state, block)
         ) {
@@ -4694,6 +5223,14 @@ function tickVehicles(
         if (!reachable(state, vehicle, block, [queueSlotPosition(state, 0, side)])) {
           sendAway(state, vehicle);
           turnAway(state);
+          break;
+        }
+
+        // Here for the toilet, the café or a bed, not for fuel: straight to
+        // the park, or a visit booked from where they stand if there is none.
+        // A driver who finds nothing they want after all simply drives on.
+        if (vehicle.facilityIntent) {
+          afterService(state, vehicle, null, effects);
           break;
         }
 
@@ -4749,10 +5286,8 @@ function tickVehicles(
         } else if (!blockHasPumps(state, side)) {
           // Nothing here to fuel with, so this driver came for the shop.
           // Queueing for a pump that does not exist would only strand them.
-          vehicle.shoppingIntent = true;
-          vehicle.waitingTimeSeconds = 0;
-          setVehicleState(vehicle, 'OPTIONAL_SHOP');
-          vehicle.visitBuildingId = pickVisitBuilding(state, side);
+          vehicle.facilityIntent = true;
+          afterService(state, vehicle, null, effects);
         } else {
           const joining =
             queued.length < maxQueueLength(state, block)
@@ -4985,28 +5520,69 @@ function tickVehicles(
         // The building they are inside can be sold or carted off around them.
         // The one exception is an upgrade: a café absorbed into a rest complex
         // is still open — the coffee moves with it.
-        if (vehicle.visitBuildingId && !state.buildings[vehicle.visitBuildingId]) {
-          const complex = Object.values(state.buildings).find(
-            (b) => b.type === 'rest_complex' && drivewaySideAt(b.position[1]) === side
-          );
-          if (complex) {
-            vehicle.visitBuildingId = complex.id;
-          } else {
-            loseCustomer(
-              state,
-              vehicle,
-              'Kullandığı tesis kaldırıldı — müşteri hizmet alamadan ayrıldı.',
-              effects
-            );
-            break;
-          }
+        if (!facilityStillOpen(state, vehicle, side, effects)) break;
+
+        // The visit was booked on arrival; the pause is the driver's moment
+        // of deciding there is nowhere to leave the car, and going.
+        vehicle.waitingTimeSeconds += dt;
+        if (vehicle.waitingTimeSeconds >= VIRTUAL_VISIT_SECONDS) {
+          vehicle.visitBuildingId = null;
+          vehicle.visitMode = null;
+          sendAway(state, vehicle);
+        }
+        break;
+      }
+
+      case 'TO_PARK': {
+        if (!facilityStillOpen(state, vehicle, side, effects)) break;
+
+        // The park itself can be sold while a car is rolling up to it.
+        if (!vehicle.parkingBuildingId || !state.buildings[vehicle.parkingBuildingId]) {
+          endVisit(state, vehicle);
+          break;
+        }
+
+        if (driveInTraffic(state, vehicle, block, dt)) {
+          // Square in the lines, facing the kerb, whatever angle the last
+          // leg came in at.
+          const park = state.buildings[vehicle.parkingBuildingId];
+          vehicle.heading = parkingBay(park, vehicle.parkingSlot ?? 0, vehicleBodyHalfExtents(vehicle)).heading;
+          setVehicleState(vehicle, 'VISITING');
+          vehicle.waitingTimeSeconds = 0;
+          spawnVisitor(state, vehicle, state.buildings[vehicle.visitBuildingId!]);
+          break;
+        }
+
+        // Boxed in on the way to the bay: give the bay up and go, rather
+        // than stand in the aisle for the rest of the day.
+        if (isWedged(vehicle) || (vehicle.solidStuckSeconds ?? 0) > 20) {
+          endVisit(state, vehicle);
+        }
+        break;
+      }
+
+      case 'VISITING': {
+        if (!facilityStillOpen(state, vehicle, side, effects)) break;
+
+        // The park sold from under a parked car: the driver comes back to
+        // find it on the concrete and drives off. No penalty — nobody was
+        // left unserved, the visit already happened.
+        if (
+          vehicle.visitMode === 'PARK' &&
+          (!vehicle.parkingBuildingId || !state.buildings[vehicle.parkingBuildingId])
+        ) {
+          endVisit(state, vehicle);
+          break;
         }
 
         vehicle.waitingTimeSeconds += dt;
-        if (vehicle.waitingTimeSeconds >= 6) {
-          completeMarketVisit(state, vehicle, effects);
-          vehicle.visitBuildingId = null;
-          sendAway(state, vehicle);
+        const building = state.buildings[vehicle.visitBuildingId!];
+        if (
+          !vehicle.visitor ||
+          vehicle.waitingTimeSeconds > VISIT_TIMEOUT_SECONDS ||
+          advanceVisitor(state, vehicle, building, dt, effects)
+        ) {
+          endVisit(state, vehicle);
         }
         break;
       }
@@ -5033,6 +5609,51 @@ function tickVehicles(
       }
     }
   }
+}
+
+/**
+ * Whether the building a visiting driver is in, or headed for, is still
+ * there. Sold out from under them, they leave unserved and the station's
+ * name pays for it — unless a rest complex has gone up in its place, in which
+ * case the café they wanted is still open, under a bigger roof. False means
+ * the caller's work for this tick is done.
+ */
+function facilityStillOpen(
+  state: GameState,
+  vehicle: VehicleEntity,
+  side: DrivewaySide,
+  effects: SimEffects
+): boolean {
+  if (!vehicle.visitBuildingId || state.buildings[vehicle.visitBuildingId]) return true;
+
+  const complex = Object.values(state.buildings).find(
+    (b) => b.type === 'rest_complex' && drivewaySideAt(b.position[1]) === side
+  );
+  if (!complex) {
+    loseCustomer(
+      state,
+      vehicle,
+      'Kullandığı tesis kaldırıldı — müşteri hizmet alamadan ayrıldı.',
+      effects
+    );
+    return false;
+  }
+
+  vehicle.visitBuildingId = complex.id;
+  // A driver already on foot heads for the new door.
+  const visitor = vehicle.visitor;
+  if (visitor && visitor.phase === 'TO_BUILDING') {
+    const route = walkRoute(
+      state,
+      blockFor(state, vehicle),
+      visitor.worldPosition,
+      facilityDoor(complex),
+      complex.id
+    );
+    visitor.route = route.slice(1);
+    visitor.targetWaypoint = route[0] ?? null;
+  }
+  return true;
 }
 
 function tickEmployees(state: GameState, dt: number, effects: SimEffects): void {
@@ -5192,6 +5813,9 @@ function tickStationCondition(state: GameState, dt: number, effects: SimEffects)
   }
 }
 
+/** Game hours between the manager's rounds of the tills. */
+export const MANAGER_COLLECT_EVERY_HOURS = 2;
+
 function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects): void {
   if (!state.station.managerId) return;
   const settings = state.managerSettings;
@@ -5208,7 +5832,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
   );
 
   const logAction = (
-    category: 'FUEL_ORDER' | 'PRICING' | 'STAFF' | 'MAINTENANCE' | 'ALERT',
+    category: 'FUEL_ORDER' | 'PRICING' | 'STAFF' | 'MAINTENANCE' | 'ALERT' | 'FINANCE',
     reason: string,
     result: 'SUCCESS' | 'SKIPPED_RESERVE' | 'FAILED',
     amount?: number
@@ -5298,6 +5922,31 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       if (!pump) break;
       employee.assignedPumpId = pump.id;
       logAction('STAFF', `${employee.name} boştaki ${pump.id} pompasına atandı.`, 'SUCCESS');
+    }
+  }
+
+  // The rounds of the tills. Without a manager the player walks to each
+  // building and clicks the money out; with one, it turns up in the cash
+  // every couple of hours with a line in the log saying so.
+  if (settings.autoCollectTills ?? true) {
+    const every = settings.collectIntervalHours ?? MANAGER_COLLECT_EVERY_HOURS;
+    const now = state.dayState.gameTime;
+    const last = state.station.lastTillCollectAt;
+    if (last === undefined || now - last >= every || now < last) {
+      state.station.lastTillCollectAt = now;
+      // The first tick after hiring starts the clock rather than emptying
+      // every till at once — the rounds are rounds, not a windfall.
+      if (last !== undefined) {
+        const round = collectAllTills(state);
+        if (round.total > 0) {
+          logAction(
+            'FINANCE',
+            `${round.buildings} tesisin kasası toplandı: ₺${round.total.toLocaleString('tr-TR')}.`,
+            'SUCCESS',
+            round.total
+          );
+        }
+      }
     }
   }
 

@@ -14,14 +14,19 @@ const VALID_VEHICLE_TRANSITIONS: Record<VehicleState, VehicleState[]> = {
   // queue entirely — there is nothing on this block to queue for.
   // A driver who finds the forecourt full before committing to the mouth
   // simply carries on down the road.
-  ROAD_APPROACH: ['QUEUE', 'PUMP_RESERVED', 'OPTIONAL_SHOP', 'PASSING', 'EXIT', 'DESPAWN'],
+  ROAD_APPROACH: ['QUEUE', 'PUMP_RESERVED', 'OPTIONAL_SHOP', 'TO_PARK', 'PASSING', 'EXIT', 'DESPAWN'],
   QUEUE: ['PUMP_RESERVED', 'EXIT', 'DESPAWN'],
   PUMP_RESERVED: ['AT_PUMP', 'EXIT', 'DESPAWN'],
-  AT_PUMP: ['REQUEST', 'EXIT', 'DESPAWN'],
+  // A charged car is served where it stands, so it leaves for the shop from here.
+  AT_PUMP: ['REQUEST', 'OPTIONAL_SHOP', 'TO_PARK', 'EXIT', 'DESPAWN'],
   REQUEST: ['FUELING', 'EXIT', 'DESPAWN'],
   FUELING: ['PAYMENT', 'EXIT', 'DESPAWN'],
-  PAYMENT: ['OPTIONAL_SHOP', 'EXIT', 'DESPAWN'],
+  // Paid up: off to the park, a visit booked on the spot, or — the driver
+  // leaving the car at the pump — straight into the visit.
+  PAYMENT: ['OPTIONAL_SHOP', 'TO_PARK', 'VISITING', 'EXIT', 'DESPAWN'],
   OPTIONAL_SHOP: ['EXIT', 'DESPAWN'],
+  TO_PARK: ['VISITING', 'EXIT', 'DESPAWN'],
+  VISITING: ['EXIT', 'DESPAWN'],
   EXIT: ['DESPAWN'],
   DESPAWN: []
 };

@@ -336,6 +336,23 @@ export const StaffModal: React.FC = () => {
                 </div>
 
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span className="font-extrabold text-sm text-white">Tesis Kasalarını Topla</span>
+                    <input
+                      type="checkbox"
+                      checked={gameState.managerSettings.autoCollectTills ?? true}
+                      onChange={(e) => updateManagerSettings({ autoCollectTills: e.target.checked })}
+                      className="w-4 h-4 accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Müdür her {gameState.managerSettings.collectIntervalHours ?? 2} saatte bir WC, market,
+                    kahveci, restoran ve otelin kasasını dolaşıp parayı istasyon kasasına aktarır.
+                    Kapalıyken parayı yapıların üstündeki rozete tıklayarak sen toplarsın.
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
                   <div className="flex justify-between items-center">
                     <span className="font-extrabold text-sm text-white">Kasa Rezervi Güvencesi</span>
                     <span className="font-mono font-bold text-emerald-400">

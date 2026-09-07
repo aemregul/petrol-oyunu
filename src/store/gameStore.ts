@@ -47,6 +47,12 @@ import {
   getFootprint
 } from '../domain/services/placement';
 import {
+  collectTill as collectTillOf,
+  facilityConfig,
+  facilityTariff,
+  nextTariffIndex
+} from '../domain/services/facilities';
+import {
   stationBounds,
   ownedBounds,
   FAR_SIDE_FRONT,
@@ -235,6 +241,13 @@ function beginNewDay(state: GameState, effects: ReturnType<typeof createEffects>
 
   // Restock the mini-market shelves for the new day.
   if (state.market.active) state.market.stock = 100;
+
+  // Yesterday's takings are yesterday's; what is still in the tills stays
+  // there until somebody collects it.
+  for (const building of Object.values(state.buildings)) {
+    if (building.todayRevenue !== undefined) building.todayRevenue = 0;
+    if (building.todayVisits !== undefined) building.todayVisits = 0;
+  }
 }
 
 export type ActiveModalType =
@@ -330,6 +343,13 @@ interface GameStore {
       employeeId: string | null;
       hasCanopy?: boolean;
     };
+    /** A facility's till and price card travel with it. */
+    facility?: {
+      till?: number;
+      todayRevenue?: number;
+      todayVisits?: number;
+      tariff?: number;
+    };
   } | null;
   landMode: LandModeState;
   /**
@@ -378,6 +398,12 @@ interface GameStore {
   /** Lifts a building for a small fee and re-enters placement with it. */
   relocateStructure: (id: string) => boolean;
   upgradeBuilding: (id: string) => boolean;
+  /** Turns a building a quarter turn in place, if it still fits. */
+  rotateBuilding: (id: string) => boolean;
+  /** Empties a facility's till into the cash; returns what came out. */
+  collectTill: (id: string) => number;
+  /** Moves a facility on to the next price on its card. */
+  cycleFacilityTariff: (id: string) => boolean;
   toggleStationOpen: () => void;
   enterLandMode: () => void;
   exitLandMode: () => void;
@@ -843,7 +869,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           health: relocating.health,
           movedByPlayer: relocating.wasMoved,
           constructionState: 'ACTIVE',
-          builtAtTimestamp: Date.now()
+          builtAtTimestamp: Date.now(),
+          ...(relocating.facility ?? {})
         };
       }
 
@@ -1096,12 +1123,23 @@ export const useGameStore = create<GameStore>((set, get) => {
       // standing next to duplicates of itself.
       if (buildMode.buildingType === 'rest_complex') {
         const side = drivewaySideAt(buildMode.position[1]);
+        let absorbedTills = 0;
         for (const absorbed of absorbedByRestComplex(state, side)) {
+          absorbedTills += Math.round(state.buildings[absorbed.id]?.till ?? 0);
           delete state.buildings[absorbed.id];
+        }
+        // The buildings go, the money in them does not.
+        if (absorbedTills > 0) {
+          TransactionService.executeCashTransaction(state, {
+            type: 'FACILITY_INCOME',
+            amount: absorbedTills,
+            description: 'Tesise katılan yapıların kasaları toplandı'
+          });
         }
       }
 
       const bId = 'bld_' + Math.random().toString(36).substring(2, 7);
+      const facility = facilityConfig(buildMode.buildingType);
       state.buildings[bId] = {
         id: bId,
         type: buildMode.buildingType,
@@ -1113,7 +1151,18 @@ export const useGameStore = create<GameStore>((set, get) => {
         // Put down by hand, so the layout leaves it where it was put.
         movedByPlayer: carried ? true : undefined,
         constructionState: 'ACTIVE',
-        builtAtTimestamp: Date.now()
+        builtAtTimestamp: Date.now(),
+        // A facility opens with its card at the default price and an empty
+        // till; one that was carried here brings both along.
+        ...(facility
+          ? {
+              till: 0,
+              todayRevenue: 0,
+              todayVisits: 0,
+              tariff: facility.defaultTariff ?? 0,
+              ...(carried?.facility ?? {})
+            }
+          : {})
       };
       if (buildMode.buildingType === 'mini_market' || buildMode.buildingType === 'rest_complex') {
         // The complex carries a shop inside it, so the market keeps trading.
@@ -1244,10 +1293,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
     }
 
+    // Whatever was in the till comes out with the building.
+    const till = Math.round(building?.till ?? 0);
     TransactionService.executeCashTransaction(state, {
       type: 'REFUND',
-      amount: value,
-      description: `${name} satıldı`
+      amount: value + till,
+      description: `${name} satıldı${till > 0 ? ` (kasasındaki ₺${till} dahil)` : ''}`
     });
 
     sounds.playCashSound();
@@ -1256,7 +1307,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'INFO',
       title: 'Yapı Satıldı',
-      message: `${name} elden çıkarıldı, ${value.toLocaleString('tr-TR')} TL kasaya girdi.`
+      message: `${name} elden çıkarıldı, ${(value + till).toLocaleString('tr-TR')} TL kasaya girdi.`
     });
     if (evicted.evicted > 0) {
       get().addNotification({
@@ -1439,6 +1490,16 @@ export const useGameStore = create<GameStore>((set, get) => {
                 employeeId: pump.employeeId,
                 // The roof is bolted to the island and travels with it.
                 hasCanopy: pump.hasCanopy
+              }
+            }
+          : {}),
+        ...(building && facilityConfig(building.type)
+          ? {
+              facility: {
+                till: building.till,
+                todayRevenue: building.todayRevenue,
+                todayVisits: building.todayVisits,
+                tariff: building.tariff
               }
             }
           : {})
@@ -1847,6 +1908,72 @@ export const useGameStore = create<GameStore>((set, get) => {
     sounds.playClick();
     SaveManager.saveGame(state);
     set({ gameState: state });
+  },
+
+  /**
+   * A quarter turn on the spot. A building that is not square sweeps a
+   * different footprint when turned, so the turn is judged the way a fresh
+   * placement is — with the building itself lifted out of the way first, or
+   * it would refuse on account of colliding with itself.
+   */
+  rotateBuilding: (id) => {
+    const { gameState } = get();
+    const building = gameState.buildings[id];
+    if (!building) return false;
+    const catalog = GAME_CONFIG.buildings[building.type];
+    if (!catalog || catalog.fixed) return false;
+
+    const rotation = (((building.rotation || 0) + 90) % 360) as 0 | 90 | 180 | 270;
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    delete state.buildings[id];
+
+    const position = snapPlacement(state, building.type, building.position, rotation);
+    const placement = evaluatePlacement(state, building.type, position, rotation);
+    if (!placement.valid) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Döndürülemiyor',
+        message: placement.reason || `${catalog.name} bu yönde buraya sığmıyor.`
+      });
+      return false;
+    }
+
+    state.buildings[id] = { ...building, position, rotation, movedByPlayer: true };
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    return true;
+  },
+
+  collectTill: (id) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const amount = collectTillOf(state, id);
+    if (amount <= 0) return 0;
+
+    sounds.playCashSound();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    return amount;
+  },
+
+  cycleFacilityTariff: (id) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const building = state.buildings[id];
+    if (!building) return false;
+    const next = nextTariffIndex(building);
+    if (next === null) return false;
+
+    building.tariff = next;
+    const card = facilityTariff(building);
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Ücret Değişti',
+      message: `${GAME_CONFIG.buildings[building.type]?.name ?? 'Tesis'}: ${card?.label ?? ''}.`
+    });
+    return true;
   },
 
   addPumpFuel: (pumpId, fuel) => {
@@ -2603,6 +2730,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.station.managerId = 'manager_1';
     state.managerSettings.autoFuelOrder = true;
     state.managerSettings.autoPricing = true;
+    state.managerSettings.autoCollectTills = true;
 
     sounds.playLevelUp();
     SaveManager.saveGame(state);
