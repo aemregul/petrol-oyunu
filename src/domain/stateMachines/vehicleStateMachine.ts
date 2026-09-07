@@ -20,7 +20,9 @@ const VALID_VEHICLE_TRANSITIONS: Record<VehicleState, VehicleState[]> = {
   // A charged car is served where it stands, so it leaves for the shop from here.
   AT_PUMP: ['REQUEST', 'OPTIONAL_SHOP', 'TO_PARK', 'EXIT', 'DESPAWN'],
   REQUEST: ['FUELING', 'EXIT', 'DESPAWN'],
-  FUELING: ['PAYMENT', 'EXIT', 'DESPAWN'],
+  // A charged car settles up where it stands, so it leaves for the shop or
+  // the park straight from here.
+  FUELING: ['PAYMENT', 'OPTIONAL_SHOP', 'TO_PARK', 'EXIT', 'DESPAWN'],
   // Paid up: off to the park, a visit booked on the spot, or — the driver
   // leaving the car at the pump — straight into the visit.
   PAYMENT: ['OPTIONAL_SHOP', 'TO_PARK', 'VISITING', 'EXIT', 'DESPAWN'],

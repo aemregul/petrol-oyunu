@@ -160,9 +160,11 @@ export const WELCOME_STRUCTURES: BuildingEntity[] = [
   welcomeBuilding('wb_park', 'car_park', [14.5, 6.5], 270),
   welcomeBuilding('wb_trash', 'trash_can', [15.5, 3.5]),
 
-  // Sağ kaldırım (x=0): şarj direği kaldırıma sıfır, bay'i içe (+x) bakar;
-  // arkasında hava-su, o da kaldırıma sıfır.
-  welcomeBuilding('wb_charger', 'ev_charger_dc', [1, 5.5], 0),
+  // Sağ kaldırım (x=0): trafo kaldırıma sıfır; arkasında hava-su, o da
+  // kaldırıma sıfır. Eskiden burada bir şarj direği duruyordu; direk artık
+  // arkasında batarya bankası ister (Emre, 2026-09-07) ve bu arsada ikisine
+  // birden yer yok — elektrik hattının ilk halkası kaldı.
+  welcomeBuilding('wb_sub', 'ev_substation', [1, 6], 0),
   welcomeBuilding('wb_air', 'air_water', [0.5, 8], 0)
 ];
 

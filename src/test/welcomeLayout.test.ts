@@ -80,15 +80,13 @@ describe('the welcome-screen station', () => {
     expect(tank.minZ).toBe(office.minZ);
   });
 
-  it('sets the DC charger and the air-water unit flush against the right kerb, side by side', () => {
-    const charger = footprintOf(byType('ev_charger_dc'));
+  it('sets the substation and the air-water unit flush against the right kerb, side by side', () => {
+    const sub = footprintOf(byType('ev_substation'));
     const air = footprintOf(byType('air_water'));
-    expect(charger.minX).toBe(0);
+    expect(sub.minX).toBe(0);
     expect(air.minX).toBe(0);
     // Yan yana: biri bitince öteki başlar, arada boşluk yok.
-    expect(air.minZ === charger.maxZ || charger.minZ === air.maxZ).toBe(true);
-    // Bay'i içe bakar — kaldırıma dönük bir bay arsanın dışına düşerdi.
-    expect(byType('ev_charger_dc').rotation).toBe(0);
+    expect(air.minZ === sub.maxZ || sub.minZ === air.maxZ).toBe(true);
   });
 
   it('parks the car park against the left kerb, as far forward as the reserve allows', () => {

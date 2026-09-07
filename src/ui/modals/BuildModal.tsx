@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { GAME_CONFIG } from '../../config/gameConfig';
+import { GAME_CONFIG, BuildingCatalogItem } from '../../config/gameConfig';
+import { GameState } from '../../domain/types/gameState';
 import { X, Hammer, Lock, Milestone } from 'lucide-react';
 import { buyableParcels, parcelPrice, paveCost, parseParcelKey, LAND_BOUNDS, PARCEL } from '../../domain/services/land';
 import { sounds } from '../../audio/soundEffects';
@@ -158,6 +159,76 @@ const LandCards: React.FC<{
   );
 };
 
+type Category = 'station' | 'service' | 'energy' | 'land';
+
+const TABS: Array<{ id: Category; name: string }> = [
+  { id: 'station', name: 'İstasyon' },
+  { id: 'service', name: 'Tesisler' },
+  { id: 'energy', name: 'Enerji' },
+  { id: 'land', name: 'Arsa' }
+];
+
+/** Which tab a catalogue item lives under. */
+function categoryOf(item: BuildingCatalogItem): Category {
+  if (item.category === 'service') return 'service';
+  if (item.category === 'energy') return 'energy';
+  return 'station';
+}
+
+/**
+ * Why a catalogue item cannot be built right now, in the words the card
+ * shows in orange — or null when it can. Prerequisites are read from what
+ * stands anywhere on the station; the placement rules say the rest, block
+ * by block, when the piece is put down.
+ */
+export function catalogLock(state: GameState, item: BuildingCatalogItem): string | null {
+  const has = (type: string) => Object.values(state.buildings).some((b) => b.type === type);
+  if (state.player.level < item.unlockLevel) return `Seviye ${item.unlockLevel} gerekli`;
+  if (item.type.startsWith('tank_') && has(item.type)) return 'Zaten kurulu — yükseltin';
+  if (item.type === 'tank_expansion') {
+    const farm = Object.values(state.buildings).find((b) => b.type === 'tank_farm');
+    if (!farm || farm.level < 3) return 'Tank Sahası Sv.3 gerekli';
+  }
+  if (item.type === 'ev_storage' && !has('ev_substation')) return 'Elektrik altyapısı gerekli';
+  if ((item.type === 'ev_charger_ac' || item.type === 'ev_charger_dc') && !has('ev_storage')) {
+    return 'Enerji depolama gerekli';
+  }
+  return null;
+}
+
+/** The small coloured tag beside the size: what the thing is measured in. */
+function featureBadge(item: BuildingCatalogItem): string | null {
+  switch (item.type) {
+    case 'pump_standard':
+      return '8 L/sn';
+    case 'ev_substation':
+      return 'temel';
+    case 'ev_storage':
+      return `${GAME_CONFIG.ev.storageKwhByLevel[0]} kWh`;
+    case 'ev_charger_ac':
+      return `₺${GAME_CONFIG.ev.acPricePerKwh}/kWh`;
+    case 'ev_charger_dc':
+      return `₺${GAME_CONFIG.ev.dcPricePerKwh}/kWh`;
+    case 'hotel':
+      return `${GAME_CONFIG.facilities.hotel.rooms?.[0] ?? 6} oda`;
+    default:
+      return null;
+  }
+}
+
+/** "Sv.1" for what is upgraded in place, "#3" for what is bought again and again. */
+function cardTitle(state: GameState, item: BuildingCatalogItem): string {
+  const repeatable = ['pump_standard', 'ev_charger_ac', 'ev_charger_dc', 'car_park', 'truck_park', 'light_pole', 'trash_can', 'decoration'];
+  if (repeatable.includes(item.type)) {
+    const count = item.type === 'pump_standard'
+      ? Object.keys(state.pumps).length
+      : Object.values(state.buildings).filter((b) => b.type === item.type).length;
+    return `${item.name} #${count + 1}`;
+  }
+  if (GAME_CONFIG.buildingUpgrades[item.type]) return `${item.name} Sv.1`;
+  return item.name;
+}
+
 export const BuildModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
@@ -165,9 +236,7 @@ export const BuildModal: React.FC = () => {
   const enterLandMode = useGameStore((s) => s.enterLandMode);
   const upgradeRoad = useGameStore((s) => s.upgradeRoad);
 
-  const [category, setCategory] = useState<
-    'all' | 'pump' | 'tank' | 'structure' | 'service' | 'energy' | 'land'
-  >('all');
+  const [category, setCategory] = useState<Category>('station');
 
   const items =
     category === 'land'
@@ -175,7 +244,7 @@ export const BuildModal: React.FC = () => {
       : Object.values(GAME_CONFIG.buildings).filter(
           // Fixed infrastructure comes with the station; there is nothing to
           // choose here, only a level to raise on the thing itself.
-          (b) => !b.fixed && (category === 'all' || b.category === category)
+          (b) => !b.fixed && categoryOf(b) === category
         );
 
   const photographable = useMemo(
@@ -183,59 +252,44 @@ export const BuildModal: React.FC = () => {
     []
   );
 
-  const handleSelectBuild = (type: string) => {
-    enterBuildMode(type);
-  };
-
   const handleClose = () => {
     sounds.playClick();
     setActiveModal('NONE');
   };
 
+  const card = 'bg-[#2a2427] border border-white/10 rounded-3xl p-4 flex flex-col gap-3';
+  const badge = 'px-2 py-0.5 rounded-lg text-[11px] font-extrabold';
+
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
+    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in select-none">
       <CatalogPhotoBooth types={photographable} />
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
-        {/* Header */}
-        <div className="bg-gradient-to-b from-slate-800 to-slate-800/60 px-6 py-4 border-b-2 border-slate-700 flex justify-between items-center shrink-0">
+      <div className="bg-[#231e21] border border-white/10 rounded-[2rem] w-full max-w-4xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[88vh]">
+        <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
-            <div className="game-icon-badge !rounded-2xl w-10 h-10 !bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center">
-              <Hammer className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs uppercase font-bold text-slate-400 tracking-wider">İstasyon Geliştirme</div>
-              <div className="text-base font-extrabold text-white">İnşaat & Tesis Kataloğu</div>
-            </div>
+            <span className="w-1.5 h-8 rounded-full bg-[#d64b4b]" />
+            <span className="text-2xl font-black text-white">İnşaat & Yatırım</span>
           </div>
           <button
             onClick={handleClose}
-            className="game-btn w-8 h-8 rounded-xl bg-slate-700 border-2 border-slate-600 hover:bg-slate-600 text-slate-200 hover:text-white flex items-center justify-center"
+            className="w-11 h-11 rounded-2xl bg-[#2f292c] border border-white/10 hover:bg-[#3a3337] text-slate-200 flex items-center justify-center transition-colors"
+            aria-label="Kapat"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex border-b-2 border-slate-800 p-2.5 gap-2 bg-slate-950/40 overflow-x-auto shrink-0">
-          {[
-            { id: 'all', name: 'Tümü' },
-            { id: 'pump', name: 'Pompalar' },
-            { id: 'tank', name: 'Tanklar' },
-            { id: 'structure', name: 'Yapılar' },
-            { id: 'service', name: 'Tesis & Market' },
-            { id: 'energy', name: 'Elektrik & Şarj' },
-            { id: 'land', name: 'Arsa' }
-          ].map((tab) => (
+        <div className="px-6 pt-5 flex flex-wrap gap-2.5 shrink-0">
+          {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => {
                 sounds.playClick();
-                setCategory(tab.id as any);
+                setCategory(tab.id);
               }}
-              className={`game-btn px-4 py-2 rounded-xl font-extrabold text-xs whitespace-nowrap ${
+              className={`px-4 py-2.5 rounded-2xl text-[14px] font-extrabold border transition-all ${
                 category === tab.id
-                  ? 'bg-gradient-to-b from-amber-300 to-amber-500 border-2 border-amber-200/70 text-slate-950'
-                  : 'bg-slate-800 border-2 border-slate-700 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-[#f3ede9] text-[#231e21] border-white/40 shadow-inner'
+                  : 'bg-[#2a2427] text-slate-300 border-white/10 hover:bg-[#362f33] hover:text-white'
               }`}
             >
               {tab.name}
@@ -243,7 +297,6 @@ export const BuildModal: React.FC = () => {
           ))}
         </div>
 
-        {/* Catalog Grid */}
         <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
           {category === 'land' && (
             <LandCards
@@ -254,74 +307,48 @@ export const BuildModal: React.FC = () => {
           )}
 
           {items.map((item) => {
-            const isUnlocked = gameState.player.level >= item.unlockLevel;
+            const lock = catalogLock(gameState, item);
             const canAfford = gameState.player.cash >= item.price;
-            // One tank package per fuel; the standing one is upgraded instead.
-            const maxedOut =
-              item.type.startsWith('tank_') &&
-              Object.values(gameState.buildings).some((b) => b.type === item.type);
+            const feature = featureBadge(item);
 
             return (
-              <div
-                key={item.type}
-                className={`bg-slate-950/60 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all ${
-                  !isUnlocked
-                    ? 'border-slate-800 opacity-60'
-                    : 'border-slate-700/80 hover:border-amber-500/50'
-                }`}
-              >
-                <div className="flex flex-col gap-3">
-                  {/* What the thing actually looks like, before paying for it. */}
-                  <CatalogPreview type={item.type} />
+              <div key={item.type} className={card}>
+                {/* What the thing actually looks like, before paying for it. */}
+                <CatalogPreview type={item.type} />
 
-                  <div>
-                    <div className="flex justify-between items-baseline gap-2">
-                      <div className="font-extrabold text-sm text-white leading-tight">
-                        {item.name}
-                      </div>
-                      <div className="font-mono font-bold text-emerald-400 text-sm whitespace-nowrap">
-                        ₺{item.price.toLocaleString('tr-TR')}
-                      </div>
-                    </div>
+                <div className="font-extrabold text-sm text-white leading-tight">{cardTitle(gameState, item)}</div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <span className="px-2 py-0.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[10px] font-mono font-bold">
-                        {item.size[0]}x{item.size[1]}m
-                      </span>
-                      <span className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-mono font-bold">
-                        Bakım ₺{item.dailyUpkeep}/gün
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-slate-400 leading-relaxed mt-2">
-                      {item.description}
-                    </div>
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {feature && <span className={`${badge} bg-sky-500/20 text-sky-300`}>{feature}</span>}
+                  <span className={`${badge} bg-white/10 text-slate-300`}>{item.size[0]}×{item.size[1]}</span>
+                  {item.dailyUpkeep > 0 && (
+                    <span className={`${badge} bg-white/10 text-slate-300`}>₺{item.dailyUpkeep}/gün</span>
+                  )}
                 </div>
 
-                {maxedOut ? (
-                  <div className="w-full py-2.5 rounded-xl bg-slate-800/80 text-slate-400 text-xs font-bold flex items-center justify-center gap-1.5">
+                <div className="text-xs text-slate-400 leading-relaxed flex-1">{item.description}</div>
+
+                {lock && <div className="text-xs font-extrabold text-amber-400">{lock}</div>}
+
+                {lock ? (
+                  <div className="w-full py-3 rounded-2xl bg-[#221d20] border border-white/5 text-slate-500 text-sm font-extrabold text-center tracking-wider flex items-center justify-center gap-1.5">
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Maksimum alım sayısına ulaşıldı — tankı yükseltin</span>
+                    <span>KİLİTLİ</span>
                   </div>
-                ) : isUnlocked ? (
+                ) : (
                   <button
-                    onClick={() => handleSelectBuild(item.type)}
+                    onClick={() => enterBuildMode(item.type)}
                     disabled={!canAfford}
-                    className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                    title={canAfford ? 'İnşa et' : 'Yetersiz bakiye'}
+                    className={`w-full py-3 rounded-2xl font-extrabold text-sm border transition-all flex items-center justify-center gap-1.5 ${
                       canAfford
-                        ? 'game-btn bg-gradient-to-b from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400 border-2 border-amber-200/70 text-slate-950 shadow-lg shadow-amber-500/20'
-                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        ? 'bg-[#1f1b1d] border-white/10 hover:bg-[#332c30] text-white'
+                        : 'bg-[#221d20] border-white/5 text-slate-500 cursor-not-allowed'
                     }`}
                   >
-                    <Hammer className="w-3.5 h-3.5" />
-                    <span>{canAfford ? 'İnşa Et' : 'Yetersiz Bakiye'}</span>
+                    {!canAfford && <Hammer className="w-3.5 h-3.5" />}
+                    <span>₺{item.price.toLocaleString('tr-TR')}</span>
                   </button>
-                ) : (
-                  <div className="w-full py-2.5 rounded-xl bg-slate-800/80 text-slate-500 text-xs font-bold flex items-center justify-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Seviye {item.unlockLevel} Gerekli</span>
-                  </div>
                 )}
               </div>
             );

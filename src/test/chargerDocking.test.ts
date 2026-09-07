@@ -46,6 +46,10 @@ function probeCharger(size: [number, number], rotation: 0 | 90) {
     id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
     size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
   } as never;
+  state.buildings.bank = {
+    id: 'bank', type: 'ev_storage', level: 1, position: [9.5, 12.5], rotation: 0,
+    size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0, energyKwh: 200
+  } as never;
 
   const effects = createEffects();
   let assignedTicks = 0;

@@ -19,6 +19,8 @@ import {
   createEffects,
   runSimulationTick,
   beginFueling,
+  beginCharging,
+  energyCapacity,
   dispenseStep,
   finalizeSale,
   placeFuelOrder,
@@ -356,6 +358,8 @@ interface GameStore {
       employeeId: string | null;
       hasCanopy?: boolean;
     };
+    /** A battery bank's charge travels with it. */
+    energyKwh?: number;
     /** A facility's till and price card travel with it. */
     facility?: {
       till?: number;
@@ -454,6 +458,8 @@ interface GameStore {
   // Fueling Actions
   openFuelingPanelForVehicle: (vehicleId: string) => void;
   startVehicleFueling: (vehicleId: string, mode: 'LITERS' | 'MONEY' | 'FULL', targetValue: number) => void;
+  /** Plugs an electric customer in by hand, where no attendant is on the post. */
+  startVehicleCharging: (vehicleId: string) => boolean;
   dispenseFuelStep: (vehicleId: string, deltaSeconds: number) => boolean; // true if completed
   completeVehicleFueling: (vehicleId: string) => void;
 
@@ -887,7 +893,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           movedByPlayer: relocating.wasMoved,
           constructionState: 'ACTIVE',
           builtAtTimestamp: Date.now(),
-          ...(relocating.facility ?? {})
+          ...(relocating.facility ?? {}),
+          ...(relocating.energyKwh !== undefined ? { energyKwh: relocating.energyKwh } : {})
         };
       }
 
@@ -1179,6 +1186,11 @@ export const useGameStore = create<GameStore>((set, get) => {
               tariff: facility.defaultTariff ?? 0,
               ...(carried?.facility ?? {})
             }
+          : {}),
+        // A battery bank comes full from the yard; one that was moved keeps
+        // whatever charge it had.
+        ...(buildMode.buildingType === 'ev_storage'
+          ? { energyKwh: carried?.energyKwh ?? energyCapacity({ level: carried?.level ?? 1 }) }
           : {})
       };
       if (buildMode.buildingType === 'mini_market' || buildMode.buildingType === 'rest_complex') {
@@ -1510,6 +1522,7 @@ export const useGameStore = create<GameStore>((set, get) => {
               }
             }
           : {}),
+        ...(building?.type === 'ev_storage' ? { energyKwh: building.energyKwh } : {}),
         ...(building && facilityConfig(building.type)
           ? {
               facility: {
@@ -2381,6 +2394,15 @@ export const useGameStore = create<GameStore>((set, get) => {
     });
   },
 
+  startVehicleCharging: (vehicleId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const vehicle = state.vehicles[vehicleId];
+    if (!vehicle || !beginCharging(state, vehicle, 'PLAYER')) return false;
+    sounds.playPumpStart();
+    set({ gameState: state });
+    return true;
+  },
+
   startVehicleFueling: (vehicleId, mode, targetValue) => {
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     const vehicle = state.vehicles[vehicleId];
@@ -2556,6 +2578,11 @@ export const useGameStore = create<GameStore>((set, get) => {
       (pid) => !Object.values(gameState.employees).some((e) => e.assignedPumpId === pid && e.role === 'PUMP_ATTENDANT')
     ) || Object.keys(gameState.pumps)[0] || 'pump_1';
 
+    // A post is a pump with a plug: the same hand serves it (Emre, 2026-09-07).
+    const post = gameState.buildings[targetPumpId];
+    const isPost = !!post && (post.type === 'ev_charger_ac' || post.type === 'ev_charger_dc');
+    if (!gameState.pumps[targetPumpId] && !isPost) return false;
+
     // Zaten bu pompada birisi çalışıyorsa almaya gerek yok.
     const alreadyAssigned = Object.values(gameState.employees).some(
       (e) => e.assignedPumpId === targetPumpId && e.role === 'PUMP_ATTENDANT'
@@ -2605,8 +2632,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     get().addNotification({
       type: 'REWARD',
-      title: 'Pompacı İşe Alındı!',
-      message: `${randomName} Usta göreve başladı. Pompaya gelen araçlara otomatik hizmet verecek.`
+      title: isPost ? 'Şarjcı İşe Alındı!' : 'Pompacı İşe Alındı!',
+      message: isPost
+        ? `${randomName} Usta göreve başladı. Üniteye gelen elektrikli araçları otomatik şarj edecek.`
+        : `${randomName} Usta göreve başladı. Pompaya gelen araçlara otomatik hizmet verecek.`
     });
 
     return true;
@@ -2826,6 +2855,10 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (conf) totalUpkeep += conf.dailyUpkeep;
     }
 
+    // The grid's bill for what it fed the battery banks today.
+    const energyBill = Math.round(state.dayState.todayStats.energyCost ?? 0);
+    totalUpkeep += energyBill;
+
     let totalLoans = 0;
     for (const loan of state.loans) {
       if (loan.state !== 'ACTIVE') continue;
@@ -2866,7 +2899,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       TransactionService.executeCashTransaction(state, {
         type: 'UPKEEP',
         amount: -totalDailyExpenses,
-        description: `Gün sonu sabit giderler (Maaş: ${totalWages} TL, Bakım: ${totalUpkeep} TL, Kredi: ${totalLoans} TL)`,
+        description: `Gün sonu sabit giderler (Maaş: ${totalWages} TL, Bakım: ${totalUpkeep - energyBill} TL, Elektrik: ${energyBill} TL, Kredi: ${totalLoans} TL)`,
         allowOverdraft: true
       });
     }

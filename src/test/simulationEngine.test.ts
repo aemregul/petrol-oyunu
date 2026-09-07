@@ -1142,6 +1142,12 @@ describe('simulationEngine - highway lanes and driveways', () => {
       id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
       size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
     };
+    // Fed, but with nothing to draw from: still a bollard until a bank stands.
+    expect(chargingPoints(state, 'near')).toHaveLength(0);
+    state.buildings.bank = {
+      id: 'bank', type: 'ev_storage', level: 1, position: [9.5, 12.5], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0, energyKwh: 200
+    };
     expect(chargingPoints(state, 'near')).toHaveLength(1);
 
     // And now electric customers actually turn up and pay for a charge.
@@ -1587,6 +1593,10 @@ describe('withdrawing a service mid-visit', () => {
       id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
       size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
     };
+    state.buildings.bank = {
+      id: 'bank', type: 'ev_storage', level: 1, position: [9.5, 12.5], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0, energyKwh: 200
+    };
 
     advanceUntil(
       state,
@@ -1626,6 +1636,10 @@ describe('withdrawing a service mid-visit', () => {
     state.buildings.sub = {
       id: 'sub', type: 'ev_substation', level: 1, position: [13, 12], rotation: 0,
       size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    state.buildings.bank = {
+      id: 'bank', type: 'ev_storage', level: 1, position: [9.5, 12.5], rotation: 0,
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0, energyKwh: 200
     };
 
     advanceUntil(

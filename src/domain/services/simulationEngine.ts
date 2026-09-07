@@ -3210,8 +3210,11 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
   const fast = point?.type === 'ev_charger_dc';
   const tariff = fast ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
 
-  // The "tank" of an electric car is its battery, in kWh.
-  const kwh = vehicle.request.calculatedLiters;
+  // The "tank" of an electric car is its battery, in kWh; what went in is
+  // what is paid for.
+  const kwh = vehicle.request.dispensedLiters > 0
+    ? vehicle.request.dispensedLiters
+    : vehicle.request.calculatedLiters;
   const total = Math.round(kwh * tariff);
 
   const facilities = blockFacilities(state, vehicleSide(vehicle));
@@ -4586,7 +4589,9 @@ export function chargingPoints(
   const onSide = Object.values(state.buildings).filter(
     (b) => drivewaySideAt(b.position[1]) === side
   );
+  // A post needs the substation behind it and a bank to draw from.
   if (!onSide.some((b) => b.type === 'ev_substation')) return [];
+  if (!onSide.some((b) => b.type === 'ev_storage')) return [];
 
   return onSide
     .filter((b) => b.type === 'ev_charger_ac' || b.type === 'ev_charger_dc')
@@ -4595,6 +4600,91 @@ export function chargingPoints(
       kind: b.type === 'ev_charger_dc' ? ('dc' as const) : ('ac' as const),
       position: b.position
     }));
+}
+
+/** What a battery bank of this level holds, in kWh. */
+export function energyCapacity(building: Pick<BuildingEntity, 'level'>): number {
+  const ladder = GAME_CONFIG.ev.storageKwhByLevel;
+  return ladder[Math.min(ladder.length - 1, Math.max(0, building.level - 1))];
+}
+
+/** The battery banks on a block. */
+function energyBanks(state: GameState, side: DrivewaySide): BuildingEntity[] {
+  return Object.values(state.buildings).filter(
+    (b) => b.type === 'ev_storage' && drivewaySideAt(b.position[1]) === side
+  );
+}
+
+/** kWh in the banks on this block, all together. */
+export function energyAvailable(state: GameState, side: DrivewaySide): number {
+  return energyBanks(state, side).reduce((sum, b) => sum + (b.energyKwh ?? energyCapacity(b)), 0);
+}
+
+/** Takes up to `kwh` out of the block's banks; returns what actually came out. */
+export function drawEnergy(state: GameState, side: DrivewaySide, kwh: number): number {
+  let left = kwh;
+  for (const bank of energyBanks(state, side)) {
+    if (left <= 0) break;
+    const have = bank.energyKwh ?? energyCapacity(bank);
+    const take = Math.min(have, left);
+    bank.energyKwh = have - take;
+    left -= take;
+  }
+  return kwh - left;
+}
+
+/**
+ * The grid, trickling into the banks through the substation. Billed as it
+ * flows, into the day's figures; the money leaves with the other fixed
+ * costs at closing time, the way the wages do.
+ */
+function tickEnergy(state: GameState, dt: number): void {
+  const perSecond = GAME_CONFIG.ev.gridKwhPerHour / GAME_CONFIG.economy.realSecondsPerGameHour;
+  for (const bank of Object.values(state.buildings)) {
+    if (bank.type !== 'ev_storage') continue;
+    const capacity = energyCapacity(bank);
+    // A bank from before banks held anything comes full, like a new one.
+    if (bank.energyKwh === undefined) bank.energyKwh = capacity;
+    const side = drivewaySideAt(bank.position[1]);
+    const fed = Object.values(state.buildings).some(
+      (b) => b.type === 'ev_substation' && drivewaySideAt(b.position[1]) === side
+    );
+    if (!fed) continue;
+    const topUp = Math.min(capacity - bank.energyKwh, perSecond * dt);
+    if (topUp <= 0) continue;
+    bank.energyKwh += topUp;
+    state.dayState.todayStats.energyCost =
+      (state.dayState.todayStats.energyCost ?? 0) + topUp * GAME_CONFIG.ev.gridPricePerKwh;
+  }
+}
+
+/**
+ * Plugs a car in. Charging needs someone to start it — the attendant on the
+ * post, or the player clicking the car — the same as a pump needs someone
+ * to lift the nozzle (Emre, 2026-09-07).
+ */
+export function beginCharging(
+  state: GameState,
+  vehicle: VehicleEntity,
+  actor: 'PLAYER' | 'EMPLOYEE'
+): boolean {
+  if (!vehicle.chargingBuildingId) return false;
+  if (vehicle.state !== 'AT_PUMP' && vehicle.state !== 'REQUEST') return false;
+  if (vehicle.state === 'AT_PUMP') setVehicleState(vehicle, 'REQUEST');
+  setVehicleState(vehicle, 'FUELING');
+  vehicle.assignedActor = actor;
+  vehicle.waitingTimeSeconds = 0;
+  vehicle.request.dispensedLiters = 0;
+  return true;
+}
+
+/** Whether an attendant is on this charging post. */
+export function chargerAttendant(state: GameState, chargerId: string): EmployeeEntity | null {
+  return (
+    Object.values(state.employees).find(
+      (e) => e.role === 'PUMP_ATTENDANT' && e.assignedPumpId === chargerId
+    ) ?? null
+  );
 }
 
 /** A charging point on this block with nobody plugged into it. */
@@ -4636,7 +4726,7 @@ const GIVE_UP_SECONDS = 0.5;
 function cannotServe(state: GameState, vehicle: VehicleEntity): boolean {
   const side = vehicleSide(vehicle);
   if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
-    return chargingPoints(state, side).length === 0;
+    return chargingPoints(state, side).length === 0 || energyAvailable(state, side) < 1;
   }
 
   const tank = state.tanks[vehicle.fuelType];
@@ -4668,6 +4758,12 @@ function serviceFailureReason(
   const tank = state.tanks[vehicle.fuelType];
   const fuel = GAME_CONFIG.fuels[vehicle.fuelType]?.shortName ?? vehicle.fuelType;
 
+  if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
+    if (energyAvailable(state, side) < 1) {
+      return 'Batarya bankası boş — elektrikli müşteri şarj alamadan ayrıldı.';
+    }
+    return fallback;
+  }
   if (!blockHasWorkingPump(state, side)) {
     return 'Çalışır pompa yok — müşteri bekledi ve ayrıldı. Pompayı onarın.';
   }
@@ -5306,7 +5402,11 @@ function releaseOrphanedHolds(state: GameState): void {
       employee.currentVehicleId = null;
       employee.actionTimerSeconds = 0;
     }
-    if (employee.assignedPumpId && !state.pumps[employee.assignedPumpId]) {
+    if (
+      employee.assignedPumpId &&
+      !state.pumps[employee.assignedPumpId] &&
+      !state.buildings[employee.assignedPumpId]
+    ) {
       employee.assignedPumpId = null;
     }
   }
@@ -5671,10 +5771,10 @@ function tickVehicles(
           break;
         }
 
-        // Charging needs nobody's attention: the driver plugs in and waits —
-        // unless the post has been sold, or the substation feeding it has,
-        // which is the one thing that sends a plugged-in customer away
-        // unserved.
+        // A plugged-in car waits for somebody to start the charge — the
+        // attendant on the post, or the player — and loses patience like
+        // anyone at a pump. The post being sold, or its substation, is the
+        // one thing that sends it away at once.
         if (vehicle.chargingBuildingId) {
           if (!chargingPoints(state, side).some((p) => p.id === vehicle.chargingBuildingId)) {
             loseCustomer(
@@ -5685,8 +5785,18 @@ function tickVehicles(
             );
             break;
           }
-          vehicle.chargeSecondsLeft = (vehicle.chargeSecondsLeft ?? 0) - dt;
-          if (vehicle.chargeSecondsLeft <= 0) finalizeCharge(state, vehicle, effects);
+          if (energyAvailable(state, side) < 1) {
+            vehicle.noServiceSeconds = (vehicle.noServiceSeconds ?? 0) + dt;
+            if (vehicle.noServiceSeconds >= GIVE_UP_SECONDS) {
+              loseCustomer(state, vehicle, serviceFailureReason(state, vehicle, 'Müşteri şarj alamadan ayrıldı.'), effects);
+            }
+            break;
+          }
+          vehicle.waitingTimeSeconds += dt;
+          vehicle.patience -= dt;
+          if (vehicle.patience <= 0) {
+            loseCustomer(state, vehicle, 'Şarj için bekleyen müşteri sabrını yitirdi.', effects);
+          }
           break;
         }
 
@@ -5704,6 +5814,31 @@ function tickVehicles(
       }
 
       case 'FUELING': {
+        // A charging car draws its kWh out of the block's banks as it goes;
+        // an empty bank stalls the charge until the grid tops it up, and a
+        // driver will only sit through so much of that.
+        if (vehicle.chargingBuildingId) {
+          const point = chargingPoints(state, side).find((p) => p.id === vehicle.chargingBuildingId);
+          if (!point) {
+            loseCustomer(state, vehicle, 'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.', effects);
+            break;
+          }
+          const seconds =
+            point.kind === 'dc' ? GAME_CONFIG.ev.dcChargeSeconds : GAME_CONFIG.ev.acChargeSeconds;
+          const need = (vehicle.request.calculatedLiters / seconds) * dt;
+          const drawn = drawEnergy(state, side, need);
+          vehicle.request.dispensedLiters += drawn;
+          vehicle.chargeSecondsLeft = (vehicle.chargeSecondsLeft ?? seconds) - dt * (need > 0 ? drawn / need : 1);
+          if (drawn < need * 0.999) {
+            vehicle.patience -= dt * 0.5;
+            if (vehicle.patience <= 0) {
+              loseCustomer(state, vehicle, 'Batarya bankası boş — şarjı yarım kalan müşteri ayrıldı.', effects);
+              break;
+            }
+          }
+          if ((vehicle.chargeSecondsLeft ?? 0) <= 0) finalizeCharge(state, vehicle, effects);
+          break;
+        }
         // The player drives their own dispensing from the fueling modal.
         if (vehicle.assignedActor === 'PLAYER') vehicle.patience -= dt * 0.25;
         break;
@@ -5856,6 +5991,72 @@ function facilityStillOpen(
   return true;
 }
 
+/**
+ * An attendant on a charging post: waits by it, plugs each arriving car in
+ * after the usual moment's preparation, and counts the charge when it is
+ * done. True when the post exists and was handled here.
+ */
+function tickChargerAttendant(
+  state: GameState,
+  employee: EmployeeEntity,
+  dt: number,
+  tier: { actionDelaySeconds: number }
+): boolean {
+  const post = employee.assignedPumpId ? state.buildings[employee.assignedPumpId] : null;
+  if (!post || (post.type !== 'ev_charger_ac' && post.type !== 'ev_charger_dc')) return false;
+
+  employee.worldPosition = [post.position[0] - 0.7, 0, post.position[1] + 0.7];
+  if (employee.state === 'UNASSIGNED') setEmployeeState(employee, 'IDLE');
+
+  const vehicle = Object.values(state.vehicles).find((v) => v.chargingBuildingId === post.id) ?? null;
+  if (!vehicle) {
+    if (employee.state === 'FUELING') employee.serviceCount++;
+    if (employee.state !== 'IDLE') {
+      setEmployeeState(employee, 'RETURN_IDLE');
+      setEmployeeState(employee, 'IDLE');
+    }
+    employee.currentVehicleId = null;
+    employee.actionTimerSeconds = 0;
+    return true;
+  }
+
+  if (vehicle.assignedActor === 'PLAYER') return true;
+
+  if (vehicle.state === 'AT_PUMP' && vehicle.assignedActor === null && employee.state === 'IDLE') {
+    employee.currentVehicleId = vehicle.id;
+    setEmployeeState(employee, 'SELECT_JOB');
+    setEmployeeState(employee, 'MOVING');
+    setEmployeeState(employee, 'PREPARE');
+    employee.actionTimerSeconds = tier.actionDelaySeconds;
+    vehicle.assignedActor = 'EMPLOYEE';
+    return true;
+  }
+
+  if (employee.state === 'PREPARE') {
+    if (employee.currentVehicleId !== vehicle.id || vehicle.state !== 'AT_PUMP') {
+      employee.currentVehicleId = null;
+      employee.actionTimerSeconds = 0;
+      setEmployeeState(employee, 'IDLE');
+      return true;
+    }
+    employee.actionTimerSeconds -= dt;
+    if (employee.actionTimerSeconds <= 0) {
+      if (beginCharging(state, vehicle, 'EMPLOYEE')) {
+        setEmployeeState(employee, 'FUELING');
+      } else {
+        vehicle.assignedActor = null;
+        employee.currentVehicleId = null;
+        setEmployeeState(employee, 'IDLE');
+      }
+    }
+    return true;
+  }
+
+  // The charge runs on its own once started; the attendant stands by it
+  // and the vehicle's departure closes the job above.
+  return true;
+}
+
 function tickEmployees(state: GameState, dt: number, effects: SimEffects): void {
   for (const employee of Object.values(state.employees)) {
     if (employee.role !== 'PUMP_ATTENDANT') continue;
@@ -5871,6 +6072,8 @@ function tickEmployees(state: GameState, dt: number, effects: SimEffects): void 
 
     const pump = state.pumps[employee.assignedPumpId];
     if (!pump) {
+      // Not a pump: a charging post, perhaps. Same job, different nozzle.
+      if (tickChargerAttendant(state, employee, dt, tier)) continue;
       setEmployeeState(employee, 'UNASSIGNED');
       continue;
     }
@@ -6282,6 +6485,7 @@ export function runSimulationTick(
     tickVehicles(state, dt / vehicleSteps, effects, mods);
   }
   tickEmployees(state, dt, effects);
+  tickEnergy(state, dt);
   tickStationCondition(state, dt, effects);
   tickManagerAutomation(state, dt, effects);
 }

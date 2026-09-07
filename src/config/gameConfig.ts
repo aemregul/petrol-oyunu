@@ -233,6 +233,12 @@ export interface GameConfig {
     dcPricePerKwh: number;
     acChargeSeconds: number;
     dcChargeSeconds: number;
+    /** What a battery bank holds at each level, in kWh (index = level - 1). */
+    storageKwhByLevel: number[];
+    /** What the substation feeds into the banks, in kWh per game hour. */
+    gridKwhPerHour: number;
+    /** What the grid charges for that, in TL per kWh — billed at day end. */
+    gridPricePerKwh: number;
   };
   roadUpgrade: {
     price: number;
@@ -625,7 +631,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 250,
       size: [2, 2],
       unlockLevel: 7,
-      description: 'Trafo ve dağıtım panosu. Şarj ünitesi kurabilmenin ön koşuludur.',
+      description: 'Trafo ve dağıtım panosu. Şebekeden enerji çeker; batarya bankasının ön koşuludur.',
       icon: 'Zap'
     },
     ev_storage: {
@@ -636,7 +642,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 180,
       size: [3, 3],
       unlockLevel: 8,
-      description: 'Batarya bankası; yoğun saatlerde şarj kapasitesini destekler.',
+      description: '200 kWh batarya bankası; şarj üniteleri buradan çeker, trafo şebekeden doldurur. Elektrik altyapısı gerekir.',
       icon: 'BatteryCharging'
     },
     ev_charger_ac: {
@@ -647,7 +653,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 90,
       size: [2, 3],
       unlockLevel: 7,
-      description: 'Yavaş şarj ünitesi. Altyapı kapasitesinden pay tüketir.',
+      description: 'Yavaş şarj ünitesi. Batarya bankasından çeker; şarjcı alınabilir. Enerji depolama gerekir.',
       icon: 'Plug'
     },
     ev_charger_dc: {
@@ -658,7 +664,7 @@ export const GAME_CONFIG: GameConfig = {
       dailyUpkeep: 220,
       size: [2, 3],
       unlockLevel: 9,
-      description: 'Yüksek güçlü hızlı şarj ünitesi. Altyapıdan yüksek pay tüketir.',
+      description: 'Yüksek güçlü hızlı şarj ünitesi. Bankayı hızlı boşaltır; şarjcı alınabilir. Enerji depolama gerekir.',
       icon: 'Zap'
     },
   },
@@ -816,6 +822,20 @@ export const GAME_CONFIG: GameConfig = {
         level: 3,
         cost: 120000,
         effectsDescription: '16 oda, spa ve kahvaltı salonu; konaklama geliri +%40 artar.'
+      }
+    },
+    ev_storage: {
+      2: {
+        type: 'ev_storage',
+        level: 2,
+        cost: 25000,
+        effectsDescription: 'Batarya bankası 400 kWh tutar; şarj kuyruğu daha geç boşalır.'
+      },
+      3: {
+        type: 'ev_storage',
+        level: 3,
+        cost: 55000,
+        effectsDescription: 'Batarya bankası 800 kWh tutar; hızlı şarj üniteleri gün boyu dolu çalışır.'
       }
     },
     rest_complex: {
@@ -1317,7 +1337,15 @@ export const GAME_CONFIG: GameConfig = {
     dcPricePerKwh: 12.9,
     /** How long a charge takes at each kind of point, in game seconds. */
     acChargeSeconds: 28,
-    dcChargeSeconds: 10
+    dcChargeSeconds: 10,
+    /**
+     * The battery bank is the electric fuel tank: chargers draw from it and
+     * the substation trickles it back from the grid. A bank comes full
+     * (Emre, 2026-09-07: "200 kWh otomatik gelsin") and grows with its level.
+     */
+    storageKwhByLevel: [200, 400, 800],
+    gridKwhPerHour: 60,
+    gridPricePerKwh: 4.5
   },
   roadUpgrade: {
     price: 250000,

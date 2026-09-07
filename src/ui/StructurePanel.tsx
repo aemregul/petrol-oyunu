@@ -3,6 +3,7 @@ import * as Icons from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { isFacility } from '../domain/services/facilities';
+import { drivewaySideAt, energyAvailable, energyCapacity } from '../domain/services/simulationEngine';
 import { sounds } from '../audio/soundEffects';
 
 /**
@@ -29,6 +30,8 @@ export const StructurePanel: React.FC = () => {
   const rotateBuilding = useGameStore((s) => s.rotateBuilding);
   const sellStructure = useGameStore((s) => s.sellStructure);
   const structureValue = useGameStore((s) => s.structureValue);
+  const hirePumpAttendant = useGameStore((s) => s.hirePumpAttendant);
+  const fireAttendant = useGameStore((s) => s.fireAttendant);
 
   const building = selectedBuildingId ? gameState.buildings[selectedBuildingId] : null;
   if (!building || activeModal !== 'NONE' || buildMode.active) return null;
@@ -45,6 +48,33 @@ export const StructurePanel: React.FC = () => {
   const fixed = !!catalog.fixed;
   const square = catalog.size[0] === catalog.size[1];
   const value = structureValue(building.id);
+
+  // The electric line has its own rows: a post is a pump with a plug, a bank
+  // is the tank behind it.
+  const isPost = building.type === 'ev_charger_ac' || building.type === 'ev_charger_dc';
+  const isBank = building.type === 'ev_storage';
+  const side = drivewaySideAt(building.position[1]);
+  const bankKwh = isPost || isBank ? energyAvailable(gameState, side) : 0;
+  const bankCapacity = isBank
+    ? energyCapacity(building)
+    : Object.values(gameState.buildings)
+        .filter((b) => b.type === 'ev_storage' && drivewaySideAt(b.position[1]) === side)
+        .reduce((sum, b) => sum + energyCapacity(b), 0);
+  const attendant = isPost
+    ? Object.values(gameState.employees).find(
+        (e) => e.role === 'PUMP_ATTENDANT' && e.assignedPumpId === building.id
+      )
+    : undefined;
+  const attendantConf = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
+  const plugged = isPost
+    ? Object.values(gameState.vehicles).find((v) => v.chargingBuildingId === building.id)
+    : undefined;
+  const postStatus = !plugged
+    ? { text: 'Boşta', tone: 'text-emerald-400' }
+    : plugged.state === 'FUELING'
+      ? { text: 'Şarj ediyor', tone: 'text-emerald-400' }
+      : { text: 'Müşteri bekliyor', tone: 'text-amber-400' };
+  const kwhPrice = building.type === 'ev_charger_dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
 
   const handleClose = () => {
     sounds.playClick();
@@ -87,11 +117,59 @@ export const StructurePanel: React.FC = () => {
               </span>
             </div>
             <div className="flex justify-between items-center py-1.5">
-              <span className="text-slate-400 font-semibold">Durum</span>
+              <span className="text-slate-400 font-semibold">Sağlık</span>
               <span className={`font-extrabold font-mono ${building.health >= 60 ? 'text-emerald-400' : 'text-amber-400'}`}>
                 %{Math.round(building.health)}
               </span>
             </div>
+            {isPost && (
+              <>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Durum</span>
+                  <span className={`font-extrabold ${postStatus.tone}`}>{postStatus.text}</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Tarife</span>
+                  <span className="font-extrabold font-mono text-white">₺{kwhPrice.toFixed(1)}/kWh</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Şarjcı</span>
+                  <span className={`font-extrabold uppercase ${attendant ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {attendant ? 'ÇALIŞIYOR' : 'YOK'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Yovmiye</span>
+                  <span className={`font-extrabold font-mono ${attendant ? 'text-rose-300' : 'text-slate-500'}`}>
+                    ₺{attendant ? attendant.wage : attendantConf.dailyWage}/gün
+                  </span>
+                </div>
+              </>
+            )}
+            {(isPost || isBank) && (
+              <div className="py-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-semibold">{isBank ? 'Dolu' : 'Batarya bankası'}</span>
+                  <span className={`font-extrabold font-mono ${bankKwh < 1 ? 'text-rose-300' : 'text-sky-300'}`}>
+                    {Math.round(bankKwh)} / {bankCapacity} kWh
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-black/40 overflow-hidden mt-1.5">
+                  <div
+                    className="h-full rounded-full bg-sky-400"
+                    style={{ width: `${bankCapacity > 0 ? Math.min(100, (bankKwh / bankCapacity) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {isBank && (
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-slate-400 font-semibold">Şebeke dolumu</span>
+                <span className="font-extrabold font-mono text-white">
+                  {GAME_CONFIG.ev.gridKwhPerHour} kWh/sa · ₺{GAME_CONFIG.ev.gridPricePerKwh.toFixed(1)}/kWh
+                </span>
+              </div>
+            )}
             {!fixed && (
               <div className="flex justify-between items-center py-1.5">
                 <span className="text-slate-400 font-semibold">Satış değeri</span>
@@ -101,6 +179,33 @@ export const StructurePanel: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-2.5 pt-1">
+            {isPost &&
+              (attendant ? (
+                <button
+                  onClick={() => {
+                    sounds.playClick();
+                    fireAttendant(attendant.id);
+                  }}
+                  className="w-full py-3.5 bg-[#d83f3f] hover:bg-[#c63232] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all shadow-lg"
+                >
+                  Şarjcıyı İşten Çıkar
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    sounds.playClick();
+                    hirePumpAttendant(building.id);
+                  }}
+                  disabled={gameState.player.cash < attendantConf.hireCost}
+                  className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
+                    gameState.player.cash >= attendantConf.hireCost
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
+                      : 'bg-slate-800 text-slate-500 border border-white/5 cursor-not-allowed'
+                  }`}
+                >
+                  Şarjcı Al — ₺{attendantConf.hireCost.toLocaleString('tr-TR')}
+                </button>
+              ))}
             {upgrade ? (
               <button
                 onClick={() => upgradeBuilding(building.id)}

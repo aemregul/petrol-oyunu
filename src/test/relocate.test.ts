@@ -21,6 +21,16 @@ function ready(): GameState {
   state.station.roadLevel = 2;
   // The expansion only places beside a maxed farm.
   state.buildings.tank_1.level = 3;
+  // The electric line is built in order: a bank needs the substation, a
+  // post needs the bank — so both stand before any of them is moved.
+  state.buildings.sub0 = {
+    id: 'sub0', type: 'ev_substation', level: 1, position: [21, 21], rotation: 0,
+    size: [2, 2], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+  };
+  state.buildings.bank0 = {
+    id: 'bank0', type: 'ev_storage', level: 1, position: [25.5, 21.5], rotation: 0,
+    size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0, energyKwh: 200
+  };
 
   for (let col = 0; col <= 3; col++) {
     for (let row = 0; row <= 3; row++) {

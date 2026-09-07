@@ -4,6 +4,8 @@ import { BuildingEntity } from '../domain/types/gameState';
 import { DECAL, decal } from './decal';
 import { BayPad } from './BayPad';
 import { pumpBayOffset } from '../domain/services/simulationEngine';
+import { useGameStore } from '../store/gameStore';
+import { PumpAttendantMesh } from './PumpAttendantMesh';
 
 /**
  * Hand-built facility geometry for the pieces no CC0 kit covers: wash tunnels,
@@ -452,6 +454,10 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
   fast = false
 }) => {
   const { w, d } = dims(building);
+  const employees = useGameStore((s) => s.gameState.employees);
+  const attendant = Object.values(employees).find(
+    (e) => e.role === 'PUMP_ATTENDANT' && e.assignedPumpId === building.id
+  );
   const accent = fast ? '#f97316' : '#22c55e';
   const height = fast ? 2.4 : 1.9;
 
@@ -466,6 +472,15 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
         worldAlong={building.rotation % 180 !== 0 ? 'x' : 'z'}
         rotationDeg={building.rotation}
       />
+
+      {/* The hand on the post, beside the pedestal, facing the bay. */}
+      {attendant && (
+        <PumpAttendantMesh
+          attendant={attendant}
+          position={[-(w / 2) - 0.55, 0.3, 0.2]}
+          rotation={[0, Math.PI / 2, 0]}
+        />
+      )}
 
       {/* Island pad and kerb, same language as the fuel pump */}
       <mesh position={[0, 0.15, 0]} receiveShadow castShadow>

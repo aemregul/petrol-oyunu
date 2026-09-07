@@ -43,13 +43,21 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
   const openFuelingPanel = useGameStore((s) => s.openFuelingPanelForVehicle);
   const gameState = useGameStore((s) => s.gameState);
 
+  const startVehicleCharging = useGameStore((s) => s.startVehicleCharging);
   const targetPump = vehicle.targetPumpId ? gameState.pumps[vehicle.targetPumpId] : null;
-  const pumpHasAttendant = targetPump
+  // A post is served like a pump: by the hand on it, or by the player.
+  const servicePointId = targetPump?.id ?? vehicle.chargingBuildingId ?? null;
+  const pumpHasAttendant = servicePointId
     ? Object.values(gameState.employees).some(
-        (e) => e.assignedPumpId === targetPump.id && e.role === 'PUMP_ATTENDANT'
+        (e) => e.assignedPumpId === servicePointId && e.role === 'PUMP_ATTENDANT'
       )
     : false;
   const isAttendantServing = vehicle.assignedActor === 'EMPLOYEE' || pumpHasAttendant;
+  const atCharger = !!vehicle.chargingBuildingId;
+  const serve = () => {
+    if (atCharger) startVehicleCharging(vehicle.id);
+    else openFuelingPanel(vehicle.id);
+  };
 
   // The parking offset lives in the route, so world position is used as-is.
   const posX = vehicle.worldPosition[0] * 2;
@@ -153,7 +161,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
       position={[posX, 0, posZ]}
       onClick={(e) => {
         e.stopPropagation();
-        if (needsService && !isAttendantServing) openFuelingPanel(vehicle.id);
+        if (needsService && !isAttendantServing) serve();
       }}
     >
       {/* Vehicle body: RgsDev CC0 model, primitives kept as a fallback. */}
@@ -196,7 +204,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              if (needsService && !isAttendantServing) openFuelingPanel(vehicle.id);
+              if (needsService && !isAttendantServing) serve();
             }}
           >
             {/* Meter Badge (like beneloil.com: 18.9L • ₺170) */}
@@ -207,9 +215,11 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
                 </span>
               ) : (
                 <span className="font-extrabold tracking-wide text-slate-200">
-                  {vehicle.request.mode === 'MONEY'
-                    ? `₺${vehicle.request.targetValue.toLocaleString('tr-TR')}`
-                    : <>{vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> FULL</>}
+                  {atCharger
+                    ? <>⚡ {vehicle.request.calculatedLiters.toFixed(0)} kWh{!isAttendantServing && <span className="text-emerald-400"> · Şarjı Başlat</span>}</>
+                    : vehicle.request.mode === 'MONEY'
+                      ? `₺${vehicle.request.targetValue.toLocaleString('tr-TR')}`
+                      : <>{vehicle.request.calculatedLiters.toFixed(0)}{serviceUnit} <span className="text-slate-500 font-normal">•</span> FULL</>}
                 </span>
               )}
             </div>

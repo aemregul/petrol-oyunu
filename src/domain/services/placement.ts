@@ -403,6 +403,23 @@ export function evaluatePlacement(
     }
   }
 
+  // The electric line is built in order: the substation feeds the bank, the
+  // bank feeds the posts (Emre, 2026-09-07). Each stage needs the one before
+  // it on the same block.
+  if (buildingType === 'ev_storage' || buildingType === 'ev_charger_ac' || buildingType === 'ev_charger_dc') {
+    const side = drivewaySideAt(position[1]);
+    const onBlock = (type: string) =>
+      Object.values(state.buildings).some(
+        (b) => b.type === type && drivewaySideAt(b.position[1]) === side
+      );
+    if (buildingType === 'ev_storage' && !onBlock('ev_substation')) {
+      return { valid: false, reason: 'Önce bu blokta Elektrik Altyapısı kurulmalı.' };
+    }
+    if (buildingType !== 'ev_storage' && !onBlock('ev_storage')) {
+      return { valid: false, reason: 'Önce bu blokta Enerji Depolama kurulmalı.' };
+    }
+  }
+
   const role = drivewayRole(buildingType);
   if (role) return evaluateDriveway(state, role, position);
 

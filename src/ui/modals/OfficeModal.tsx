@@ -355,7 +355,7 @@ export const OfficeModal: React.FC = () => {
 
   const t = gameState.dayState.todayStats;
   const todaySales = t.fuelRevenue + t.marketRevenue + t.tips;
-  const todayProfit = todaySales - t.fuelCost - t.marketCost - t.repairs;
+  const todayProfit = todaySales - t.fuelCost - t.marketCost - t.repairs - (t.energyCost ?? 0);
   const recent = player.statistics.recentNetProfits ?? [];
   const purchases = [...(gameState.fuelPurchaseHistory ?? [])].reverse().slice(0, 6);
   const activeLoans = gameState.loans.filter((l) => l.state === 'ACTIVE');
@@ -643,6 +643,9 @@ export const OfficeModal: React.FC = () => {
                   <span className="text-right text-slate-500">—</span>
                 </div>
                 <Row label="Tesis kasalarında bekleyen" value={lira(figures.tills)} tone="text-amber-300" />
+                {(t.energyCost ?? 0) > 0 && (
+                  <Row label="Bugünkü elektrik (şebeke)" value={lira(t.energyCost ?? 0)} tone="text-rose-300" />
+                )}
                 <Row label="Tamamlanan gün" value={player.statistics.daysCompleted} />
               </Section>
 

@@ -313,6 +313,8 @@ export interface BuildingEntity {
   todayVisits?: number;
   /** Which price on the facility's tariff card is up: an index into its config. */
   tariff?: number;
+  /** A battery bank's charge, in kWh. Absent on saves from before banks held any. */
+  energyKwh?: number;
 }
 
 export interface FuelOrderEntity {
@@ -490,6 +492,8 @@ export interface DayState {
     upkeep: number;
     loanPayments: number;
     repairs: number;
+    /** What the grid charged for topping the battery banks up today. */
+    energyCost?: number;
     customersServed: number;
     /** Customers taken on and then failed: they gave up waiting. */
     customersLost: number;
