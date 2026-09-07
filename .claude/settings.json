@@ -342,7 +342,8 @@
       "Bash(node build_shot.mjs \"Mini Market\" \"Standart Akaryakıt\")",
       "Bash(node probe_ui.mjs)",
       "Bash(awk '/^    [a-z_]+: \\\\{$/{t=$1} /price:/{p=$2} /unlockLevel: 1,/{print t, p}' src/config/gameConfig.ts)",
-      "Bash(node hud_shot.mjs)"
+      "Bash(node hud_shot.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/42bbea7a-00c9-4923-89e5-62922b14ba34/scratchpad/frustum.mjs)"
     ],
     "additionalDirectories": [
       "/private/tmp"

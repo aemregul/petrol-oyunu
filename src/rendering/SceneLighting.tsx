@@ -3,6 +3,14 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { hourOfDay } from '../domain/services/simulationEngine';
+import { ownedBounds } from '../domain/services/land';
+
+/**
+ * How far past the owned land the shadow box reaches, in world units: the
+ * road and verge in front, the scenery behind, and the length of a tall
+ * building's shadow at a low sun.
+ */
+const SHADOW_MARGIN = 40;
 
 /**
  * Sun colour and intensity right round the clock.
@@ -62,9 +70,28 @@ export const SceneLighting: React.FC = () => {
   const gameTime = useGameStore((s) => s.gameState.dayState.gameTime);
   const weather = useGameStore((s) => s.gameState.dayState.weather);
   const quality = useGameStore((s) => s.gameState.settings.graphicsQuality);
+  const ownedParcels = useGameStore((s) => s.gameState.station.plots.ownedParcels);
 
   const { scene } = useThree();
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  // Where the sun looks, and what its shadow box has to hold: the land the
+  // player owns, centred. A box fixed round the world origin worked for the
+  // starting plot and no further — as the sun swept round, buildings out at
+  // the edge of a grown plot left the box, and the part of their shadow that
+  // touched the ground was cut off, leaving a loose grey slab drifting beside
+  // the building (Emre, 2026-09-07).
+  const sunTarget = useMemo(() => new THREE.Object3D(), []);
+  const shadowFrame = useMemo(() => {
+    const owned = ownedBounds(ownedParcels);
+    const minX = owned.minX * 2;
+    const maxX = owned.width * 2;
+    const minZ = owned.minZ * 2;
+    const maxZ = owned.height * 2;
+    return {
+      centre: new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2),
+      half: Math.max(maxX - minX, maxZ - minZ) / 2 + SHADOW_MARGIN
+    };
+  }, [ownedParcels]);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
 
@@ -91,13 +118,40 @@ export const SceneLighting: React.FC = () => {
 
       // Sweep the sun across the sky through the daylight hours, and leave it
       // below the horizon overnight so the lamps are what lights the place.
+      // Placed relative to the plot's centre, and looking at it, so the
+      // shadow box below is always the box around the land.
       const daylight = THREE.MathUtils.clamp((hourOfDay(gameTime) - 6) / 15, 0, 1);
       const arc = Math.PI * daylight;
+      const { centre, half } = shadowFrame;
+      const reach = half * 1.6;
       sunRef.current.position.set(
-        32 - Math.cos(arc) * 55,
-        12 + Math.sin(arc) * 48,
-        18 - Math.cos(arc) * 25
+        centre.x - Math.cos(arc) * reach,
+        12 + Math.sin(arc) * reach * 0.9,
+        centre.z - Math.cos(arc) * reach * 0.45
       );
+      sunTarget.position.copy(centre);
+      sunTarget.updateMatrixWorld();
+      sunRef.current.target = sunTarget;
+
+      // The box is square to the light and holds the whole plot whichever way
+      // the sun stands; the far plane reaches past the land's far corner and
+      // the near plane starts well before its near one.
+      const camera = sunRef.current.shadow.camera;
+      const distance = sunRef.current.position.distanceTo(centre);
+      const wanted = { side: half, near: Math.max(1, distance - half * 1.5), far: distance + half * 1.5 };
+      if (
+        camera.right !== wanted.side ||
+        camera.near !== wanted.near ||
+        camera.far !== wanted.far
+      ) {
+        camera.left = -wanted.side;
+        camera.right = wanted.side;
+        camera.top = wanted.side;
+        camera.bottom = -wanted.side;
+        camera.near = wanted.near;
+        camera.far = wanted.far;
+        camera.updateProjectionMatrix();
+      }
     }
 
     if (ambientRef.current) {
@@ -123,14 +177,10 @@ export const SceneLighting: React.FC = () => {
         intensity={1.8}
         castShadow={quality !== 'LOW'}
         shadow-mapSize={[shadowSize, shadowSize]}
-        shadow-camera-left={-60}
-        shadow-camera-right={60}
-        shadow-camera-top={60}
-        shadow-camera-bottom={-60}
-        shadow-camera-far={140}
         shadow-bias={-0.0008}
         shadow-normalBias={0.02}
       />
+      <primitive object={sunTarget} />
       <hemisphereLight ref={hemiRef} groundColor="#3f4a2e" intensity={0.45} />
     </>
   );
