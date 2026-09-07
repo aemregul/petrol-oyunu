@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG, BuildingCatalogItem } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
-import { X, Hammer, Lock, Milestone } from 'lucide-react';
+import { X, Hammer, Lock, Milestone, Sun } from 'lucide-react';
+import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../../domain/services/energy';
 import { buyableParcels, parcelPrice, paveCost, parseParcelKey, LAND_BOUNDS, PARCEL } from '../../domain/services/land';
 import { sounds } from '../../audio/soundEffects';
 import { CatalogPreview, CatalogPhotoBooth } from '../CatalogPreview';
@@ -190,7 +191,10 @@ export function catalogLock(state: GameState, item: BuildingCatalogItem): string
     if (!farm || farm.level < 3) return 'Tank Sahası Sv.3 gerekli';
   }
   if (item.type === 'ev_storage' && !has('ev_substation')) return 'Elektrik altyapısı gerekli';
-  if ((item.type === 'ev_charger_ac' || item.type === 'ev_charger_dc') && !has('ev_storage')) {
+  if (
+    (item.type === 'ev_charger_ac' || item.type === 'ev_charger_dc' || item.type === 'diesel_generator') &&
+    !has('ev_storage')
+  ) {
     return 'Enerji depolama gerekli';
   }
   return null;
@@ -209,6 +213,8 @@ function featureBadge(item: BuildingCatalogItem): string | null {
       return `₺${GAME_CONFIG.ev.acPricePerKwh}/kWh`;
     case 'ev_charger_dc':
       return `₺${GAME_CONFIG.ev.dcPricePerKwh}/kWh`;
+    case 'diesel_generator':
+      return `+${GAME_CONFIG.ev.generator.kwhPerHour} kWh/sa`;
     case 'hotel':
       return `${GAME_CONFIG.facilities.hotel.rooms?.[0] ?? 6} oda`;
     default:
@@ -228,6 +234,66 @@ function cardTitle(state: GameState, item: BuildingCatalogItem): string {
   if (GAME_CONFIG.buildingUpgrades[item.type]) return `${item.name} Sv.1`;
   return item.name;
 }
+
+/**
+ * Panels are not bought here: they go on a pump's canopy, from that pump's
+ * own card. This card says so, and says what a roof is worth, so the player
+ * learns it from the catalogue and not by accident.
+ */
+const RoofCards: React.FC<{ level: number; onClose: () => void }> = ({ level, onClose }) => {
+  const addNotification = useGameStore((s) => s.addNotification);
+  const conf = GAME_CONFIG.ev.solar;
+  const card = 'bg-[#2a2427] border border-white/10 rounded-3xl p-4 flex flex-col gap-3';
+  const badge = 'px-2 py-0.5 rounded-lg text-[11px] font-extrabold';
+  const locked = level < conf.unlockLevel;
+  const roofs: Array<{ key: string; name: string; size: [number, number]; where: string; blurb: string; icon: React.ReactNode }> = [
+    {
+      key: 'canopy',
+      name: 'Güneşli Sundurma',
+      size: GAME_CONFIG.buildings.canopy.size,
+      where: 'Sundurmalı bir pompanın kartından kurulur.',
+      blurb: 'Ada sundurmasının üstüne paneller. Gündüz bankayı doldurur; yağmurda ve kirli istasyonda az üretir.',
+      icon: <Sun className="w-10 h-10 text-amber-300" />
+    },
+  ];
+  return (
+    <>
+      {roofs.map((roof) => (
+        <div key={roof.key} className={card}>
+          <div className="h-28 rounded-2xl bg-gradient-to-b from-[#1a1618] to-[#0f0d0e] border border-white/5 flex items-center justify-center">
+            {roof.icon}
+          </div>
+          <div className="font-extrabold text-sm text-white leading-tight">{roof.name}</div>
+          <div className="flex flex-wrap gap-2">
+            <span className={`${badge} bg-amber-500/20 text-amber-300`}>öğlen {solarPeakKwhPerHour(roof.size)} kWh/sa</span>
+            <span className={`${badge} bg-white/10 text-slate-300`}>{roof.size[0]}×{roof.size[1]} çatı</span>
+            <span className={`${badge} bg-white/10 text-slate-300`}>₺{solarUpkeep(roof.size)}/gün</span>
+          </div>
+          <div className="text-xs text-slate-400 leading-relaxed flex-1">{roof.blurb}</div>
+          <div className="text-xs font-extrabold text-amber-400">
+            {locked ? `Seviye ${conf.unlockLevel} gerekli` : roof.where}
+          </div>
+          {locked ? (
+            <div className="w-full py-3 rounded-2xl bg-[#221d20] border border-white/5 text-slate-500 text-sm font-extrabold text-center tracking-wider flex items-center justify-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" />
+              <span>KİLİTLİ</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                addNotification({ type: 'INFO', title: roof.name, message: roof.where });
+                onClose();
+              }}
+              className="w-full py-3 rounded-2xl font-extrabold text-sm border bg-[#1f1b1d] border-white/10 hover:bg-[#332c30] text-white transition-all"
+            >
+              ₺{solarPrice(roof.size).toLocaleString('tr-TR')} · çatıdan kur
+            </button>
+          )}
+        </div>
+      ))}
+    </>
+  );
+};
 
 export const BuildModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
@@ -353,6 +419,8 @@ export const BuildModal: React.FC = () => {
               </div>
             );
           })}
+
+          {category === 'energy' && <RoofCards level={gameState.player.level} onClose={handleClose} />}
         </div>
       </div>
     </div>

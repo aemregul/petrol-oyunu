@@ -5,6 +5,7 @@ import { Html } from '@react-three/drei';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { DECAL, decal } from './decal';
 import { getPumpCanopyLayout, PumpCanopyLayout } from './pumpCanopyLayout';
+import { SolarTiles } from './SolarTiles';
 import { BayPad } from './BayPad';
 import { pumpBayOffset, pumpFacesAcrossZ } from '../domain/services/simulationEngine';
 import { PumpAttendantMesh } from './PumpAttendantMesh';
@@ -46,7 +47,7 @@ const STATUS_COLORS: Record<string, string> = {
  * pump group, so a click anywhere on its deck, fascia or column bubbles to the
  * same handler as the dispenser and selects that pump.
  */
-const PumpCanopy: React.FC<{ layout: PumpCanopyLayout }> = ({ layout }) => {
+const PumpCanopy: React.FC<{ layout: PumpCanopyLayout; solar?: boolean }> = ({ layout, solar }) => {
   // Joined decks can span several islands, so the generous clearance keeps a
   // wide canopy from visually pressing down on pumps and passing vehicles.
   const deckY = 7.0;
@@ -98,6 +99,15 @@ const PumpCanopy: React.FC<{ layout: PumpCanopyLayout }> = ({ layout }) => {
         <boxGeometry args={[layout.width, 0.42, layout.depth]} />
         <meshStandardMaterial color="#94a3b8" roughness={0.65} metalness={0.15} />
       </mesh>
+      {solar && (
+        <SolarTiles
+          width={layout.width - 0.9}
+          depth={layout.depth - 0.9}
+          y={deckY + 0.63}
+          x={layout.offsetX}
+          z={layout.offsetZ}
+        />
+      )}
       <mesh position={[fasciaOffsetX, deckY + 0.08, fasciaOffsetZ]}>
         <boxGeometry args={[fasciaWidth, 0.38, fasciaDepth]} />
         <meshStandardMaterial
@@ -358,7 +368,7 @@ export const PumpMesh: React.FC<PumpMeshProps> = ({ pump, neighbours }) => {
         </mesh>
       )}
 
-      {pump.hasCanopy && <PumpCanopy layout={canopyLayout} />}
+      {pump.hasCanopy && <PumpCanopy layout={canopyLayout} solar={!!pump.hasSolarCanopy} />}
 
       {/* Symbolic 3D Attendant standing by the dispenser island facing the car */}
       {attendant && (

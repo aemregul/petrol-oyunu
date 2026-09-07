@@ -406,7 +406,12 @@ export function evaluatePlacement(
   // The electric line is built in order: the substation feeds the bank, the
   // bank feeds the posts (Emre, 2026-09-07). Each stage needs the one before
   // it on the same block.
-  if (buildingType === 'ev_storage' || buildingType === 'ev_charger_ac' || buildingType === 'ev_charger_dc') {
+  if (
+    buildingType === 'ev_storage' ||
+    buildingType === 'ev_charger_ac' ||
+    buildingType === 'ev_charger_dc' ||
+    buildingType === 'diesel_generator'
+  ) {
     const side = drivewaySideAt(position[1]);
     const onBlock = (type: string) =>
       Object.values(state.buildings).some(

@@ -344,6 +344,23 @@ export const StaffModal: React.FC = () => {
                 </div>
 
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span className="font-extrabold text-sm text-white">Bankayı Gece Doldur</span>
+                    <input
+                      type="checkbox"
+                      checked={gameState.managerSettings.nightGridFill ?? false}
+                      onChange={(e) => updateManagerSettings({ nightGridFill: e.target.checked })}
+                      className="w-4 h-4 accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Müdür şebekeden yalnızca gece tarifesinde ({GAME_CONFIG.ev.gridTariff.night.from}:00–
+                    {GAME_CONFIG.ev.gridTariff.night.to}:00, ₺{GAME_CONFIG.ev.gridTariff.night.price.toFixed(1)}/kWh) çeker.
+                    Banka %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
                   <div className="flex justify-between items-center">
                     <span className="font-extrabold text-sm text-white">Kasa Rezervi Güvencesi</span>
                     <span className="font-mono font-bold text-emerald-400">

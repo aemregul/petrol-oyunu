@@ -3,7 +3,17 @@ import * as Icons from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { isFacility } from '../domain/services/facilities';
-import { drivewaySideAt, energyAvailable, energyCapacity } from '../domain/services/simulationEngine';
+import {
+  drivewaySideAt,
+  energyAvailable,
+  energyCapacity,
+  substationOn,
+  solarKwhPerHourNow,
+  solarCellsFeeding,
+  generatorRunning,
+  hourOfDay
+} from '../domain/services/simulationEngine';
+import { gridKwhPerHourFor, gridPriceAt, isNightTariff, dieselForGenerator } from '../domain/services/energy';
 import { sounds } from '../audio/soundEffects';
 
 /**
@@ -32,6 +42,7 @@ export const StructurePanel: React.FC = () => {
   const structureValue = useGameStore((s) => s.structureValue);
   const hirePumpAttendant = useGameStore((s) => s.hirePumpAttendant);
   const fireAttendant = useGameStore((s) => s.fireAttendant);
+  const toggleGenerator = useGameStore((s) => s.toggleGenerator);
 
   const building = selectedBuildingId ? gameState.buildings[selectedBuildingId] : null;
   if (!building || activeModal !== 'NONE' || buildMode.active) return null;
@@ -75,6 +86,28 @@ export const StructurePanel: React.FC = () => {
       ? { text: 'Şarj ediyor', tone: 'text-emerald-400' }
       : { text: 'Müşteri bekliyor', tone: 'text-amber-400' };
   const kwhPrice = building.type === 'ev_charger_dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+
+  // The contract on the substation, the sun on the roofs, the diesel in the
+  // generator: the three lines that fill the bank.
+  const isSubstation = building.type === 'ev_substation';
+  const isGenerator = building.type === 'diesel_generator';
+  const hour = hourOfDay(gameState.dayState.gameTime);
+  const gridNow = gridPriceAt(hour);
+  const tariffLabel = isNightTariff(hour) ? 'gece' : gridNow > GAME_CONFIG.ev.gridPricePerKwh ? 'pik' : 'gündüz';
+  const feeder = substationOn(gameState, side);
+  const solarNow = isBank ? solarKwhPerHourNow(gameState, side) : 0;
+  const solarCells = isBank ? solarCellsFeeding(gameState, side) : 0;
+  const genRunning = isGenerator && generatorRunning(gameState, building);
+  const genStatus = !isGenerator
+    ? null
+    : building.generatorOff
+      ? { text: 'Kapalı', tone: 'text-slate-500' }
+      : genRunning
+        ? { text: 'Çalışıyor', tone: 'text-emerald-400' }
+        : dieselForGenerator(gameState.tanks.diesel) <= 0
+          ? { text: 'Mazot rezervde', tone: 'text-rose-300' }
+          : { text: 'Banka yeterli, bekliyor', tone: 'text-amber-400' };
+  const t = gameState.dayState.todayStats;
 
   const handleClose = () => {
     sounds.playClick();
@@ -163,12 +196,88 @@ export const StructurePanel: React.FC = () => {
               </div>
             )}
             {isBank && (
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-slate-400 font-semibold">Şebeke dolumu</span>
-                <span className="font-extrabold font-mono text-white">
-                  {GAME_CONFIG.ev.gridKwhPerHour} kWh/sa · ₺{GAME_CONFIG.ev.gridPricePerKwh.toFixed(1)}/kWh
-                </span>
-              </div>
+              <>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Şebeke dolumu</span>
+                  <span className={`font-extrabold font-mono ${feeder ? 'text-white' : 'text-rose-300'}`}>
+                    {feeder
+                      ? `${gridKwhPerHourFor(feeder.level)} kWh/sa · ₺${gridNow.toFixed(1)} (${tariffLabel})`
+                      : 'Trafo yok'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Güneş</span>
+                  <span className={`font-extrabold font-mono ${solarNow > 0 ? 'text-amber-300' : 'text-slate-500'}`}>
+                    {solarCells > 0 ? `${solarNow.toFixed(1)} kWh/sa` : 'Panel yok'}
+                  </span>
+                </div>
+              </>
+            )}
+            {isSubstation && (
+              <>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Şebeke sözleşmesi</span>
+                  <span className="font-extrabold font-mono text-white">{gridKwhPerHourFor(building.level)} kWh/sa</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Gece tarifesi</span>
+                  <span className="font-extrabold font-mono text-emerald-400">
+                    ₺{GAME_CONFIG.ev.gridTariff.night.price.toFixed(1)}/kWh · {GAME_CONFIG.ev.gridTariff.night.from}:00–{GAME_CONFIG.ev.gridTariff.night.to}:00
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Gündüz</span>
+                  <span className="font-extrabold font-mono text-white">₺{GAME_CONFIG.ev.gridPricePerKwh.toFixed(1)}/kWh</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Pik</span>
+                  <span className="font-extrabold font-mono text-rose-300">
+                    ₺{GAME_CONFIG.ev.gridTariff.peak.price.toFixed(1)}/kWh · {GAME_CONFIG.ev.gridTariff.peak.from}:00–{GAME_CONFIG.ev.gridTariff.peak.to}:00
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Şu an</span>
+                  <span className="font-extrabold font-mono text-sky-300">₺{gridNow.toFixed(1)}/kWh ({tariffLabel})</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Bugünkü enerji gideri</span>
+                  <span className="font-extrabold font-mono text-rose-300">₺{Math.round(t.energyCost ?? 0).toLocaleString('tr-TR')}</span>
+                </div>
+              </>
+            )}
+            {isGenerator && genStatus && (
+              <>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Durum</span>
+                  <span className={`font-extrabold ${genStatus.tone}`}>{genStatus.text}</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Üretim</span>
+                  <span className="font-extrabold font-mono text-white">{GAME_CONFIG.ev.generator.kwhPerHour} kWh/sa</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Tüketim</span>
+                  <span className="font-extrabold font-mono text-white">
+                    {(GAME_CONFIG.ev.generator.kwhPerHour * GAME_CONFIG.ev.generator.litersPerKwh).toFixed(0)} L/sa mazot
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Devreye girer</span>
+                  <span className="font-extrabold font-mono text-white">banka %{GAME_CONFIG.ev.generator.runBelowPercent} altında</span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Yakılabilir mazot</span>
+                  <span className="font-extrabold font-mono text-white">
+                    {Math.round(dieselForGenerator(gameState.tanks.diesel)).toLocaleString('tr-TR')} L
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-slate-400 font-semibold">Bugün</span>
+                  <span className="font-extrabold font-mono text-amber-300">
+                    {Math.round(t.generatorKwh ?? 0)} kWh · {Math.round(t.generatorLiters ?? 0)} L
+                  </span>
+                </div>
+              </>
             )}
             {!fixed && (
               <div className="flex justify-between items-center py-1.5">
@@ -206,6 +315,18 @@ export const StructurePanel: React.FC = () => {
                   Şarjcı Al — ₺{attendantConf.hireCost.toLocaleString('tr-TR')}
                 </button>
               ))}
+            {isGenerator && (
+              <button
+                onClick={() => toggleGenerator(building.id)}
+                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm transition-all shadow-lg active:scale-98 ${
+                  building.generatorOff
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
+                    : 'bg-[#d83f3f] hover:bg-[#c63232] text-white'
+                }`}
+              >
+                {building.generatorOff ? 'Jeneratörü Çalıştır' : 'Jeneratörü Durdur'}
+              </button>
+            )}
             {upgrade ? (
               <button
                 onClick={() => upgradeBuilding(building.id)}

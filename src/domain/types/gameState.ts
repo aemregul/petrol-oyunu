@@ -162,6 +162,8 @@ export interface PumpEntity {
    * have no such field, and an absent one reads as no roof.
    */
   hasCanopy?: boolean;
+  /** Panels on that roof, feeding the block's battery bank by day. */
+  hasSolarCanopy?: boolean;
 }
 
 export interface VehicleEntity {
@@ -315,6 +317,8 @@ export interface BuildingEntity {
   tariff?: number;
   /** A battery bank's charge, in kWh. Absent on saves from before banks held any. */
   energyKwh?: number;
+  /** A generator switched off by hand. Absent reads as running. */
+  generatorOff?: boolean;
 }
 
 export interface FuelOrderEntity {
@@ -442,6 +446,12 @@ export interface ManagerAutomationSettings {
   autoCollectTills?: boolean;
   /** Game hours between rounds. */
   collectIntervalHours?: number;
+  /**
+   * Draw from the grid only in the cheap night window, unless the bank has
+   * fallen below the floor. Absent reads as off: the contract fills at any
+   * hour until the manager is told otherwise.
+   */
+  nightGridFill?: boolean;
 }
 
 export interface ManagerLogEntry {
@@ -494,6 +504,11 @@ export interface DayState {
     repairs: number;
     /** What the grid charged for topping the battery banks up today. */
     energyCost?: number;
+    /** kWh the roofs put into the banks today. */
+    solarKwh?: number;
+    /** Diesel the generator burnt today, in litres, and what it made. */
+    generatorLiters?: number;
+    generatorKwh?: number;
     customersServed: number;
     /** Customers taken on and then failed: they gave up waiting. */
     customersLost: number;

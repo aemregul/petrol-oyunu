@@ -235,10 +235,49 @@ export interface GameConfig {
     dcChargeSeconds: number;
     /** What a battery bank holds at each level, in kWh (index = level - 1). */
     storageKwhByLevel: number[];
-    /** What the substation feeds into the banks, in kWh per game hour. */
+    /** What a Sv.1 substation feeds into the banks, in kWh per game hour. */
     gridKwhPerHour: number;
-    /** What the grid charges for that, in TL per kWh — billed at day end. */
+    /** How much more each substation level pulls (index = level - 1). */
+    gridLevelFactor: number[];
+    /** What the grid charges by day, in TL per kWh — billed at day end. */
     gridPricePerKwh: number;
+    /**
+     * The contract's clock: cheap at night, dear at the evening peak. Hours
+     * are inclusive of `from`, exclusive of `to`; a night window wraps
+     * midnight.
+     */
+    gridTariff: {
+      night: { from: number; to: number; price: number };
+      peak: { from: number; to: number; price: number };
+    };
+    /** The manager's night-fill rule tops up anyway below this share. */
+    nightFillFloorPercent: number;
+    /**
+     * Panels go on the roof the station already has — a pump's canopy — not
+     * on a field of their own (Emre, 2026-09-07: sundurma dışında çatı yok).
+     */
+    solar: {
+      unlockLevel: number;
+      /** TL per footprint cell, so a bigger roof costs more. */
+      pricePerCell: number;
+      upkeepPerCell: number;
+      /** kWh per game hour per cell under a clear noon sun. */
+      peakKwhPerCell: number;
+      sunrise: number;
+      sunset: number;
+      weather: Record<'SUNNY' | 'OVERCAST' | 'RAIN', number>;
+      /** A filthy station's panels still give this share of their best. */
+      minGrimeFactor: number;
+    };
+    /** Burns the station's own diesel when the bank runs low. */
+    generator: {
+      kwhPerHour: number;
+      litersPerKwh: number;
+      /** Kicks in when the block's banks fall below this share. */
+      runBelowPercent: number;
+      /** Never eats into the last share of the diesel tank. */
+      reserveShare: number;
+    };
   };
   roadUpgrade: {
     price: number;
@@ -667,6 +706,17 @@ export const GAME_CONFIG: GameConfig = {
       description: 'Yüksek güçlü hızlı şarj ünitesi. Bankayı hızlı boşaltır; şarjcı alınabilir. Enerji depolama gerekir.',
       icon: 'Zap'
     },
+    diesel_generator: {
+      type: 'diesel_generator',
+      name: 'Dizel Jeneratör',
+      category: 'energy',
+      price: 24000,
+      dailyUpkeep: 120,
+      size: [2, 2],
+      unlockLevel: 8,
+      description: 'Banka azalınca kendi tankındaki mazotu yakar. Sattığın dizeli tüketir; stok kritiğe inince durur. Enerji depolama gerekir.',
+      icon: 'Fuel'
+    },
   },
   /**
    * What each facility actually does for the station.
@@ -822,6 +872,20 @@ export const GAME_CONFIG: GameConfig = {
         level: 3,
         cost: 120000,
         effectsDescription: '16 oda, spa ve kahvaltı salonu; konaklama geliri +%40 artar.'
+      }
+    },
+    ev_substation: {
+      2: {
+        type: 'ev_substation',
+        level: 2,
+        cost: 30000,
+        effectsDescription: 'Şebeke sözleşmesi büyür: bankaya saatte 120 kWh çekilir.'
+      },
+      3: {
+        type: 'ev_substation',
+        level: 3,
+        cost: 65000,
+        effectsDescription: 'Sanayi sözleşmesi: bankaya saatte 240 kWh çekilir.'
       }
     },
     ev_storage: {
@@ -1345,7 +1409,32 @@ export const GAME_CONFIG: GameConfig = {
      */
     storageKwhByLevel: [200, 400, 800],
     gridKwhPerHour: 60,
-    gridPricePerKwh: 4.5
+    gridLevelFactor: [1, 2, 4],
+    gridPricePerKwh: 4.5,
+    // The contract's clock (Emre, 2026-09-07): energy is a supply line like
+    // fuel is. Filling at night is the cheap tanker; the evening peak is the
+    // dear one. The manager's night-fill rule is what makes the choice pay.
+    gridTariff: {
+      night: { from: 22, to: 6, price: 2.4 },
+      peak: { from: 17, to: 21, price: 7.5 }
+    },
+    nightFillFloorPercent: 25,
+    solar: {
+      unlockLevel: 8,
+      pricePerCell: 600,
+      upkeepPerCell: 4,
+      peakKwhPerCell: 0.8,
+      sunrise: 6,
+      sunset: 20,
+      weather: { SUNNY: 1, OVERCAST: 0.45, RAIN: 0.2 },
+      minGrimeFactor: 0.5
+    },
+    generator: {
+      kwhPerHour: 80,
+      litersPerKwh: 0.3,
+      runBelowPercent: 50,
+      reserveShare: 0.15
+    }
   },
   roadUpgrade: {
     price: 250000,

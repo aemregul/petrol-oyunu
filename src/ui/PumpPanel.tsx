@@ -2,7 +2,8 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { calculateRepairCost } from '../domain/formulas/economy';
-import { Fuel, X, Wrench, Umbrella } from 'lucide-react';
+import { Fuel, X, Wrench, Umbrella, Sun } from 'lucide-react';
+import { solarPrice, solarPeakKwhPerHour } from '../domain/services/energy';
 import { sounds } from '../audio/soundEffects';
 
 const STATE_LABELS: Record<string, { text: string; className: string }> = {
@@ -33,6 +34,7 @@ export const PumpPanel: React.FC = () => {
   const addPumpFuel = useGameStore((s) => s.addPumpFuel);
   const fitCanopy = useGameStore((s) => s.fitCanopy);
   const removeCanopy = useGameStore((s) => s.removeCanopy);
+  const fitSolarCanopy = useGameStore((s) => s.fitSolarCanopy);
 
   const pump = selectedPumpId ? gameState.pumps[selectedPumpId] : null;
   if (!pump || activeModal !== 'NONE' || buildMode.active) return null;
@@ -232,6 +234,25 @@ export const PumpPanel: React.FC = () => {
               </button>
             )}
 
+            {/* Panels on the roof: the sun into the block's bank. */}
+            {pump.hasCanopy && !pump.hasSolarCanopy && (
+              <button
+                onClick={() => fitSolarCanopy(pump.id)}
+                className="w-full py-2.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-amber-300 font-bold text-xs hover:bg-amber-900/50 transition-all flex items-center justify-center gap-1.5"
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>
+                  Güneşli Sundurma — ₺{solarPrice(GAME_CONFIG.buildings.canopy.size).toLocaleString('tr-TR')}
+                </span>
+              </button>
+            )}
+            {pump.hasCanopy && pump.hasSolarCanopy && (
+              <div className="w-full py-2 rounded-xl bg-amber-950/30 border border-amber-500/20 text-amber-200/80 text-[11px] font-bold flex items-center justify-center gap-1.5">
+                <Sun className="w-3.5 h-3.5" />
+                <span>Güneşli sundurma · öğlen {solarPeakKwhPerHour(GAME_CONFIG.buildings.canopy.size)} kWh/sa</span>
+              </div>
+            )}
+
             {/* Canopy Toggle */}
             {pump.hasCanopy ? (
               <button
@@ -239,7 +260,7 @@ export const PumpPanel: React.FC = () => {
                 className="w-full py-2 rounded-xl text-slate-400 hover:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
               >
                 <Umbrella className="w-3.5 h-3.5" />
-                <span>Sundurmayı Sök</span>
+                <span>Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle)' : ''}</span>
               </button>
             ) : (
               <button

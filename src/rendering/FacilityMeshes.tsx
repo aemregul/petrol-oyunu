@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { BuildingEntity } from '../domain/types/gameState';
 import { DECAL, decal } from './decal';
 import { BayPad } from './BayPad';
-import { pumpBayOffset } from '../domain/services/simulationEngine';
+import { pumpBayOffset, generatorRunning } from '../domain/services/simulationEngine';
 import { useGameStore } from '../store/gameStore';
 import { PumpAttendantMesh } from './PumpAttendantMesh';
 
@@ -300,6 +300,64 @@ export const AirWater: React.FC<FacilityProps> = ({ building }) => {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.19, d * 0.26]}>
         <planeGeometry args={[0.7, 0.3]} />
         <meshStandardMaterial color="#475569" roughness={0.9} />
+      </mesh>
+    </group>
+  );
+};
+
+/**
+ * A skid-mounted diesel set: the yellow-green housing, a radiator grille at
+ * one end, the exhaust stack, and a lamp that says whether it is running,
+ * waiting on the bank, or switched off.
+ */
+export const DieselGenerator: React.FC<FacilityProps> = ({ building }) => {
+  const running = useGameStore((s) => generatorRunning(s.gameState, building));
+  const off = !!building.generatorOff;
+  const lamp = off ? '#475569' : running ? '#22c55e' : '#f59e0b';
+  return (
+    <group>
+      <mesh position={[0, 0.12, 0]} receiveShadow castShadow>
+        <boxGeometry args={[3.4, 0.24, 2.4]} />
+        <meshStandardMaterial color="#6b7688" roughness={0.9} />
+      </mesh>
+      {/* Housing */}
+      <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
+        <boxGeometry args={[3.0, 1.6, 1.7]} />
+        <meshStandardMaterial color="#a3a021" roughness={0.55} metalness={0.25} />
+      </mesh>
+      {/* Radiator grille */}
+      <mesh position={[1.51, 1.05, 0]}>
+        <boxGeometry args={[0.04, 1.2, 1.3]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.9} />
+      </mesh>
+      {[-0.4, -0.2, 0, 0.2, 0.4].map((z) => (
+        <mesh key={z} position={[1.54, 1.05, z]}>
+          <boxGeometry args={[0.02, 1.1, 0.06]} />
+          <meshStandardMaterial color="#9ca3af" roughness={0.6} metalness={0.4} />
+        </mesh>
+      ))}
+      {/* Louvre door with the fuel cap */}
+      <mesh position={[0.6, 1.0, 0.86]}>
+        <boxGeometry args={[0.9, 1.0, 0.03]} />
+        <meshStandardMaterial color="#8e8b1c" roughness={0.6} />
+      </mesh>
+      <mesh position={[-0.9, 1.9, 0.4]} castShadow>
+        <cylinderGeometry args={[0.14, 0.14, 0.2, 10]} />
+        <meshStandardMaterial color="#111827" roughness={0.5} />
+      </mesh>
+      {/* Exhaust stack */}
+      <mesh position={[-1.1, 2.35, -0.4]} castShadow>
+        <cylinderGeometry args={[0.09, 0.09, 1.2, 10]} />
+        <meshStandardMaterial color="#374151" roughness={0.5} metalness={0.5} />
+      </mesh>
+      <mesh position={[-1.1, 2.98, -0.4]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.12, 0.12, 0.3, 10]} />
+        <meshStandardMaterial color="#374151" roughness={0.5} metalness={0.5} />
+      </mesh>
+      {/* Status lamp */}
+      <mesh position={[0.6, 1.72, 0.9]}>
+        <sphereGeometry args={[0.08, 10, 10]} />
+        <meshBasicMaterial color={lamp} toneMapped={false} />
       </mesh>
     </group>
   );

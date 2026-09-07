@@ -40,8 +40,10 @@ import {
   evictFromPump,
   dailyPriceReputationDelta,
   dismissVehicle,
-  DRIVEWAY_Z
+  DRIVEWAY_Z,
+  energyCapacityOn
 } from '../domain/services/simulationEngine';
+import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import {
   evaluatePlacement,
   snapPlacement,
@@ -103,6 +105,45 @@ const NOTIFICATION_LOG_SIZE = 60;
  * toast on screen recognises itself and ticks its counter up rather than
  * stacking a second copy of the same words.
  */
+/**
+ * Whether panels may go on a canopy on this block right now: the level, a
+ * bank on the block to put the kWh into, and the money. Says why not.
+ */
+function solarAllowed(
+  get: () => GameStore,
+  size: [number, number],
+  side: 'near' | 'far'
+): boolean {
+  const { gameState } = get();
+  const conf = GAME_CONFIG.ev.solar;
+  if (gameState.player.level < conf.unlockLevel) {
+    get().addNotification({
+      type: 'WARNING',
+      title: 'Seviye Yetersiz',
+      message: `Güneş paneli için Seviye ${conf.unlockLevel} gerekiyor.`
+    });
+    return false;
+  }
+  if (energyCapacityOn(gameState, side) <= 0) {
+    get().addNotification({
+      type: 'WARNING',
+      title: 'Banka Yok',
+      message: 'Panelin ürettiğini tutacak bir Enerji Depolama bu blokta kurulu olmalı.'
+    });
+    return false;
+  }
+  const price = solarPrice(size);
+  if (gameState.player.cash < price) {
+    get().addNotification({
+      type: 'WARNING',
+      title: 'Yetersiz Bakiye',
+      message: `Panel için ${price.toLocaleString('tr-TR')} TL gerekiyor.`
+    });
+    return false;
+  }
+  return true;
+}
+
 function pushNotification(log: GameNotification[], draft: NotificationDraft): GameNotification[] {
   const now = Date.now();
   const sameIndex = log.findIndex(
@@ -357,6 +398,7 @@ interface GameStore {
       flowRateLps: number;
       employeeId: string | null;
       hasCanopy?: boolean;
+      hasSolarCanopy?: boolean;
     };
     /** A battery bank's charge travels with it. */
     energyKwh?: number;
@@ -441,6 +483,10 @@ interface GameStore {
   exitCanopyMode: () => void;
   fitCanopy: (pumpId: string) => boolean;
   removeCanopy: (pumpId: string) => boolean;
+  /** Panels on a pump's canopy, feeding the block's bank by day. */
+  fitSolarCanopy: (pumpId: string) => boolean;
+  /** Switches a diesel generator off, or back on. */
+  toggleGenerator: (buildingId: string) => void;
   cleanVehicleWindows: (vehicleId: string) => void;
   dismissCustomer: (vehicleId: string) => void;
   cleanStation: () => boolean;
@@ -874,7 +920,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           employeeId: relocating.pump.employeeId,
           currentVehicleId: null,
           flowRateLps: relocating.pump.flowRateLps,
-          hasCanopy: relocating.pump.hasCanopy
+          hasCanopy: relocating.pump.hasCanopy,
+          hasSolarCanopy: relocating.pump.hasSolarCanopy
         };
         const attendant = relocating.pump.employeeId
           ? state.employees[relocating.pump.employeeId]
@@ -1114,7 +1161,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         employeeId: null,
         currentVehicleId: null,
         flowRateLps: carried?.pump?.flowRateLps ?? 8,
-        hasCanopy: carried?.pump?.hasCanopy
+        hasCanopy: carried?.pump?.hasCanopy,
+        hasSolarCanopy: carried?.pump?.hasSolarCanopy
       };
 
       // The attendant who worked this bay follows it to its new spot.
@@ -1258,6 +1306,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     // A roof is part of the island it stands on, so selling the pump sells
     // the canopy with it rather than leaving the money behind.
     if (pump?.hasCanopy) invested += GAME_CONFIG.buildings.canopy.price;
+    if (pump?.hasCanopy && pump.hasSolarCanopy) invested += solarPrice(GAME_CONFIG.buildings.canopy.size);
 
     const wear = 0.6 + 0.4 * (health / 100);
     return Math.round((invested * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
@@ -1518,7 +1567,8 @@ export const useGameStore = create<GameStore>((set, get) => {
                 flowRateLps: pump.flowRateLps,
                 employeeId: pump.employeeId,
                 // The roof is bolted to the island and travels with it.
-                hasCanopy: pump.hasCanopy
+                hasCanopy: pump.hasCanopy,
+                hasSolarCanopy: pump.hasSolarCanopy
               }
             }
           : {}),
@@ -2146,8 +2196,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     // same pump paid a wear-scaled share, made "unbolt the roof first" the
     // strictly better way to sell every pump that was not brand new.
     const wear = 0.6 + 0.4 * (pump.health / 100);
-    const refund =
-      Math.round((catalog.price * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
+    // The panels come off with the roof they sit on, at the same discount.
+    const sunk = catalog.price + (pump.hasSolarCanopy ? solarPrice(catalog.size) : 0);
+    const refund = Math.round((sunk * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
     TransactionService.executeCashTransaction(state, {
@@ -2156,6 +2207,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       description: `${pumpId} sundurma söküldü`
     });
     delete state.pumps[pumpId].hasCanopy;
+    delete state.pumps[pumpId].hasSolarCanopy;
 
     sounds.playClick();
     SaveManager.saveGame(state);
@@ -2166,6 +2218,44 @@ export const useGameStore = create<GameStore>((set, get) => {
       message: `₺${refund.toLocaleString('tr-TR')} kasaya geçti.`
     });
     return true;
+  },
+
+  fitSolarCanopy: (pumpId) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[pumpId];
+    if (!pump?.hasCanopy || pump.hasSolarCanopy) return false;
+    const size = GAME_CONFIG.buildings.canopy.size;
+    if (!solarAllowed(get, size, drivewaySideAt(pump.position[1]))) return false;
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const tx = TransactionService.executeCashTransaction(state, {
+      type: 'BUILD',
+      amount: -solarPrice(size),
+      description: `${pumpId} güneşli sundurma`
+    });
+    if (!tx.success) return false;
+    state.pumps[pumpId].hasSolarCanopy = true;
+
+    sounds.playBuildPlace();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'REWARD',
+      title: 'Güneşli Sundurma',
+      message: `Açık havada öğlen ${solarPeakKwhPerHour(size)} kWh/sa bankaya akar.`
+    });
+    return true;
+  },
+
+  toggleGenerator: (buildingId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const unit = state.buildings[buildingId];
+    if (!unit || unit.type !== 'diesel_generator') return;
+    if (unit.generatorOff) delete unit.generatorOff;
+    else unit.generatorOff = true;
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
   },
 
   cleanVehicleWindows: (vehicleId) => {
@@ -2849,6 +2939,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       totalUpkeep += (pump.level - 1) * 40;
       // A canopy is no longer a building, so its keep is collected here.
       if (pump.hasCanopy) totalUpkeep += GAME_CONFIG.buildings.canopy.dailyUpkeep;
+      if (pump.hasCanopy && pump.hasSolarCanopy) totalUpkeep += solarUpkeep(GAME_CONFIG.buildings.canopy.size);
     }
     for (const bld of Object.values(state.buildings)) {
       const conf = GAME_CONFIG.buildings[bld.type];

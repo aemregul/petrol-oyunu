@@ -75,6 +75,15 @@ import {
   clamp
 } from '../formulas/economy';
 import { FAR_SIDE_FRONT, farSideBounds, unpavedHoles } from './land';
+import {
+  dieselForGenerator,
+  generatorWants,
+  gridKwhPerHourFor,
+  gridPriceAt,
+  isNightTariff,
+  solarCellsOn,
+  solarFactor
+} from './energy';
 
 export type SoundCue =
   | 'click'
@@ -4620,6 +4629,11 @@ export function energyAvailable(state: GameState, side: DrivewaySide): number {
   return energyBanks(state, side).reduce((sum, b) => sum + (b.energyKwh ?? energyCapacity(b)), 0);
 }
 
+/** What the banks on this block hold at the brim, all together. */
+export function energyCapacityOn(state: GameState, side: DrivewaySide): number {
+  return energyBanks(state, side).reduce((sum, b) => sum + energyCapacity(b), 0);
+}
+
 /** Takes up to `kwh` out of the block's banks; returns what actually came out. */
 export function drawEnergy(state: GameState, side: DrivewaySide, kwh: number): number {
   let left = kwh;
@@ -4633,28 +4647,110 @@ export function drawEnergy(state: GameState, side: DrivewaySide, kwh: number): n
   return kwh - left;
 }
 
+/** Puts up to `kwh` into the block's banks; returns what fitted. */
+export function feedEnergy(state: GameState, side: DrivewaySide, kwh: number): number {
+  let left = kwh;
+  for (const bank of energyBanks(state, side)) {
+    if (left <= 0) break;
+    const capacity = energyCapacity(bank);
+    const have = bank.energyKwh ?? capacity;
+    const put = Math.min(Math.max(0, capacity - have), left);
+    bank.energyKwh = have + put;
+    left -= put;
+  }
+  return kwh - left;
+}
+
+/** The substation feeding this block — the biggest one, if there are several. */
+export function substationOn(state: GameState, side: DrivewaySide): BuildingEntity | undefined {
+  return Object.values(state.buildings)
+    .filter((b) => b.type === 'ev_substation' && drivewaySideAt(b.position[1]) === side)
+    .sort((a, b) => b.level - a.level)[0];
+}
+
+/** Cells under panels feeding this block's banks. */
+export function solarCellsFeeding(state: GameState, side: DrivewaySide): number {
+  return solarCellsOn(Object.values(state.pumps).filter((p) => drivewaySideAt(p.position[1]) === side));
+}
+
+/** What this block's panels are putting into the bank right now, kWh per game hour. */
+export function solarKwhPerHourNow(state: GameState, side: DrivewaySide): number {
+  const factor = solarFactor(
+    hourOfDay(state.dayState.gameTime),
+    state.dayState.weather,
+    state.station.cleanliness
+  );
+  return solarCellsFeeding(state, side) * GAME_CONFIG.ev.solar.peakKwhPerCell * factor;
+}
+
+/** Whether this generator is burning diesel right now. */
+export function generatorRunning(state: GameState, building: BuildingEntity): boolean {
+  if (building.type !== 'diesel_generator') return false;
+  const side = drivewaySideAt(building.position[1]);
+  return generatorWants(
+    building,
+    energyAvailable(state, side),
+    energyCapacityOn(state, side),
+    dieselForGenerator(state.tanks.diesel)
+  );
+}
+
 /**
- * The grid, trickling into the banks through the substation. Billed as it
- * flows, into the day's figures; the money leaves with the other fixed
- * costs at closing time, the way the wages do.
+ * The block's energy, one tick of it: the roofs put in what the sun gives,
+ * the generator burns diesel when the bank is low, and the grid fills the
+ * rest through the substation at the hour's price. The grid is last so that
+ * free and own-fuel kWh are never crowded out by bought ones. All of it is
+ * billed as it flows, into the day's figures; the money leaves with the
+ * other fixed costs at closing time, the way the wages do.
  */
 function tickEnergy(state: GameState, dt: number): void {
-  const perSecond = GAME_CONFIG.ev.gridKwhPerHour / GAME_CONFIG.economy.realSecondsPerGameHour;
+  const hours = dt / GAME_CONFIG.economy.realSecondsPerGameHour;
+  const hour = hourOfDay(state.dayState.gameTime);
+  const stats = state.dayState.todayStats;
+  const bill = (tl: number) => {
+    stats.energyCost = (stats.energyCost ?? 0) + tl;
+  };
+
+  // A bank from before banks held anything comes full, like a new one.
   for (const bank of Object.values(state.buildings)) {
-    if (bank.type !== 'ev_storage') continue;
-    const capacity = energyCapacity(bank);
-    // A bank from before banks held anything comes full, like a new one.
-    if (bank.energyKwh === undefined) bank.energyKwh = capacity;
-    const side = drivewaySideAt(bank.position[1]);
-    const fed = Object.values(state.buildings).some(
-      (b) => b.type === 'ev_substation' && drivewaySideAt(b.position[1]) === side
-    );
-    if (!fed) continue;
-    const topUp = Math.min(capacity - bank.energyKwh, perSecond * dt);
-    if (topUp <= 0) continue;
-    bank.energyKwh += topUp;
-    state.dayState.todayStats.energyCost =
-      (state.dayState.todayStats.energyCost ?? 0) + topUp * GAME_CONFIG.ev.gridPricePerKwh;
+    if (bank.type === 'ev_storage' && bank.energyKwh === undefined) bank.energyKwh = energyCapacity(bank);
+  }
+
+  for (const side of ['near', 'far'] as DrivewaySide[]) {
+    const capacity = energyCapacityOn(state, side);
+    if (capacity <= 0) continue;
+
+    // Roofs first: what the sun gives is free, and a full bank wastes it.
+    const sun = solarKwhPerHourNow(state, side) * hours;
+    if (sun > 0) stats.solarKwh = (stats.solarKwh ?? 0) + feedEnergy(state, side, sun);
+
+    // Then the generator, from the diesel tank, at what that diesel cost.
+    const gen = GAME_CONFIG.ev.generator;
+    for (const unit of Object.values(state.buildings)) {
+      if (unit.type !== 'diesel_generator' || drivewaySideAt(unit.position[1]) !== side) continue;
+      if (!generatorRunning(state, unit)) continue;
+      const tank = state.tanks.diesel;
+      const kwh = Math.min(gen.kwhPerHour * hours, dieselForGenerator(tank) / gen.litersPerKwh);
+      const stored = feedEnergy(state, side, kwh);
+      if (stored <= 0) continue;
+      const liters = stored * gen.litersPerKwh;
+      tank.stock -= liters;
+      stats.generatorLiters = (stats.generatorLiters ?? 0) + liters;
+      stats.generatorKwh = (stats.generatorKwh ?? 0) + stored;
+      bill(liters * tank.averageCost);
+    }
+
+    // The grid last, through the contract on the substation.
+    const substation = substationOn(state, side);
+    if (!substation) continue;
+    if (state.station.managerId && state.managerSettings.nightGridFill && !isNightTariff(hour)) {
+      // The manager waits for the cheap window — unless the bank is about
+      // to leave customers standing at a dead post.
+      const share = (energyAvailable(state, side) / capacity) * 100;
+      if (share >= GAME_CONFIG.ev.nightFillFloorPercent) continue;
+    }
+    const stored = feedEnergy(state, side, gridKwhPerHourFor(substation.level) * hours);
+    if (stored > 0) bill(stored * gridPriceAt(hour));
   }
 }
 

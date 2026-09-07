@@ -26,7 +26,8 @@ import {
   WideExit,
   EvSubstation,
   Restaurant,
-  RestComplex
+  RestComplex,
+  DieselGenerator
 } from './FacilityMeshes';
 
 /** Facilities drawn by hand rather than loaded from an asset kit. */
@@ -44,6 +45,7 @@ const CUSTOM_FACILITIES: Record<string, React.FC<{ building: BuildingEntity }>> 
   wide_entry: WideEntry,
   wide_exit: WideExit,
   ev_substation: EvSubstation,
+  diesel_generator: DieselGenerator,
   restaurant: Restaurant,
   rest_complex: RestComplex
 };

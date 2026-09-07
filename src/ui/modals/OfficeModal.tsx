@@ -644,7 +644,17 @@ export const OfficeModal: React.FC = () => {
                 </div>
                 <Row label="Tesis kasalarında bekleyen" value={lira(figures.tills)} tone="text-amber-300" />
                 {(t.energyCost ?? 0) > 0 && (
-                  <Row label="Bugünkü elektrik (şebeke)" value={lira(t.energyCost ?? 0)} tone="text-rose-300" />
+                  <Row label="Bugünkü enerji (şebeke + jeneratör)" value={lira(t.energyCost ?? 0)} tone="text-rose-300" />
+                )}
+                {(t.solarKwh ?? 0) > 0 && (
+                  <Row label="Bugünkü güneş üretimi" value={`${Math.round(t.solarKwh ?? 0)} kWh`} tone="text-amber-300" />
+                )}
+                {(t.generatorLiters ?? 0) > 0 && (
+                  <Row
+                    label="Jeneratörün yaktığı mazot"
+                    value={`${Math.round(t.generatorLiters ?? 0)} L → ${Math.round(t.generatorKwh ?? 0)} kWh`}
+                    tone="text-amber-300"
+                  />
                 )}
                 <Row label="Tamamlanan gün" value={player.statistics.daysCompleted} />
               </Section>
