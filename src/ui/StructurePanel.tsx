@@ -55,8 +55,8 @@ export const StructurePanel: React.FC = () => {
     'w-full py-3.5 bg-[#252227] hover:bg-[#322d35] active:scale-98 text-white rounded-2xl font-extrabold text-sm transition-all border border-white/5 shadow-md';
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center sm:justify-start sm:p-6 sm:left-4">
-      <div className="w-[340px] pointer-events-auto select-none rounded-[2rem] overflow-hidden bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col">
+    <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center p-4">
+      <div className="w-[340px] max-h-[88vh] overflow-y-auto pointer-events-auto select-none rounded-[2rem] bg-[#161419] border border-white/10 shadow-2xl animate-fade-in flex flex-col">
         <div className="bg-[#2f5fa8] px-5 py-3.5 flex items-center justify-between text-white shadow-md">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
