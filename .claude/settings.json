@@ -360,7 +360,9 @@
       "Bash(echo \"\\(exit $?\\)\")",
       "Bash(echo \"grep exit: $?\")",
       "Bash(echo \"GREP_EXIT=$?\")",
-      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh\\) AppleWebKit/537.36 Chrome/120 Safari/537.36\" \"https://fonts.googleapis.com/css2?family=Lilita+One&display=swap\")"
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh\\) AppleWebKit/537.36 Chrome/120 Safari/537.36\" \"https://fonts.googleapis.com/css2?family=Lilita+One&display=swap\")",
+      "Bash(cp src/domain/services/simulationEngine.ts __TRACKED_VAR__/se.bak)",
+      "Bash(sed -i '' 's|  const { evicted } = evictFromPump\\(state, pump.id\\);|  const evicted = 0; // TEMP|' src/domain/services/simulationEngine.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp",

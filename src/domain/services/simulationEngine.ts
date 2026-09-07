@@ -6442,27 +6442,51 @@ function tickStationCondition(state: GameState, dt: number, effects: SimEffects)
     // Level 3 hardware is markedly more reliable (GDD: -%25 arıza riski).
     const reliability = pump.level >= 3 ? 0.75 : 1;
     if (pump.health <= 0) {
-      setPumpState(pump, 'BROKEN');
-      pump.currentVehicleId = null;
-      notify(
+      breakPump(
+        state,
+        pump,
         effects,
-        'CRITICAL',
-        'Pompa Arızalandı!',
         `${pump.id} tamamen devre dışı kaldı. Bakım yaparak tekrar hizmete alın.`
       );
       continue;
     }
 
     if (pump.health < 25 && Math.random() < 0.004 * reliability * dt) {
-      setPumpState(pump, 'BROKEN');
-      pump.currentVehicleId = null;
-      notify(
-        effects,
-        'CRITICAL',
-        'Pompa Arızalandı!',
-        `${pump.id} aşırı yıpranma nedeniyle durdu. Bakım gerekiyor.`
-      );
+      breakPump(state, pump, effects, `${pump.id} aşırı yıpranma nedeniyle durdu. Bakım gerekiyor.`);
     }
+  }
+}
+
+/**
+ * Takes a bay out of service, and sends whoever was using it on their way.
+ *
+ * Wiping currentVehicleId on its own left the car behind (Emre, 2026-09-07):
+ * the pump forgot the driver, so the attendant went idle and no pump state
+ * ever advanced them, while the driver still held the pump, the fuel
+ * reservation and their spot on the apron — neither fuelling nor leaving,
+ * and invisible to the orphan sweep, which only knows a pump that has moved
+ * on to *somebody else*. So the customer is evicted first, through the same
+ * path as a pump that is sold from under them, and the bay fails once it is
+ * empty. Whatever was already in their tank goes unpaid, the way it does when
+ * the station shuts mid-fill.
+ */
+function breakPump(
+  state: GameState,
+  pump: PumpEntity,
+  effects: SimEffects,
+  message: string
+): void {
+  const { evicted } = evictFromPump(state, pump.id);
+  setPumpState(pump, 'BROKEN');
+  pump.currentVehicleId = null;
+  notify(effects, 'CRITICAL', 'Pompa Arızalandı!', message);
+  if (evicted > 0) {
+    notify(
+      effects,
+      'WARNING',
+      'Müşteri Kaybedildi!',
+      `Pompa arızalanınca müşteri hizmet alamadan ayrıldı. (-0.015 İtibar)`
+    );
   }
 }
 

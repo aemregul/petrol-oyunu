@@ -248,6 +248,39 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(state.tanks.gasoline.reservedStock).toBeCloseTo(0, 1);
   });
 
+  it('sends the customer away when the pump fails under them', () => {
+    // Wiping the pump's currentVehicleId on breakdown left the car standing
+    // at the bay for ever: no pump state advanced it, no attendant saw it,
+    // and it still held the pump and its fuel reservation (Emre, 2026-09-07).
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    advanceUntil(state, (s) => Object.values(s.vehicles).some((v) => v.state === 'AT_PUMP'), 600);
+
+    const vehicle = Object.values(state.vehicles).find((v) => v.state === 'AT_PUMP')!;
+    const effects = createEffects();
+    expect(beginFueling(state, vehicle, 'LITERS', 20, 'PLAYER', effects)).toBe(true);
+    for (let i = 0; i < 10; i++) dispenseStep(state, vehicle, 0.1, effects);
+    expect(vehicle.state).toBe('FUELING');
+    const lost = state.dayState.todayStats.customersLost;
+
+    state.pumps.pump_1.health = 0;
+    advance(state, 1);
+
+    expect(state.pumps.pump_1.state).toBe('BROKEN');
+    expect(state.pumps.pump_1.currentVehicleId).toBeNull();
+    // The driver leaves rather than waiting on a dead dispenser…
+    expect(['EXIT', 'DESPAWN']).toContain(vehicle.state);
+    expect(vehicle.targetPumpId).toBeNull();
+    expect(vehicle.assignedActor).toBeNull();
+    // …and takes their hold on the tank with them. Reputation pays for it.
+    expect(state.tanks.gasoline.reservedStock).toBeCloseTo(0, 1);
+    expect(state.dayState.todayStats.customersLost).toBe(lost + 1);
+
+    // Nobody is left standing at the failed bay afterwards, either.
+    advanceUntil(state, () => !state.vehicles[vehicle.id], 600);
+    expect(state.vehicles[vehicle.id]).toBeUndefined();
+  });
+
   it('never lets a vehicle reach an invalid state', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
