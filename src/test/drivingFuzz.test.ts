@@ -19,7 +19,7 @@ import { GameState } from '../domain/types/gameState';
  * take them — and holds every one to the same rule: no car inside a building,
  * and no car aimed at one.
  */
-const FLAT = ['canopy', 'car_park', 'truck_park', 'wide_entry', 'wide_exit'];
+const FLAT = ['canopy', 'wide_entry', 'wide_exit'];
 /** Posts a car parks against, the way it parks against a pump island. */
 const SERVICE = ['ev_charger_ac', 'ev_charger_dc'];
 
@@ -163,6 +163,8 @@ function round(rnd: () => number, seconds: number): string[] {
 
       for (const building of Object.values(state.buildings)) {
         if (FLAT.includes(building.type) || SERVICE.includes(building.type)) continue;
+        // The one building a car may be in: the park it has a bay in.
+        if (vehicle.parkingBuildingId === building.id) continue;
         const f = getFootprint(building.position, building.size, building.rotation);
 
         const inside = body.some(

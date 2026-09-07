@@ -1378,7 +1378,11 @@ function isWedged(vehicle: VehicleEntity): boolean {
 const SOLID_SHRINK = -0.15;
 
 /** Everything on a block a car body may not enter, at solid tolerance. */
-function solidRects(state: GameState, side: DrivewaySide): PathRect[] {
+function solidRects(
+  state: GameState,
+  side: DrivewaySide,
+  ignoreBuildingId?: string | null
+): PathRect[] {
   // Binalar sıfır toleransla katıdır. Küçültme payı yalnız araç dibinde
   // durulan yapılara — pompa adaları VE şarj direkleri: bay'e yanaşan aracın
   // santimlik sürtünmesi takılma sayılmasın. (Şarj direği bina listesinde
@@ -1387,6 +1391,8 @@ function solidRects(state: GameState, side: DrivewaySide): PathRect[] {
   const rects: PathRect[] = [];
   for (const building of Object.values(state.buildings)) {
     if (FLAT_TYPES.includes(building.type)) continue;
+    // The park this car has a bay in is the one building it may drive into.
+    if (building.id === ignoreBuildingId) continue;
     if (drivewaySideAt(building.position[1]) !== side) continue;
     const turned = building.rotation === 90 || building.rotation === 270;
     const hw = (turned ? building.size[1] : building.size[0]) / 2;
@@ -1414,7 +1420,7 @@ function bodyInSolid(
   z: number,
   heading: number
 ): boolean {
-  return bodyInRects(solidRects(state, side), vehicle, x, z, heading);
+  return bodyInRects(solidRects(state, side, vehicle.parkingBuildingId), vehicle, x, z, heading);
 }
 
 /** Whether any corner of the body, posed here, falls inside one of these. */
@@ -1459,7 +1465,7 @@ function bodyClearAlong(
   const length = Math.hypot(dx, dz);
   if (length < 1e-6) return true;
 
-  const rects = solidRects(state, side);
+  const rects = solidRects(state, side, vehicle.parkingBuildingId);
   if (rects.length === 0) return true;
 
   const heading = Math.atan2(dx, dz);
@@ -2478,14 +2484,18 @@ function offWalls(
 function sendAway(state: GameState, vehicle: VehicleEntity): void {
   // A car standing in a park bay backs out to the spot it turned in from
   // before it goes anywhere: the kerb is in front of it, and a route drawn
-  // from the bay itself would drive straight over it. The bay is given up
-  // here, not on arrival at the road — the next driver may have it.
+  // from the bay itself would drive straight over it. It keeps its bay until
+  // it is out — the park is solid to everyone else, and a car half-way out
+  // is still in it — and then heads straight for the exit rather than up
+  // to the return lane and round (Emre, 2026-09-07).
   const backOut = parkedBackOut(state, vehicle);
-  vehicle.parkingBuildingId = null;
-  vehicle.parkingSlot = null;
+  if (!backOut) {
+    vehicle.parkingBuildingId = null;
+    vehicle.parkingSlot = null;
+  }
 
   const route = backOut
-    ? exitRoute(state, { ...vehicle, worldPosition: backOut })
+    ? parkExitRoute(state, { ...vehicle, worldPosition: backOut })
     : exitRoute(state, vehicle);
   if (route === null) {
     setVehicleState(vehicle, 'DESPAWN');
@@ -2495,6 +2505,38 @@ function sendAway(state: GameState, vehicle: VehicleEntity): void {
   setVehicleState(vehicle, 'EXIT');
   setRoute(vehicle, backOut ? [backOut, ...route] : route);
   vehicle.reversing = !!backOut;
+}
+
+/**
+ * From the spot behind a park bay, the shortest honest way out: across to
+ * the exit mouth's lane and down it. Buildings and islands are steered
+ * round by the planner; the car's own park is not excused, because it is
+ * already outside it. Falls back to the ordinary exit when there is no way
+ * across — a plot built so that the only way round is the back lane.
+ */
+function parkExitRoute(
+  state: GameState,
+  from: VehicleEntity
+): Array<[number, number, number]> | null {
+  const block = blockFor(state, from);
+  const laneX = drivewayLaneX(block.exit, pickLane(state, from.id, block.exit, ['EXIT']));
+
+  const direct = routeAroundOrNull(
+    state,
+    from,
+    block.side,
+    [
+      offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
+      [laneX, 0, block.roadLaneZ],
+      [block.roadEndX, 0, block.roadLaneZ]
+    ],
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block),
+    undefined,
+    undefined,
+    parkedTruckRects(state)
+  );
+  return direct ?? exitRoute(state, from);
 }
 
 /**
@@ -2729,7 +2771,13 @@ function driveToward(vehicle: VehicleEntity, deltaSeconds: number): boolean {
     // Reached this waypoint; spend what is left on the next leg. Reversing
     // only ever lasts one leg: out of the bay, then forward like anyone.
     vehicle.worldPosition = [target[0], y, target[2]];
-    vehicle.reversing = false;
+    if (vehicle.reversing) {
+      // Out of the bay: it is somebody else's now, and the park is a wall
+      // to this car like any other.
+      vehicle.reversing = false;
+      vehicle.parkingBuildingId = null;
+      vehicle.parkingSlot = null;
+    }
     budget -= distance;
 
     const next = vehicle.route.shift();
@@ -3501,10 +3549,10 @@ function walkRoute(
   block: BlockLayout,
   from: [number, number, number],
   to: [number, number, number],
-  ignoreBuildingId?: string
+  ignoreBuildingIds: Array<string | null | undefined>
 ): Array<[number, number, number]> {
   const rects = [
-    ...wallRects(state, block.side, 0.3, ignoreBuildingId),
+    ...wallRects(state, block.side, 0.3, ignoreBuildingIds.filter((id): id is string => !!id)),
     ...pumpRects(state, block.side, undefined, 0.3)
   ];
   const a: [number, number] = [from[0], from[2]];
@@ -3539,7 +3587,7 @@ function carDoor(vehicle: VehicleEntity): [number, number, number] {
 function spawnVisitor(state: GameState, vehicle: VehicleEntity, building: BuildingEntity): void {
   const block = blockFor(state, vehicle);
   const door = carDoor(vehicle);
-  const route = walkRoute(state, block, door, facilityDoor(building), building.id);
+  const route = walkRoute(state, block, door, facilityDoor(building), [building.id, vehicle.parkingBuildingId]);
 
   let look = 0;
   for (const char of vehicle.id) look = (look * 31 + char.charCodeAt(0)) | 0;
@@ -3622,7 +3670,7 @@ function advanceVisitor(
         blockFor(state, vehicle),
         facilityDoor(building),
         visitor.carDoor,
-        building.id
+        [building.id, vehicle.parkingBuildingId]
       );
       visitor.route = back.slice(1);
       visitor.targetWaypoint = back[0] ?? null;
@@ -3661,7 +3709,6 @@ function findParkingBay(
 } | null {
   const kind = parkingTypeFor(vehicle);
   const body = vehicleBodyHalfExtents(vehicle);
-  const walls = wallRects(state, block.side, 0);
 
   const taken = new Set<string>();
   for (const other of Object.values(state.vehicles)) {
@@ -3701,11 +3748,13 @@ function findParkingBay(
     const bay = parkingBay(park, option.slot, body);
     const runUp = clampLaneToApron(block, bay.runUp);
     // The spot behind the bay is where the car turns in from; a building
-    // standing on it makes the bay a bay nobody can use.
-    if (inRects(walls, runUp[0], runUp[2])) continue;
+    // standing on it makes the bay a bay nobody can use. The park itself is
+    // not such a building: held onto the concrete, the spot can fall just
+    // inside the park's own lines, and that is the car's to drive on.
+    if (inRects(wallRects(state, block.side, 0, option.buildingId), runUp[0], runUp[2])) continue;
 
     const legs = parkApproachLegs(state, block, runUp, bay.pose);
-    const route = driveable(state, planner, block, legs);
+    const route = driveable(state, planner, block, legs, undefined, option.buildingId);
     if (route) {
       return {
         buildingId: option.buildingId,
@@ -5775,7 +5824,7 @@ function facilityStillOpen(
       blockFor(state, vehicle),
       visitor.worldPosition,
       facilityDoor(complex),
-      complex.id
+      [complex.id, vehicle.parkingBuildingId]
     );
     visitor.route = route.slice(1);
     visitor.targetWaypoint = route[0] ?? null;

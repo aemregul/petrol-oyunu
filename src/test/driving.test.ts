@@ -18,10 +18,10 @@ import { GameState } from '../domain/types/gameState';
  * pretending it is not there: it steers round, or — where the plot has been
  * walled in and there is no way round — it does not come in at all.
  *
- * Painted parking bays are ground rather than walls, and a canopy is a roof:
- * driving over and under those is what they are for.
+ * A canopy is a roof: driving under it is what it is for. A park is a
+ * building since 2026-09-07 — only the car with a bay in it may be inside.
  */
-const FLAT = ['canopy', 'car_park', 'truck_park'];
+const FLAT = ['canopy'];
 
 /**
  * Service points a car deliberately pulls up to. A charging car stands right
@@ -152,6 +152,8 @@ function trespasses(state: GameState, seconds: number): { hits: string[]; arrive
 
       for (const building of Object.values(state.buildings)) {
         if (FLAT.includes(building.type) || SERVICE.includes(building.type)) continue;
+        // The one building a car may be in: the park it has a bay in.
+        if (vehicle.parkingBuildingId === building.id) continue;
         const f = getFootprint(building.position, building.size, building.rotation);
 
         const inside = body.some(
@@ -290,6 +292,7 @@ describe('vehicles and buildings', () => {
         for (const building of Object.values(state.buildings)) {
           if (building.position[1] >= 0) continue;
           if (FLAT.includes(building.type) || SERVICE.includes(building.type)) continue;
+          if (vehicle.parkingBuildingId === building.id) continue;
           const f = getFootprint(building.position, building.size, building.rotation);
           const bodySize = vehicleBodyHalfExtents(vehicle);
           const hit = corners(x, z, vehicle.heading, bodySize.length, bodySize.width).some(

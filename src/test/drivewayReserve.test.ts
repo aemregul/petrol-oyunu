@@ -80,8 +80,11 @@ describe('the driveway reserve', () => {
     expect(result.reason).toMatch(/rezerv/i);
   });
 
-  it('still allows ground paint on the corridor — a marked-out park is not a wall', () => {
-    expect(evaluatePlacement(openPlot(), 'car_park', [3, 4], 0).valid).toBe(true);
+  it('refuses a park on the corridor too — a park is a building now, and cars drive round it', () => {
+    // It used to pass as ground paint. Since 2026-09-07 a park is solid to
+    // every car but the one with a bay in it, so on the corridor it would
+    // wall the mouth off like any shop.
+    expect(evaluatePlacement(openPlot(), 'car_park', [3, 4], 0).valid).toBe(false);
   });
 
   it('lets a road-facing pump lean its bay onto the strip, but not into a mouth', () => {

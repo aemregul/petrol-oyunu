@@ -24,8 +24,9 @@ import {
   collectAllTills
 } from '../domain/services/facilities';
 import { useGameStore } from '../store/gameStore';
-import { evaluatePlacement, snapPlacement } from '../domain/services/placement';
+import { evaluatePlacement, snapPlacement, getFootprint } from '../domain/services/placement';
 import { stationBounds } from '../domain/services/land';
+import { wallRects, inRects } from '../domain/services/pathfinding';
 
 /**
  * The buildings people walk into: a car park that is actually used, a driver
@@ -286,18 +287,47 @@ describe('facilities - the visit', () => {
     expect(car.targetWaypoint?.[0]).toBeCloseTo(bay.pose[0], 3);
     expect(car.targetWaypoint?.[2]).toBeGreaterThan(bay.pose[2] + 1);
     expect(car.targetWaypoint?.[2]).toBeLessThanOrEqual(bay.runUp[2]);
-    // The bay is somebody else's now.
-    expect(car.parkingBuildingId).toBeNull();
+    // The bay stays this car's until it is out: a car half-way out is still
+    // in the park, and the park is a wall to everyone else.
+    expect(car.parkingBuildingId).toBe('park');
 
     // The nose stays put while reversing — the car moves, the heading does
-    // not — and the flag drops once the run-up is reached.
+    // not — and the bay stays its own until the run-up, where the flag drops
+    // and the bay is given up.
     const heading = car.heading;
     const from = [...car.worldPosition];
     advance(state, 0.15);
     expect(car.reversing).toBe(true);
+    expect(car.parkingBuildingId).toBe('park');
     expect(car.worldPosition[2]).toBeGreaterThan(from[2]);
     expect(car.heading).toBeCloseTo(heading, 6);
     expect(advanceUntil(state, () => !car.reversing, 30)).toBe(true);
+    expect(car.parkingBuildingId).toBeNull();
+
+    // Then straight for the exit: the way out never goes deeper into the plot
+    // than the run-up, and never back through the park (Emre, 2026-09-07).
+    const deepest = Math.max(...[car.targetWaypoint!, ...car.route].map((p) => p[2]));
+    expect(deepest).toBeLessThanOrEqual(bay.runUp[2] + 0.01);
+    const park = getFootprint(state.buildings.park.position, state.buildings.park.size, 0);
+    for (const p of [car.targetWaypoint!, ...car.route]) {
+      expect(p[0] > park.minX && p[0] < park.maxX && p[2] > park.minZ && p[2] < park.maxZ).toBe(false);
+    }
+  });
+
+  it('is a wall to every car but the one with a bay in it', () => {
+    const state = forecourt({ park: true });
+    const park = state.buildings.park;
+    // On the route map the park is now something to steer round…
+    expect(inRects(wallRects(state, 'near'), park.position[0], park.position[1])).toBe(true);
+    // …unless it is the park you are heading for.
+    expect(inRects(wallRects(state, 'near', undefined, 'park'), park.position[0], park.position[1])).toBe(false);
+    // And a car parks in it without the solid-structure rule refusing the step.
+    const car = customerAtPump(state);
+    car.facilityIntent = true;
+    serve(state, car);
+    expect(car.state).toBe('TO_PARK');
+    expect(advanceUntil(state, () => car.state === 'VISITING', 60)).toBe(true);
+    expect(car.solidStuckSeconds ?? 0).toBe(0);
   });
 
   it('lets a driver leave the car at the pump and hold the bay until they are back', () => {

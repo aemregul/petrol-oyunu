@@ -28,13 +28,15 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { unpavedHoles } from './land';
 
 /**
- * Built but not solid: nothing here is a wall to steer round. A marked-out
- * park is paint on the ground, and a widened ramp is the driveway itself —
- * treating that one as an obstacle had cars refusing to use their own
- * entrance. Canopies are absent because they are no longer buildings; each
- * one belongs to the pump it roofs.
+ * Built but not solid: nothing here is a wall to steer round. A widened ramp
+ * is the driveway itself — treating it as an obstacle had cars refusing to
+ * use their own entrance. Canopies are absent because they are no longer
+ * buildings; each one belongs to the pump it roofs. Parks used to be here
+ * as "paint on the ground", and every car on the plot drove straight over
+ * the cars parked in them (Emre, 2026-09-07): a park is a building now, and
+ * only the car with a bay in it may enter.
  */
-export const FLAT_TYPES = ['car_park', 'truck_park', 'wide_entry', 'wide_exit'];
+export const FLAT_TYPES = ['wide_entry', 'wide_exit'];
 
 export interface Rect {
   minX: number;
@@ -79,15 +81,16 @@ export function wallRects(
   state: GameState,
   side: 'near' | 'far',
   clearance = CLEARANCE,
-  ignoreBuildingId?: string
+  ignoreBuildingId?: string | string[]
 ): Rect[] {
   const out: Rect[] = [];
+  const ignored = Array.isArray(ignoreBuildingId) ? ignoreBuildingId : [ignoreBuildingId];
 
   for (const building of Object.values(state.buildings)) {
-    // A charging post is a thing a car parks against, so the one it is
-    // heading for cannot be an obstacle to it — the same courtesy the bay's
-    // own pump island gets.
-    if (building.id === ignoreBuildingId) continue;
+    // A charging post is a thing a car parks against, and a park bay is a
+    // thing a car parks IN, so the one it is heading for cannot be an
+    // obstacle to it — the same courtesy the bay's own pump island gets.
+    if (ignored.includes(building.id)) continue;
     // A canopy is a roof and a marked-out park is paint on the ground: cars
     // drive under and over these, not round them.
     if (FLAT_TYPES.includes(building.type)) continue;
