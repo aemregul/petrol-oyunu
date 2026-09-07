@@ -22,8 +22,8 @@ const STRIDE = 9;
 export const VisitorMesh: React.FC<{ vehicle: VehicleEntity }> = ({ vehicle }) => {
   const visitor = vehicle.visitor;
   const groupRef = useRef<THREE.Group>(null);
-  const leftLeg = useRef<THREE.Mesh>(null);
-  const rightLeg = useRef<THREE.Mesh>(null);
+  const leftLeg = useRef<THREE.Group>(null);
+  const rightLeg = useRef<THREE.Group>(null);
   const leftArm = useRef<THREE.Mesh>(null);
   const rightArm = useRef<THREE.Mesh>(null);
   const placed = useRef(false);
@@ -66,28 +66,24 @@ export const VisitorMesh: React.FC<{ vehicle: VehicleEntity }> = ({ vehicle }) =
 
   return (
     <group ref={groupRef} scale={1.05}>
-      {/* Legs, hinged at the hip so they can swing */}
-      <group position={[-0.11, 0.7, 0]}>
-        <mesh ref={leftLeg} castShadow>
-          <boxGeometry args={[0.13, 0.66, 0.15]} />
-          <meshStandardMaterial color={trousers} roughness={0.8} />
-        </mesh>
-      </group>
-      <group position={[0.11, 0.7, 0]}>
-        <mesh ref={rightLeg} castShadow>
-          <boxGeometry args={[0.13, 0.66, 0.15]} />
-          <meshStandardMaterial color={trousers} roughness={0.8} />
-        </mesh>
-      </group>
-      {/* Shoes */}
-      <mesh position={[-0.11, 0.04, 0.02]} castShadow>
-        <boxGeometry args={[0.14, 0.08, 0.24]} />
-        <meshStandardMaterial color="#1c1917" roughness={0.9} />
-      </mesh>
-      <mesh position={[0.11, 0.04, 0.02]} castShadow>
-        <boxGeometry args={[0.14, 0.08, 0.24]} />
-        <meshStandardMaterial color="#1c1917" roughness={0.9} />
-      </mesh>
+      {/* Legs, hinged at the hip so they swing from there — the leg hangs
+          below its pivot and the shoe rides on the end of it. Hinged at the
+          middle, the legs floated and the shoes sat alone on the ground as
+          two black lumps under the figure (Emre, 2026-09-07). */}
+      {[-0.11, 0.11].map((x, i) => (
+        <group key={x} position={[x, 0.74, 0]}>
+          <group ref={i === 0 ? leftLeg : rightLeg}>
+            <mesh position={[0, -0.35, 0]} castShadow>
+              <boxGeometry args={[0.13, 0.66, 0.15]} />
+              <meshStandardMaterial color={trousers} roughness={0.8} />
+            </mesh>
+            <mesh position={[0, -0.7, 0.03]} castShadow>
+              <boxGeometry args={[0.14, 0.08, 0.24]} />
+              <meshStandardMaterial color="#1c1917" roughness={0.9} />
+            </mesh>
+          </group>
+        </group>
+      ))}
 
       {/* Torso */}
       <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
