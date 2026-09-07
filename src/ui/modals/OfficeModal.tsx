@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { GAME_CONFIG } from '../../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
 import { calculateEndOfDayReputation } from '../../domain/formulas/economy';
 import { stopChance } from '../../domain/services/simulationEngine';
 import { FuelType, MissionEntity } from '../../domain/types/gameState';
-import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard } from 'lucide-react';
+import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Sparkles, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
 type OfficeTab = 'summary' | 'price' | 'accounts' | 'missions';
@@ -286,6 +286,8 @@ export const OfficeModal: React.FC = () => {
   const hirePumpAttendant = useGameStore((s) => s.hirePumpAttendant);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const relocateStructure = useGameStore((s) => s.relocateStructure);
+  const cleanStation = useGameStore((s) => s.cleanStation);
+  const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
   const setFuelPrice = useGameStore((s) => s.setFuelPrice);
   const claimMissionReward = useGameStore((s) => s.claimMissionReward);
 
@@ -305,6 +307,10 @@ export const OfficeModal: React.FC = () => {
   const { player, station } = gameState;
   const figures = officeFigures(gameState);
   const office = Object.values(gameState.buildings).find((b) => b.type === 'office');
+  const priceSign = Object.values(gameState.buildings).find((b) => b.type === 'price_sign');
+  const priceSignUpgrade = priceSign
+    ? GAME_CONFIG.buildingUpgrades[upgradePathFor('price_sign')]?.[priceSign.level + 1]
+    : undefined;
 
   const commitName = () => {
     if (editingName !== null && renameStation(editingName)) setEditingName(null);
@@ -498,6 +504,14 @@ export const OfficeModal: React.FC = () => {
                 <Row label="Günlük yovmiye" value={lira(figures.wages)} tone="text-rose-300" />
               </Section>
 
+              <Section title="Saha">
+                <Row
+                  label="Saha temizliği"
+                  value={`%${Math.round(station.cleanliness)}`}
+                  tone={station.cleanliness >= 70 ? 'text-emerald-400' : station.cleanliness >= 40 ? 'text-amber-300' : 'text-rose-300'}
+                />
+              </Section>
+
               <div className="flex flex-col gap-3 pt-5">
                 <ActionButton
                   onClick={hireAll}
@@ -517,6 +531,15 @@ export const OfficeModal: React.FC = () => {
                   icon={Power}
                   label={station.open ? 'İstasyonu Kapat' : 'İstasyonu Aç'}
                   tone="red"
+                />
+                <ActionButton
+                  onClick={() => {
+                    sounds.playClick();
+                    cleanStation();
+                  }}
+                  icon={Sparkles}
+                  label={`Sahayı Temizle (${lira(GAME_CONFIG.economy.siteCleanCost)})`}
+                  disabled={station.cleanliness >= 99.5 || player.cash < GAME_CONFIG.economy.siteCleanCost}
                 />
                 <ActionButton onClick={moveOffice} icon={Move} label="Ofisi Taşı" disabled={!office} />
               </div>
@@ -569,6 +592,30 @@ export const OfficeModal: React.FC = () => {
                   Alış fiyatının yanındaki ok, satış fiyatının bölge ortalamasına göre yerini gösterir.
                 </p>
               </Section>
+
+              {/* The price board is a door into this tab, so its upgrade
+                  lives here rather than on a card of its own. */}
+              {priceSign && (
+                <Section title="Fiyat Tabelası">
+                  <Row label="Seviye" value={`Sv.${priceSign.level}`} />
+                  {priceSignUpgrade ? (
+                    <div className="pt-3">
+                      <ActionButton
+                        onClick={() => {
+                          sounds.playClick();
+                          upgradeBuilding(priceSign.id);
+                        }}
+                        icon={Tag}
+                        label={`Tabela Sv.${priceSign.level + 1} — ${lira(priceSignUpgrade.cost)}`}
+                        disabled={player.cash < priceSignUpgrade.cost}
+                      />
+                      <p className="text-[12px] font-semibold text-slate-500 pt-2">{priceSignUpgrade.effectsDescription}</p>
+                    </div>
+                  ) : (
+                    <p className="text-[12px] font-semibold text-slate-500 py-2">Tabela son seviyede.</p>
+                  )}
+                </Section>
+              )}
             </>
           ) : tab === 'accounts' ? (
             <>

@@ -361,7 +361,6 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
   const [hovered, setHovered] = useState(false);
   const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
   const selectBuilding = useGameStore((s) => s.selectBuilding);
-  const setActiveModal = useGameStore((s) => s.setActiveModal);
   const openOffice = useGameStore((s) => s.openOffice);
   const editMode = useGameStore((s) => s.editMode);
   const placing = useGameStore((s) => s.buildMode.active);
@@ -399,10 +398,13 @@ export const BuildingMesh: React.FC<BuildingMeshProps> = ({ building }) => {
       return;
     }
 
+    // The pylon is scenery with the station's name on it: nothing to open
+    // (Emre, 2026-09-07). The office and the price board are doors into the
+    // office card; everything else gets its own card.
+    if (building.type === 'pylon_sign') return;
+    if (building.type === 'office') return openOffice('summary');
+    if (building.type === 'price_sign') return openOffice('price');
     selectBuilding(building.id);
-    if (building.type === 'office') openOffice('summary');
-    else if (building.type === 'price_sign') openOffice('price');
-    else if (building.type === 'pylon_sign') setActiveModal('SETTINGS');
   };
 
   return (

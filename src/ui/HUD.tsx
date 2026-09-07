@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Target, Trash2, Umbrella, UserRound, Users, X } from 'lucide-react';
-import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
 import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
@@ -9,7 +9,7 @@ import { ActiveEventsBar } from './ActiveEventsBar';
 import { TankerStatusBar } from './TankerStatusBar';
 import { PumpPanel } from './PumpPanel';
 import { FacilityPanel } from './FacilityPanel';
-import { isFacility } from '../domain/services/facilities';
+import { StructurePanel } from './StructurePanel';
 import { CAMERA_VIEWS, type CameraViewId } from '../rendering/cameraFrame';
 import { TONE_BUTTON } from './gameStyle';
 
@@ -38,7 +38,6 @@ export const HUD: React.FC = () => {
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const cameraView = useGameStore((s) => s.cameraView);
   const cycleCameraView = useGameStore((s) => s.cycleCameraView);
-  const cleanStation = useGameStore((s) => s.cleanStation);
   const buildMode = useGameStore((s) => s.buildMode);
   const fittingCanopy = useGameStore((s) => s.fittingCanopy);
   const exitCanopyMode = useGameStore((s) => s.exitCanopyMode);
@@ -49,13 +48,6 @@ export const HUD: React.FC = () => {
   const resetCamera = useGameStore((s) => s.resetCamera);
   const landMode = useGameStore((s) => s.landMode);
   const exitLandMode = useGameStore((s) => s.exitLandMode);
-  const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
-  const selectedPumpId = useGameStore((s) => s.selectedPumpId);
-  const selectBuilding = useGameStore((s) => s.selectBuilding);
-  const selectPump = useGameStore((s) => s.selectPump);
-  const structureValue = useGameStore((s) => s.structureValue);
-  const sellStructure = useGameStore((s) => s.sellStructure);
-  const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const editMode = useGameStore((s) => s.editMode);
   const toggleEditMode = useGameStore((s) => s.toggleEditMode);
@@ -100,23 +92,6 @@ export const HUD: React.FC = () => {
       ? absorbedByRestComplex(gameState, drivewaySideAt(buildMode.position[1]))
       : [];
 
-  // Pumps open their own card (PumpPanel), and so do the buildings people
-  // walk into (FacilityPanel); this bar serves everything else.
-  const selected = (() => {
-    if (selectedPumpId) return null;
-    const building = selectedBuildingId ? gameState.buildings[selectedBuildingId] : null;
-    // The office opens its own modal on click; a bar under it is noise.
-    if (!building || isFacility(building.type) || building.type === 'office') return null;
-
-    return {
-      id: building.id,
-      level: building.level,
-      name: GAME_CONFIG.buildings[building.type]?.name ?? building.type,
-      value: structureValue(building.id),
-      upgrade:
-        GAME_CONFIG.buildingUpgrades[upgradePathFor(building.type)]?.[building.level + 1] ?? null
-    };
-  })();
   const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
   const unreadNotifications = gameState.notifications.filter((n) => !n.read).length;
 
@@ -253,6 +228,29 @@ export const HUD: React.FC = () => {
             <ViewIcon className="w-5 h-5" />
           </button>
 
+          {/* One switch for rearranging what is already built, in place of a
+              move button on every structure panel. It lives with the camera
+              controls rather than in the bottom bar (Emre, 2026-09-07). */}
+          <button
+            onClick={toggleEditMode}
+            disabled={!canEdit}
+            className={`game-surface game-btn w-12 h-12 flex items-center justify-center transition-all ${
+              !canEdit
+                ? 'text-slate-600 cursor-not-allowed'
+                : editMode
+                  ? `${TONE_BUTTON.blue} !border-sky-300/70`
+                  : 'hover:bg-slate-800 text-slate-200 hover:text-white'
+            }`}
+            title={
+              canEdit
+                ? `Düzenle — yapıları taşımak için aç, sonra taşımak istediğin yapıya tıkla${editMode ? ' (açık)' : ''}`
+                : `Düzenle — Seviye ${EDIT_MODE_LEVEL} gerekiyor`
+            }
+            aria-label="Düzenleme modu"
+          >
+            <Move className={`w-5 h-5 ${editMode ? 'text-white' : canEdit ? 'text-sky-400' : 'text-slate-600'}`} />
+          </button>
+
           <div className="game-surface p-1.5 flex flex-col gap-1 w-12">
             <button
               onClick={() => rotateCamera('LEFT')}
@@ -278,15 +276,6 @@ export const HUD: React.FC = () => {
             </button>
           </div>
 
-          {/* Quick Clean Station Button */}
-          <button
-            onClick={cleanStation}
-            className="game-surface game-btn hover:bg-slate-800 text-white text-xs font-extrabold px-3.5 py-2 flex items-center gap-2"
-            title="İstasyon Sahasını Temizle (300 TL)"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>Temizle (%{Math.round(gameState.station.cleanliness)})</span>
-          </button>
         </div>
 
         {/* Land is bought and paved from the catalogue's Arsa cards; on the
@@ -456,51 +445,12 @@ export const HUD: React.FC = () => {
           </div>
         )}
 
-        {/* Whatever the player has clicked on: what it is worth, and the two
-            things they can do with it. */}
-        {selected && !buildMode.active && (
-          <div className="game-surface !border-sky-500 px-5 py-3 pointer-events-auto flex items-center gap-4 animate-fade-in">
-            <div>
-              <div className="text-xs uppercase font-bold text-sky-400">
-                {selected.name} · Sv{selected.level}
-              </div>
-              <div className="text-sm font-extrabold text-white">
-                Satış değeri ₺{selected.value.toLocaleString('tr-TR')}
-              </div>
-            </div>
-            {selected.upgrade && (
-              <button
-                onClick={() => upgradeBuilding(selected.id)}
-                className={`game-btn rounded-xl px-4 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.green}`}
-                title={selected.upgrade.effectsDescription}
-              >
-                <span>Sv{selected.level + 1} Yükselt · ₺{selected.upgrade.cost.toLocaleString('tr-TR')}</span>
-              </button>
-            )}
-            <button
-              onClick={() => sellStructure(selected.id)}
-              className={`game-btn rounded-xl px-3.5 py-2 text-xs font-extrabold flex items-center gap-1.5 ${TONE_BUTTON.amber}`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Sat</span>
-            </button>
-            <button
-              onClick={() => {
-                selectBuilding(null);
-                selectPump(null);
-              }}
-              className={`game-btn rounded-xl px-3 py-2 text-xs font-extrabold ${TONE_BUTTON.slate}`}
-            >
-              Kapat
-            </button>
-          </div>
-        )}
-
       </div>
 
       <TankerStatusBar />
       <PumpPanel />
       <FacilityPanel />
+      <StructurePanel />
 
       {/* ================= BOTTOM ACTION BAR ================= */}
       <div ref={bottomBarRef} className="hud-bottom flex justify-center items-center w-full">
@@ -530,30 +480,6 @@ export const HUD: React.FC = () => {
           >
             <Hammer className="w-4 h-4 text-amber-400" />
             <span className="hud-nav-label">İnşaat</span>
-          </button>
-
-          {/* One switch for rearranging what is already built, in place of a
-              move button on every structure panel. */}
-          <button
-            onClick={toggleEditMode}
-            disabled={!canEdit}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              !canEdit
-                ? 'text-slate-600 cursor-not-allowed'
-                : editMode
-                  ? `game-btn ${TONE_BUTTON.blue}`
-                  : 'text-slate-300 hover:bg-slate-800 border-2 border-transparent'
-            }`}
-            title={
-              canEdit
-                ? 'Yapıları taşımak için aç, sonra taşımak istediğin yapıya tıkla'
-                : `Seviye ${EDIT_MODE_LEVEL} gerekiyor`
-            }
-          >
-            <Move
-              className={`w-4 h-4 ${editMode ? 'text-white' : canEdit ? 'text-sky-400' : 'text-slate-600'}`}
-            />
-            <span className="hud-nav-label">Düzenle</span>
           </button>
 
           <button
