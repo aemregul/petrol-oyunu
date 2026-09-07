@@ -83,19 +83,34 @@ const EventChip: React.FC<{
   </div>
 );
 
+/**
+ * Whether the tank is low enough to nag about — and nobody has done anything
+ * about it yet. The card asks for an order; once one is on its way the ask
+ * is met, the tanker widget shows it coming, and a red card still shouting
+ * "order!" is a card the player learns to ignore (Emre, 2026-09-07).
+ */
+export function stockWarningDue(
+  tank: { stock: number; capacity: number; fuelType: string },
+  orders: Array<{ fuelType: string }>
+): boolean {
+  if (tank.stock > tank.capacity * 0.15) return false;
+  return !orders.some((o) => o.fuelType === tank.fuelType);
+}
+
 /** Shows what is currently affecting the station and how long it has left. */
 export const ActiveEventsBar: React.FC = () => {
   const activeEvents = useGameStore((s) => s.gameState.activeEvents);
   const rushLeft = useGameStore((s) => s.gameState.dayState.rushSecondsLeft ?? 0);
   const dealLeft = useGameStore((s) => s.gameState.dayState.fuelDealSecondsLeft ?? 0);
   const gasoline = useGameStore((s) => s.gameState.tanks.gasoline);
+  const fuelOrders = useGameStore((s) => s.gameState.fuelOrders);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
 
   // Kritik stok uyarısı eskiden ekranın ortasında bir bant olarak beliriyordu
   // ve sahneyi kapatıyordu (Emre, 2026-09-05). Artık diğer olay kartlarının
   // arasında yaşar: aynı köşe, aynı görsel dil — ama tıklanınca doğrudan
-  // sipariş ekranını açar.
-  const gasolineCritical = gasoline.stock <= gasoline.capacity * 0.15;
+  // sipariş ekranını açar. Sipariş verildiyse susar.
+  const gasolineCritical = stockWarningDue(gasoline, fuelOrders);
 
   if (activeEvents.length === 0 && rushLeft <= 0 && dealLeft <= 0 && !gasolineCritical) {
     return null;
