@@ -16,6 +16,7 @@ import {
 import {
   parkingBay,
   parkingBayCount,
+  parkingTypeFor,
   facilityDoor,
   facilityMoralPoints,
   facilitySpend,
@@ -194,6 +195,14 @@ describe('facilities - geometry', () => {
     expect(bay.runUp[0]).toBeCloseTo(9.5 + 1.5 + 1.6, 3);
     // Facing -x: heading -π/2.
     expect(bay.heading).toBeCloseTo(-Math.PI / 2, 6);
+  });
+
+  it('sends the long bodies to the lorry park and everything else to the car park', () => {
+    expect(parkingTypeFor({ archetype: 'firetruck', modelVariant: 'firetruck' })).toBe('truck_park');
+    expect(parkingTypeFor({ archetype: 'truck', modelVariant: 'truck-with-trailer' })).toBe('truck_park');
+    expect(parkingTypeFor({ archetype: 'bus', modelVariant: 'bus' })).toBe('truck_park');
+    expect(parkingTypeFor({ archetype: 'commuter', modelVariant: 'sedan' })).toBe('car_park');
+    expect(parkingTypeFor({ archetype: 'ambulance', modelVariant: 'ambulance' })).toBe('car_park');
   });
 
   it('puts the door on the road-facing side, a step outside the wall', () => {

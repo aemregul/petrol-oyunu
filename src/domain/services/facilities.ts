@@ -107,11 +107,14 @@ export function parkingTypeFor(vehicle: {
   archetype: VehicleArchetype;
   modelVariant?: string;
 }): 'car_park' | 'truck_park' {
+  // A fire engine is a lorry's length; it takes a lorry's bay (Emre, 2026-09-07).
   const big =
     vehicle.archetype === 'truck' ||
     vehicle.archetype === 'bus' ||
+    vehicle.archetype === 'firetruck' ||
     vehicle.modelVariant === 'truck-with-trailer' ||
-    vehicle.modelVariant === 'bus';
+    vehicle.modelVariant === 'bus' ||
+    vehicle.modelVariant === 'firetruck';
   return big ? 'truck_park' : 'car_park';
 }
 
