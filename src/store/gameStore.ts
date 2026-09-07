@@ -485,6 +485,8 @@ interface GameStore {
   removeCanopy: (pumpId: string) => boolean;
   /** Panels on a pump's canopy, feeding the block's bank by day. */
   fitSolarCanopy: (pumpId: string) => boolean;
+  /** Takes the panels off a canopy and leaves the canopy standing. */
+  removeSolarCanopy: (pumpId: string) => boolean;
   /** Switches a diesel generator off, or back on. */
   toggleGenerator: (buildingId: string) => void;
   cleanVehicleWindows: (vehicleId: string) => void;
@@ -2243,6 +2245,35 @@ export const useGameStore = create<GameStore>((set, get) => {
       type: 'REWARD',
       title: 'Güneşli Sundurma',
       message: `Açık havada öğlen ${solarPeakKwhPerHour(size)} kWh/sa bataryaya akar.`
+    });
+    return true;
+  },
+
+  removeSolarCanopy: (pumpId) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[pumpId];
+    if (!pump?.hasCanopy || !pump.hasSolarCanopy) return false;
+
+    // Discounted for the island's condition, the way the roof itself is.
+    const wear = 0.6 + 0.4 * (pump.health / 100);
+    const refund =
+      Math.round((solarPrice(GAME_CONFIG.buildings.canopy.size) * GAME_CONFIG.economy.refundRatio * wear) / 10) * 10;
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    TransactionService.executeCashTransaction(state, {
+      type: 'REFUND',
+      amount: refund,
+      description: `${pumpId} güneş panelleri söküldü`
+    });
+    delete state.pumps[pumpId].hasSolarCanopy;
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Paneller Söküldü',
+      message: `Sundurma yerinde kaldı; ₺${refund.toLocaleString('tr-TR')} kasaya geçti.`
     });
     return true;
   },

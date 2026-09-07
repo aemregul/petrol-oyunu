@@ -206,6 +206,26 @@ describe('buying panels', () => {
     expect(useGameStore.getState().gameState.player.cash).toBe(afterRoof - 15 * 600);
   });
 
+  it('takes the panels off and leaves the canopy standing', () => {
+    const state = plot(100);
+    state.player.cash = 100000;
+    const pump = Object.values(state.pumps).find((p) => drivewaySideAt(p.position[1]) === side)!;
+    pump.hasCanopy = true;
+    pump.hasSolarCanopy = true;
+    useGameStore.setState({ gameState: state });
+    const before = useGameStore.getState().gameState.player.cash;
+    expect(useGameStore.getState().removeSolarCanopy(pump.id)).toBe(true);
+    const after = useGameStore.getState().gameState.pumps[pump.id];
+    expect(after.hasCanopy).toBe(true);
+    expect(after.hasSolarCanopy).toBeUndefined();
+    // Refunded at the trade-in rate for a healthy island: price × ratio.
+    expect(useGameStore.getState().gameState.player.cash - before).toBe(
+      Math.round((15 * 600 * GAME_CONFIG.economy.refundRatio) / 10) * 10
+    );
+    // Nothing to take off a bare roof.
+    expect(useGameStore.getState().removeSolarCanopy(pump.id)).toBe(false);
+  });
+
   it('refuses panels on a block with no bank', () => {
     const state = plot(100);
     delete state.buildings.bank;

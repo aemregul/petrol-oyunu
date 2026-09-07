@@ -35,6 +35,7 @@ export const PumpPanel: React.FC = () => {
   const fitCanopy = useGameStore((s) => s.fitCanopy);
   const removeCanopy = useGameStore((s) => s.removeCanopy);
   const fitSolarCanopy = useGameStore((s) => s.fitSolarCanopy);
+  const removeSolarCanopy = useGameStore((s) => s.removeSolarCanopy);
 
   const pump = selectedPumpId ? gameState.pumps[selectedPumpId] : null;
   if (!pump || activeModal !== 'NONE' || buildMode.active) return null;
@@ -247,10 +248,20 @@ export const PumpPanel: React.FC = () => {
               </button>
             )}
             {pump.hasCanopy && pump.hasSolarCanopy && (
-              <div className="w-full py-2 rounded-xl bg-amber-950/30 border border-amber-500/20 text-amber-200/80 text-[11px] font-bold flex items-center justify-center gap-1.5">
-                <Sun className="w-3.5 h-3.5" />
-                <span>Güneşli sundurma · öğlen {solarPeakKwhPerHour(GAME_CONFIG.buildings.canopy.size)} kWh/sa</span>
-              </div>
+              <>
+                <div className="w-full py-2 rounded-xl bg-amber-950/30 border border-amber-500/20 text-amber-200/80 text-[11px] font-bold flex items-center justify-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>Güneşli sundurma · öğlen {solarPeakKwhPerHour(GAME_CONFIG.buildings.canopy.size)} kWh/sa</span>
+                </div>
+                {/* The panels come off on their own; the roof stays. */}
+                <button
+                  onClick={() => removeSolarCanopy(pump.id)}
+                  className="w-full py-2 rounded-xl text-slate-400 hover:text-amber-200 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>Panelleri Sök</span>
+                </button>
+              </>
             )}
 
             {/* Canopy Toggle */}
@@ -260,7 +271,7 @@ export const PumpPanel: React.FC = () => {
                 className="w-full py-2 rounded-xl text-slate-400 hover:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition-all"
               >
                 <Umbrella className="w-3.5 h-3.5" />
-                <span>Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle)' : ''}</span>
+                <span>Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle birlikte)' : ''}</span>
               </button>
             ) : (
               <button
