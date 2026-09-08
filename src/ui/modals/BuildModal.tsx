@@ -13,7 +13,7 @@ import { CatalogPreview, CatalogPhotoBooth } from '../CatalogPreview';
  * ink line and a hard shadow; the image sits in a board frame, the price is
  * a green button, and a lock is a cardboard-coloured block.
  */
-const CARD = 'bg-paper border-2 border-ink rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118]';
+const CARD = 'bg-paper border-2 border-ink rounded-md p-4 flex flex-col gap-3 shadow-k';
 const BADGE = 'px-2 py-0.5 rounded-sm text-[11px] font-black border border-ink';
 const BADGE_PLAIN = `${BADGE} bg-card text-ink`;
 const BADGE_FEATURE = `${BADGE} bg-kblu text-white`;
@@ -32,7 +32,7 @@ const LandPicture: React.FC<{ kind: 'land' | 'concrete' }> = ({ kind }) => (
         <polygon points="60,14 112,40 60,66 8,40" fill="#3f8a3a" />
         <polygon points="8,40 60,66 60,74 8,48" fill="#2f6a2c" />
         <polygon points="112,40 60,66 60,74 112,48" fill="#27561f" />
-        <rect x="78" y="10" width="2" height="30" fill="#2b2118" />
+        <rect x="78" y="10" width="2" height="30" fill="rgb(var(--k-ink))" />
         <polygon points="80,10 96,15 80,20" fill="#e0452b" />
         <circle cx="52" cy="44" r="7" fill="#4ade80" />
         <circle cx="52" cy="41" r="6" fill="#86efac" />

@@ -38,6 +38,13 @@ export const App: React.FC = () => {
     sounds.toggleMute(sfxVolume <= 0);
   }, [masterVolume, sfxVolume]);
 
+  // The palette is a data attribute on the root: every token in index.css
+  // reads through it, so the whole HUD turns with one switch.
+  const theme = useGameStore((s) => s.gameState.settings.theme ?? 'light');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   useEffect(
     () => watchAccount((profile) => useGameStore.setState({ account: profile, accountResolved: true })),
     []

@@ -4,7 +4,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { X, Landmark, CreditCard, ShieldCheck, AlertCircle, CheckCircle } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
-const CARD = 'bg-paper border-2 border-ink rounded-md p-4 shadow-[0.2rem_0.2rem_0_#2b2118]';
+const CARD = 'bg-paper border-2 border-ink rounded-md p-4 shadow-k';
 
 export const BankModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);

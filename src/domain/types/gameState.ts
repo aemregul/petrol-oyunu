@@ -674,6 +674,12 @@ export interface GameState {
     sfxVolume: number;
     graphicsQuality: 'LOW' | 'MEDIUM' | 'HIGH';
     language: 'tr' | 'en';
+    /**
+     * The Karton palette in daylight, or the same cards in the dark for a
+     * player who does not care for white (Emre, 2026-09-08). Optional so a
+     * save from before the switch reads as light.
+     */
+    theme?: 'light' | 'dark';
     showTutorialTips: boolean;
   };
   notifications: GameNotification[];

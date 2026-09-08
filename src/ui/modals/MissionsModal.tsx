@@ -19,7 +19,7 @@ const MissionRow: React.FC<{ mission: MissionEntity; onClaim: () => void }> = ({
 
   return (
     <div
-      className={`bg-paper border-2 rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118] ${
+      className={`bg-paper border-2 rounded-md p-4 flex flex-col gap-3 shadow-k ${
         mission.completed
           ? 'border-kgrn'
           : isMain

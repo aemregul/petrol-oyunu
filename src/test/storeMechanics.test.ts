@@ -324,6 +324,19 @@ describe('pricing the charging posts', () => {
   });
 });
 
+describe('the palette switch', () => {
+  // Emre, 2026-09-08: a dark set of the Karton cards for a player who does
+  // not care for white. It lives in the save with the other settings, and a
+  // save from before it reads as light.
+  it('starts light and keeps the choice in the save', () => {
+    expect(useGameStore.getState().gameState.settings.theme ?? 'light').toBe('light');
+    useGameStore.getState().updateSettings({ theme: 'dark' });
+    expect(useGameStore.getState().gameState.settings.theme).toBe('dark');
+    // The rest of the settings are untouched by the switch.
+    expect(useGameStore.getState().gameState.settings.language).toBe('tr');
+  });
+});
+
 describe('renaming the station', () => {
   // Emre'nin isteği (2026-09-03): istasyonun adı profilden değişir ve
   // tabelalar kendiliğinden güncellenir. Tabelalar (fiyat totemi, pilon)

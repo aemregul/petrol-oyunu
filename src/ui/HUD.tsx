@@ -161,7 +161,7 @@ export const HUD: React.FC = () => {
           <span className="k-tape k-tape-r" aria-hidden="true" />
 
           {/* The name, as the sign out front spells it. */}
-          <div className="hud-brand font-display text-2xl leading-none text-kred whitespace-nowrap" style={{ textShadow: '0.12em 0.12em 0 #f2c230' }}>
+          <div className="hud-brand font-display text-2xl leading-none text-kred whitespace-nowrap">
             {gameState.station.name || 'Gül Petrol'}
           </div>
 

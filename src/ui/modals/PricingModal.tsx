@@ -74,7 +74,7 @@ export const PricingModal: React.FC = () => {
             return (
               <div
                 key={fType}
-                className={`bg-paper border-2 rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118] transition-all ${
+                className={`bg-paper border-2 rounded-md p-4 flex flex-col gap-3 shadow-k transition-all ${
                   !isUnlocked
                     ? 'border-ink opacity-50'
                     : isLoss

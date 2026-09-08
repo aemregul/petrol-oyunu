@@ -239,6 +239,7 @@ export function createInitialGameState(): GameState {
       sfxVolume: 0.8,
       graphicsQuality: 'MEDIUM',
       language: 'tr',
+      theme: 'light',
       showTutorialTips: true
     },
     notifications: [

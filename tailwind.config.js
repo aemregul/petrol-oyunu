@@ -23,16 +23,27 @@ export default {
       colors: {
         // The Karton palette. `paper` is a card's face, `board` the cream
         // ground behind rows and bars, `ink` every line and every word.
-        paper: '#fff8e8',
-        board: '#f3e9d2',
-        card: '#e9d8b4',
-        ink: '#2b2118',
-        mute: '#7b6a55',
-        kred: { DEFAULT: '#e0452b', dark: '#b8351f' },
-        kgrn: { DEFAULT: '#2f9e5b', dark: '#24804a' },
-        kblu: { DEFAULT: '#2f7fd6', dark: '#2566ae' },
-        kyel: { DEFAULT: '#f2c230', dark: '#d9a915' },
-        kvio: { DEFAULT: '#8c5fd6', dark: '#6f45b5' },
+        // Read through CSS variables (index.css :root) so the dark palette
+        // can swap them with one attribute; the `<alpha-value>` slot keeps
+        // border-mute/60 and friends working.
+        paper: 'rgb(var(--k-paper) / <alpha-value>)',
+        board: 'rgb(var(--k-board) / <alpha-value>)',
+        card: 'rgb(var(--k-card) / <alpha-value>)',
+        ink: 'rgb(var(--k-ink) / <alpha-value>)',
+        mute: 'rgb(var(--k-mute) / <alpha-value>)',
+        // The sticker colours go through variables too. These are the
+        // colours words and icons are drawn in; the fills for bands and
+        // buttons are the separate backgroundColor set below, so after dark
+        // a band can go deep while a figure written in the same red stays
+        // readable on a dark card.
+        kred: { DEFAULT: 'rgb(var(--k-red) / <alpha-value>)', dark: 'rgb(var(--k-red-d) / <alpha-value>)' },
+        kgrn: { DEFAULT: 'rgb(var(--k-grn) / <alpha-value>)', dark: 'rgb(var(--k-grn-d) / <alpha-value>)' },
+        kblu: { DEFAULT: 'rgb(var(--k-blu) / <alpha-value>)', dark: 'rgb(var(--k-blu-d) / <alpha-value>)' },
+        kyel: { DEFAULT: 'rgb(var(--k-yel) / <alpha-value>)', dark: 'rgb(var(--k-yel-d) / <alpha-value>)' },
+        kvio: { DEFAULT: 'rgb(var(--k-vio) / <alpha-value>)', dark: 'rgb(var(--k-vio-d) / <alpha-value>)' },
+        // White is a token as well: the words on a coloured band are white
+        // by day and a soft grey after dark, so nothing on screen glares.
+        white: 'rgb(var(--k-white) / <alpha-value>)',
         gasoline: {
           light: '#4ade80',
           DEFAULT: '#22c55e',
@@ -56,6 +67,28 @@ export default {
           gold: '#f59e0b',
           amber: '#d97706'
         }
+      },
+      // The line round a card is its own token, apart from the ink the words
+      // are written in: by day both are the same brown, after dark the words
+      // go cream while the lines and shadows go black — otherwise a dark
+      // card wears a light frame and reads as the light design with the
+      // lights off (Emre, 2026-09-08).
+      borderColor: {
+        ink: 'rgb(var(--k-line) / <alpha-value>)'
+      },
+      // The fills. Same as the text colours by day; deep, desaturated after
+      // dark, so a header band or a button is a dark slab of its hue rather
+      // than a bright sticker on a dark card.
+      backgroundColor: {
+        kred: { DEFAULT: 'rgb(var(--k-red-bg) / <alpha-value>)', dark: 'rgb(var(--k-red-bg-d) / <alpha-value>)' },
+        kgrn: { DEFAULT: 'rgb(var(--k-grn-bg) / <alpha-value>)', dark: 'rgb(var(--k-grn-bg-d) / <alpha-value>)' },
+        kblu: { DEFAULT: 'rgb(var(--k-blu-bg) / <alpha-value>)', dark: 'rgb(var(--k-blu-bg-d) / <alpha-value>)' },
+        kyel: { DEFAULT: 'rgb(var(--k-yel-bg) / <alpha-value>)', dark: 'rgb(var(--k-yel-bg-d) / <alpha-value>)' },
+        kvio: { DEFAULT: 'rgb(var(--k-vio-bg) / <alpha-value>)', dark: 'rgb(var(--k-vio-bg-d) / <alpha-value>)' }
+      },
+      boxShadow: {
+        /* The Karton card's hard offset, in either palette. */
+        k: '0.2rem 0.2rem 0 rgb(var(--k-shadow))'
       },
       animation: {
         'pulse-subtle': 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',

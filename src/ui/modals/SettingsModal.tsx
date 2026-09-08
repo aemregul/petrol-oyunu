@@ -224,6 +224,17 @@ export const SettingsModal: React.FC = () => {
                 onPick={(id) => updateSettings({ language: id as 'tr' | 'en' })}
               />
 
+              <SectionTitle>Görünüm</SectionTitle>
+              <Hint>Koyu mod kartları ve yazıları karartır; sahne olduğu gibi kalır.</Hint>
+              <Choice
+                options={[
+                  { id: 'light', label: 'Açık' },
+                  { id: 'dark', label: 'Koyu' }
+                ]}
+                value={settings.theme ?? 'light'}
+                onPick={(id) => updateSettings({ theme: id as 'light' | 'dark' })}
+              />
+
               <SectionTitle>Grafik</SectionTitle>
               <Hint>Düşük ayar gölgeleri ve kenar yumuşatmayı kapatır; zayıf makinelerde akıcılık kazandırır.</Hint>
               <Choice

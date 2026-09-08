@@ -3,6 +3,87 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * The Karton palette as RGB triplets, so Tailwind can put an alpha on
+   * them (border-mute/60 and friends). `paper` is a card's face, `board` the
+   * cream ground behind rows and bars, `ink` every word, `line` every line.
+   * The dark set below is the same cards after lights-out (Emre,
+   * 2026-09-08: "beyaz renk sevmem").
+   */
+  :root {
+    --k-paper: 255 248 232;
+    --k-board: 243 233 210;
+    --k-card: 233 216 180;
+    --k-ink: 43 33 24;
+    --k-mute: 123 106 85;
+    /* The line round a card and the shadow under it: ink, by day. */
+    --k-line: 43 33 24;
+    --k-shadow: 43 33 24;
+    --k-dim: 43 33 24;
+    --k-white: 255 255 255;
+    /* The stickers, as words and icons are drawn in them... */
+    --k-red: 224 69 43;
+    --k-red-d: 184 53 31;
+    --k-grn: 47 158 91;
+    --k-grn-d: 36 128 74;
+    --k-blu: 47 127 214;
+    --k-blu-d: 37 102 174;
+    --k-yel: 242 194 48;
+    --k-yel-d: 217 169 21;
+    --k-vio: 140 95 214;
+    --k-vio-d: 111 69 181;
+    /* ...and as bands and buttons are filled with them. The same, by day. */
+    --k-red-bg: 224 69 43;
+    --k-red-bg-d: 184 53 31;
+    --k-grn-bg: 47 158 91;
+    --k-grn-bg-d: 36 128 74;
+    --k-blu-bg: 47 127 214;
+    --k-blu-bg-d: 37 102 174;
+    --k-yel-bg: 242 194 48;
+    --k-yel-bg-d: 217 169 21;
+    --k-vio-bg: 140 95 214;
+    --k-vio-bg-d: 111 69 181;
+  }
+  /*
+   * After dark, the whole palette goes with the room (Emre, 2026-09-08:
+   * "tamamen dark"): near-black card, black line and shadow, soft grey
+   * words instead of white or cream, and every band and button a deep,
+   * desaturated slab of its hue. The stickers stay brighter only where
+   * they are words — a figure in red has to be read off a dark card.
+   */
+  :root[data-theme='dark'] {
+    --k-paper: 22 20 18;
+    --k-board: 30 27 25;
+    --k-card: 42 38 35;
+    --k-ink: 208 199 186;
+    --k-mute: 134 124 112;
+    --k-line: 6 5 4;
+    --k-shadow: 0 0 0;
+    --k-dim: 0 0 0;
+    --k-white: 214 206 194;
+    --k-red: 214 96 72;
+    --k-red-d: 184 74 52;
+    --k-grn: 84 168 112;
+    --k-grn-d: 62 140 90;
+    --k-blu: 96 150 214;
+    --k-blu-d: 72 124 186;
+    --k-yel: 214 172 60;
+    --k-yel-d: 184 144 40;
+    --k-vio: 158 122 214;
+    --k-vio-d: 132 98 186;
+    --k-red-bg: 122 42 30;
+    --k-red-bg-d: 96 32 22;
+    --k-grn-bg: 30 92 56;
+    --k-grn-bg-d: 22 72 44;
+    --k-blu-bg: 30 72 122;
+    --k-blu-bg-d: 22 56 96;
+    --k-yel-bg: 122 92 20;
+    --k-yel-bg-d: 96 72 14;
+    --k-vio-bg: 78 54 130;
+    --k-vio-bg-d: 60 42 104;
+    color-scheme: dark;
+  }
+
   /* The display face is Baloo 2 at its heaviest: poster weight is the whole
      point of it, so every display run gets it unless a utility says otherwise. */
   .font-display {
@@ -10,8 +91,8 @@
   }
 
   body {
-    user-select: none;
     -webkit-user-select: none;
+    user-select: none;
     touch-action: manipulation;
   }
 }
@@ -71,6 +152,11 @@
    */
   .hud-events {
     min-width: 0;
+  }
+
+  /* The station's name, red with a yellow offset: the sign out front. */
+  .hud-brand {
+    text-shadow: 0.12em 0.12em 0 rgb(var(--k-yel-bg));
   }
 
   .hud-nav {
@@ -188,13 +274,13 @@
    */
   .game-surface {
     @apply bg-paper border-[3px] border-ink rounded-lg text-ink;
-    box-shadow: 0.3rem 0.3rem 0 #2b2118;
+    box-shadow: 0.3rem 0.3rem 0 rgb(var(--k-shadow));
   }
 
   /* The lighter card: chips, toasts, live events. Same paper, thinner line. */
   .game-glass {
     @apply rounded-lg border-2 border-ink text-ink bg-paper;
-    box-shadow: 0.2rem 0.2rem 0 #2b2118;
+    box-shadow: 0.2rem 0.2rem 0 rgb(var(--k-shadow));
   }
 
   /* Anything meant to be pressed sits on its own hard shadow and drops onto it. */
@@ -216,8 +302,13 @@
     backdrop-filter: blur(3px);
     box-shadow:
       0 1px 0 rgba(255, 244, 214, 0.55) inset,
-      0 0.18rem 0.35rem rgba(43, 33, 24, 0.35),
-      0 0.6rem 1.1rem rgba(43, 33, 24, 0.22);
+      0 0.18rem 0.35rem rgb(var(--k-dim) / 0.35),
+      0 0.6rem 1.1rem rgb(var(--k-dim) / 0.22);
+  }
+  :root[data-theme='dark'] .k-world {
+    color: rgb(var(--k-ink));
+    border-color: rgb(var(--k-line));
+    background-color: rgb(var(--k-yel-bg) / 0.95);
   }
   .k-world::after {
     content: '';
@@ -232,11 +323,11 @@
 
   .game-btn {
     @apply transition-all duration-75 border-2 border-ink rounded-md;
-    box-shadow: 0.2rem 0.2rem 0 #2b2118;
+    box-shadow: 0.2rem 0.2rem 0 rgb(var(--k-shadow));
   }
   .game-btn:active:not(:disabled) {
     transform: translate(0.2rem, 0.2rem);
-    box-shadow: 0 0 0 #2b2118;
+    box-shadow: 0 0 0 rgb(var(--k-shadow));
   }
   .game-btn:disabled {
     @apply opacity-60 cursor-not-allowed;
@@ -292,8 +383,8 @@
     width: 4.5rem;
     height: 1rem;
     top: -0.55rem;
-    background: rgba(242, 194, 48, 0.8);
-    border: 1px solid rgba(43, 33, 24, 0.3);
+    background: rgb(var(--k-yel-bg) / 0.8);
+    border: 1px solid rgb(var(--k-line) / 0.3);
     transform: rotate(-4deg);
     pointer-events: none;
   }
@@ -303,7 +394,7 @@
   /* The dim behind a modal: paper-toned, so the scene reads as set aside. */
   .k-dim {
     @apply fixed inset-0 z-50 flex items-center justify-center p-4;
-    background: rgba(43, 33, 24, 0.55);
+    background: rgb(var(--k-dim) / 0.55);
   }
 }
 
@@ -313,12 +404,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f3e9d2;
+  background: rgb(var(--k-board));
 }
 ::-webkit-scrollbar-thumb {
-  background: #7b6a55;
+  background: rgb(var(--k-mute));
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2b2118;
+  background: rgb(var(--k-ink));
 }

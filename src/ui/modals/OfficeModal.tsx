@@ -4,6 +4,7 @@ import { GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
 import { calculateEndOfDayReputation } from '../../domain/formulas/economy';
 import { stopChance, evPricePerKwh } from '../../domain/services/simulationEngine';
+import { managerDailyWage } from '../../domain/services/managerDuties';
 import { FuelType, MissionEntity } from '../../domain/types/gameState';
 import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Sparkles, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
@@ -29,9 +30,8 @@ export function officeFigures(state: GameState) {
   );
   const tills = Object.values(state.buildings).reduce((sum, b) => sum + (b.till ?? 0), 0);
 
-  const managerWage = state.station.managerId ? GAME_CONFIG.employees.manager.dailyWage : 0;
   const wages =
-    Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0) + managerWage;
+    Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0) + managerDailyWage(state);
 
   let upkeep = 0;
   for (const pump of Object.values(state.pumps)) {
@@ -207,7 +207,7 @@ const LoansPage: React.FC<{
           {activeLoans.map((loan) => {
             const paid = Math.max(0, Math.min(1, 1 - loan.remaining / loan.totalDue));
             return (
-              <div key={loan.id} className="bg-paper border-2 border-ink rounded-md p-4 shadow-[0.2rem_0.2rem_0_#2b2118]">
+              <div key={loan.id} className="bg-paper border-2 border-ink rounded-md p-4 shadow-k">
                 <div className="flex justify-between items-start gap-3">
                   <span className="font-display text-base text-ink tracking-wide">{loan.name}</span>
                   <span className="text-[14px] font-display tabular-nums text-kred shrink-0">
@@ -239,7 +239,7 @@ const LoansPage: React.FC<{
           return (
             <div
               key={loan.id}
-              className={`bg-paper border-2 border-ink rounded-md p-4 flex flex-col gap-3 shadow-[0.2rem_0.2rem_0_#2b2118] ${
+              className={`bg-paper border-2 border-ink rounded-md p-4 flex flex-col gap-3 shadow-k ${
                 locked ? 'opacity-70' : ''
               }`}
             >
