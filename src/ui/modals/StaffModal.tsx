@@ -45,6 +45,10 @@ export const StaffModal: React.FC = () => {
 
   const attendants = Object.values(gameState.employees).filter((e) => e.role === 'PUMP_ATTENDANT');
   const managerConf = GAME_CONFIG.employees.manager;
+  // What a new attendant costs, from the config rather than a number typed
+  // into the card: the figures moved (Emre, 2026-09-08) and the card lied.
+  const recruit = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
+  const lira = (n: number) => n.toLocaleString('tr-TR');
   const recentProfits = gameState.player.statistics.recentNetProfits ?? [];
   const profitableDays = recentProfits.filter((n) => n > 0).length;
   const profitBarMet =
@@ -118,19 +122,19 @@ export const StaffModal: React.FC = () => {
                   Gelen araçların akaryakıt dolumunu ve tahsilatını otomatik gerçekleştirir.
                 </div>
                 <div className="text-[11px] font-mono text-kgrn mt-1">
-                  Maaş: 650 TL/gün • İşe Alım: 7.500 TL
+                  Maaş: {lira(recruit.dailyWage)} TL/gün • İşe Alım: {lira(recruit.hireCost)} TL
                 </div>
               </div>
               <button
                 onClick={() => hirePumpAttendant()}
-                disabled={gameState.player.level < 3 || gameState.player.cash < 7500}
+                disabled={gameState.player.level < 3 || gameState.player.cash < recruit.hireCost}
                 className={`game-btn px-5 py-2.5 rounded-md font-display tracking-wide text-xs uppercase ${
-                  gameState.player.level < 3 || gameState.player.cash < 7500
+                  gameState.player.level < 3 || gameState.player.cash < recruit.hireCost
                     ? 'bg-card text-mute cursor-not-allowed'
                     : 'bg-kgrn hover:bg-kgrn-dark text-white'
                 }`}
               >
-                {gameState.player.level < 3 ? 'Seviye 3 Gerekli' : 'İşe Al (₺7.500)'}
+                {gameState.player.level < 3 ? 'Seviye 3 Gerekli' : `İşe Al (₺${lira(recruit.hireCost)})`}
               </button>
             </div>
 
@@ -283,19 +287,19 @@ export const StaffModal: React.FC = () => {
                     <CheckCircle2
                       className={`w-4 h-4 ${gameState.player.level >= managerConf.minLevel ? 'text-kgrn' : 'text-mute'}`}
                     />
-                    <span>Oyuncu Seviyesi: 10 ({gameState.player.level}/10)</span>
+                    <span>Oyuncu Seviyesi: {managerConf.minLevel} ({gameState.player.level}/{managerConf.minLevel})</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
                       className={`w-4 h-4 ${gameState.player.reputation >= managerConf.minReputation ? 'text-kgrn' : 'text-mute'}`}
                     />
-                    <span>İstasyon İtibarı: 4.00 ({gameState.player.reputation.toFixed(2)}/4.00)</span>
+                    <span>İstasyon İtibarı: {managerConf.minReputation.toFixed(2)} ({gameState.player.reputation.toFixed(2)}/{managerConf.minReputation.toFixed(2)})</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
                       className={`w-4 h-4 ${attendants.length >= managerConf.minActiveAttendants ? 'text-kgrn' : 'text-mute'}`}
                     />
-                    <span>Aktif Pompacı: 2 ({attendants.length}/2)</span>
+                    <span>Aktif Pompacı: {managerConf.minActiveAttendants} ({attendants.length}/{managerConf.minActiveAttendants})</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2
@@ -311,7 +315,7 @@ export const StaffModal: React.FC = () => {
                     <CheckCircle2
                       className={`w-4 h-4 ${gameState.player.cash >= managerConf.hireCost ? 'text-kgrn' : 'text-mute'}`}
                     />
-                    <span>İşe Alım Bedeli: 45.000 TL</span>
+                    <span>İşe Alım Bedeli: {lira(managerConf.hireCost)} TL</span>
                   </div>
                 </div>
 
@@ -319,7 +323,7 @@ export const StaffModal: React.FC = () => {
                   onClick={hireManager}
                   className="game-btn w-full py-3.5 rounded-md font-display tracking-wide text-sm uppercase bg-kgrn hover:bg-kgrn-dark text-white mt-2"
                 >
-                  Müdürü Göreve Başlat (₺45.000)
+                  Müdürü Göreve Başlat (₺{lira(managerConf.hireCost)})
                 </button>
               </div>
             ) : (

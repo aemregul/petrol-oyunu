@@ -383,7 +383,11 @@
       "Bash(curl -s -m 5 http://127.0.0.1:3000/)",
       "Bash(curl -s -m 5 http://127.0.0.1:3001/)",
       "Bash(node /Users/emre/petrol-oyunu/_dark.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad/3000 3000)",
-      "Bash(node /Users/emre/petrol-oyunu/_probe.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000 3001 5199)"
+      "Bash(node /Users/emre/petrol-oyunu/_probe.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000 3001 5199)",
+      "Bash(awk '/^    [a-z_]+: \\\\{$/{name=$1} /price: [0-9]/{print name, $0}' src/config/gameConfig.ts)",
+      "Bash(awk '/buildingUpgrades: \\\\{/,/^  \\\\},$/' src/config/gameConfig.ts)",
+      "Bash(awk '/^    [a-z_]+: \\\\{$/{name=$1} /price: [0-9]/{print name, $2, $3}' src/config/gameConfig.ts)",
+      "Bash(node /Users/emre/petrol-oyunu/_cat.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)"
     ],
     "additionalDirectories": [
       "/private/tmp",

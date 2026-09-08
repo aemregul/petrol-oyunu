@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
+import { GAME_CONFIG } from '../config/gameConfig';
 import { evaluatePlacement } from '../domain/services/placement';
 import {
   blockLayout,
@@ -114,6 +115,13 @@ describe('the entry-to-exit passage', () => {
    * teker meşru: hiçbiri koridora değmiyor, hiçbiri tek başına yolu kesmiyor.
    * Mühürleyen yalnız SON parçadır ve reddedilmesi gereken de odur.
    */
+  // These tests build a wall out of cafés. The catalogue allows one café a
+  // block (Emre, 2026-09-08), which is not what is under test here, so the
+  // cap is lifted for the file and put back after.
+  const cafeRule = GAME_CONFIG.buildingRules.cafe;
+  beforeAll(() => { delete GAME_CONFIG.buildingRules.cafe; });
+  afterAll(() => { GAME_CONFIG.buildingRules.cafe = cafeRule; });
+
   function wallPiece(state: GameState, id: string, z: number): void {
     state.buildings[id] = {
       id, type: 'cafe', level: 1, position: [8, z], rotation: 0, size: [3, 3],

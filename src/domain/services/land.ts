@@ -21,7 +21,7 @@ export const STARTING_PARCELS = ['0,0', '1,0', '0,1', '1,1'];
  */
 export function paveCost(row: number): number {
   // Road-facing paving costs a little more: it carries the driveway traffic.
-  return row === 0 || row === -1 ? 9500 : 8000;
+  return row === 0 || row === -1 ? 21000 : 17500;
 }
 
 /**
@@ -322,7 +322,7 @@ export function isBuyable(
  */
 export function parcelPrice(owned: string[], row: number): number {
   const beyondStart = Math.max(0, owned.length - STARTING_PARCELS.length);
-  const base = 24000 * Math.pow(1.35, beyondStart);
+  const base = 53000 * Math.pow(1.35, beyondStart);
   const facesRoad = row === 0 || row === -1;
   const frontage = facesRoad ? 1.45 : Math.abs(row) === 1 ? 1.1 : 1;
   return Math.round((base * frontage) / 500) * 500;

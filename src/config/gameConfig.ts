@@ -57,6 +57,21 @@ export interface BuildingCatalogItem {
   attachTo?: 'pump';
 }
 
+/**
+ * How many of a thing the station may have, and how the price climbs as it
+ * gets them (Emre, 2026-09-08). A cap per block is for what every block
+ * needs one of — a shop, a toilet; a cap in total is for what the station
+ * needs one of wherever it stands — a tyre bay, a car wash, the complex.
+ * No cap means the plot is the only limit. The price growth compounds per
+ * unit already owned, so the fifth pump is dearer than the first.
+ */
+export interface BuildingRule {
+  maxPerSide?: number;
+  maxTotal?: number;
+  /** Per-unit multiplier on the catalogue price; economy.priceGrowthPerUnit when absent. */
+  priceGrowth?: number;
+}
+
 export interface BuildingUpgradeConfig {
   type: string;
   level: number;
@@ -209,6 +224,7 @@ export interface GameConfig {
   version: '1.0.0';
   fuels: Record<'gasoline' | 'diesel' | 'lpg', FuelConfig>;
   buildings: Record<string, BuildingCatalogItem>;
+  buildingRules: Record<string, BuildingRule>;
   buildingEffects: Record<
     string,
     {
@@ -254,6 +270,8 @@ export interface GameConfig {
     cleanDurationSeconds: number;
     refundRatio: number; // 0.55
     moveFeeRatio: number; // 0.02
+    /** What the next unit of a repeatable structure costs, over the last: 1.3 is +30% each. */
+    priceGrowthPerUnit: number;
     tankerSpeedSecondsMin: number;
     tankerSpeedSecondsMax: number;
     tankerUnloadSpeedLps: number;
@@ -360,9 +378,9 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Kurşunsuz Benzin 95',
       shortName: 'Benzin',
       color: '#22c55e',
-      baseWholesale: 36.40,
-      regionalRetail: 44.90,
-      targetMargin: 8.50,
+      baseWholesale: 70.70,
+      regionalRetail: 76.90,
+      targetMargin: 6.20,
       avgFillLiters: 24,
       orderMinLiters: 500,
       orderStepLiters: 100,
@@ -375,9 +393,9 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Ultra EuroDizel',
       shortName: 'Dizel',
       color: '#f97316',
-      baseWholesale: 35.60,
-      regionalRetail: 43.50,
-      targetMargin: 7.90,
+      baseWholesale: 82.40,
+      regionalRetail: 88.90,
+      targetMargin: 6.50,
       avgFillLiters: 31,
       orderMinLiters: 500,
       orderStepLiters: 100,
@@ -390,9 +408,9 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Otogaz LPG',
       shortName: 'LPG',
       color: '#3b82f6',
-      baseWholesale: 18.30,
-      regionalRetail: 24.90,
-      targetMargin: 6.60,
+      baseWholesale: 32.00,
+      regionalRetail: 35.00,
+      targetMargin: 3.00,
       avgFillLiters: 22,
       orderMinLiters: 500,
       orderStepLiters: 100,
@@ -406,8 +424,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'pump_standard',
       name: 'Standart Akaryakıt Pompası',
       category: 'pump',
-      price: 18000,
-      dailyUpkeep: 110,
+      price: 39500,
+      dailyUpkeep: 160,
       size: [2, 3],
       unlockLevel: 1,
       description: '1 araç kapasiteli, 8 L/sn dolum hızında akaryakıt pompası.',
@@ -423,8 +441,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'tank_farm',
       name: 'Yakıt Tank Sahası',
       category: 'tank',
-      price: 30000,
-      dailyUpkeep: 180,
+      price: 66000,
+      dailyUpkeep: 270,
       size: [3, 3],
       unlockLevel: 1,
       description:
@@ -436,8 +454,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'tank_expansion',
       name: 'Geniş Yakıt Tankı',
       category: 'tank',
-      price: 95000,
-      dailyUpkeep: 320,
+      price: 209000,
+      dailyUpkeep: 480,
       size: [4, 3],
       unlockLevel: 8,
       description:
@@ -455,8 +473,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'price_sign',
       name: 'Fiyat Totem Tabelası',
       category: 'structure',
-      price: 4000,
-      dailyUpkeep: 20,
+      price: 8800,
+      dailyUpkeep: 30,
       size: [1, 1],
       unlockLevel: 1,
       description: 'Ana yol sürücülerine güncel yakıt fiyatlarını gösterir.',
@@ -466,8 +484,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'pylon_sign',
       name: 'Reklam Kulesi',
       category: 'structure',
-      price: 60000,
-      dailyUpkeep: 260,
+      price: 132000,
+      dailyUpkeep: 390,
       /**
        * One cell, matching the mast's own base. It used to reserve four, which
        * is nearly three times the concrete it actually stands on — and since
@@ -484,8 +502,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'canopy',
       name: 'Ada Sundurması',
       category: 'structure',
-      price: 9000,
-      dailyUpkeep: 50,
+      price: 20000,
+      dailyUpkeep: 80,
       size: [3, 5],
       unlockLevel: 5,
       description: 'Bir pompanın üstüne kurulur: o pompada +%5 dolum hızı, istasyonda temizlik koruması.',
@@ -496,8 +514,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'office',
       name: 'Yönetim Ofisi',
       category: 'structure',
-      price: 18000,
-      dailyUpkeep: 120,
+      price: 39500,
+      dailyUpkeep: 180,
       size: [5, 5],
       unlockLevel: 5,
       description: 'Gelişmiş finansal raporlama ve istasyon müdürü çalışma alanı.',
@@ -511,8 +529,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'mini_market',
       name: 'Mini Market',
       category: 'service',
-      price: 28000,
-      dailyUpkeep: 180,
+      price: 61500,
+      dailyUpkeep: 270,
       size: [5, 5],
       unlockLevel: 6,
       description: 'Yakıt alan müşterilere sepet satışı yaparak yan gelir üretir.',
@@ -522,8 +540,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'toilet',
       name: 'Müşteri WC / Lavabo',
       category: 'service',
-      price: 8000,
-      dailyUpkeep: 100,
+      price: 17500,
+      dailyUpkeep: 150,
       size: [2, 2],
       unlockLevel: 6,
       description: 'Aile ve uzun yol müşterilerinin memnuniyetini +%8 artırır.',
@@ -533,8 +551,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'light_pole',
       name: 'Aydınlatma Direği',
       category: 'structure',
-      price: 1500,
-      dailyUpkeep: 25,
+      price: 3300,
+      dailyUpkeep: 40,
       size: [1, 1],
       unlockLevel: 3,
       description: 'Gece saatlerinde istasyon görüşünü ve güvenlik hissini artırır.',
@@ -544,7 +562,7 @@ export const GAME_CONFIG: GameConfig = {
       type: 'trash_can',
       name: 'Çöp Kutusu',
       category: 'structure',
-      price: 600,
+      price: 1300,
       dailyUpkeep: 0,
       size: [1, 1],
       unlockLevel: 2,
@@ -555,8 +573,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'air_water',
       name: 'Hava & Su Ünitesi',
       category: 'service',
-      price: 6000,
-      dailyUpkeep: 40,
+      price: 13000,
+      dailyUpkeep: 60,
       size: [1, 2],
       unlockLevel: 3,
       description: 'Lastik havası ve su ikmali; kısa duraklamalarda memnuniyeti artırır.',
@@ -566,8 +584,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'car_park',
       name: 'Otopark (4 Araçlık)',
       category: 'service',
-      price: 9000,
-      dailyUpkeep: 30,
+      price: 20000,
+      dailyUpkeep: 40,
       size: [5, 3],
       unlockLevel: 4,
       description: 'Dört araçlık park alanı. Birden fazla alan kurarak kapasiteyi artırabilirsiniz.',
@@ -577,8 +595,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'truck_park',
       name: 'TIR Parkı (3 Araçlık)',
       category: 'service',
-      price: 20000,
-      dailyUpkeep: 60,
+      price: 44000,
+      dailyUpkeep: 90,
       size: [6, 4],
       unlockLevel: 7,
       description: 'Üç ağır vasıta kapasiteli park alanı. Uzun yol şoförlerini istasyona çeker.',
@@ -588,8 +606,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'car_wash',
       name: 'Oto Yıkama',
       category: 'service',
-      price: 32000,
-      dailyUpkeep: 200,
+      price: 70500,
+      dailyUpkeep: 300,
       size: [2, 3],
       unlockLevel: 6,
       description: 'Tünel tipi otomatik yıkama hattı.',
@@ -599,8 +617,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'oil_change',
       name: 'Yağ Değişim İstasyonu',
       category: 'service',
-      price: 26000,
-      dailyUpkeep: 160,
+      price: 57000,
+      dailyUpkeep: 240,
       size: [3, 3],
       unlockLevel: 6,
       description: 'Çift kanallı yağ ve filtre değişim servisi.',
@@ -610,8 +628,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'tyre_service',
       name: 'Lastik Servisi',
       category: 'service',
-      price: 24000,
-      dailyUpkeep: 150,
+      price: 53000,
+      dailyUpkeep: 220,
       size: [3, 3],
       unlockLevel: 5,
       description: 'Lastik değişimi, balans ve rot ayarı yapılan servis birimi.',
@@ -621,8 +639,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'cafe',
       name: 'Kahveci',
       category: 'service',
-      price: 22000,
-      dailyUpkeep: 140,
+      price: 48500,
+      dailyUpkeep: 210,
       size: [3, 3],
       unlockLevel: 5,
       description: 'Yol kahvesi ve atıştırmalık satan küçük büfe.',
@@ -632,8 +650,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'restaurant',
       name: 'Restoran',
       category: 'service',
-      price: 45000,
-      dailyUpkeep: 320,
+      price: 99000,
+      dailyUpkeep: 480,
       size: [6, 6],
       unlockLevel: 8,
       description: 'Oturmalı yol restoranı; uzun yol yolcularını uzun süre tutar.',
@@ -643,8 +661,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'rest_complex',
       name: 'Dinlenme Tesisi',
       category: 'service',
-      price: 150000,
-      dailyUpkeep: 900,
+      price: 330000,
+      dailyUpkeep: 1350,
       size: [12, 6],
       unlockLevel: 10,
       description: 'Market, restoran, kahveci ve WC birimlerini tek çatı altında toplayan büyük tesis.',
@@ -654,8 +672,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'decoration',
       name: 'Peyzaj & Dekorasyon',
       category: 'structure',
-      price: 5000,
-      dailyUpkeep: 20,
+      price: 11000,
+      dailyUpkeep: 30,
       size: [2, 2],
       unlockLevel: 3,
       description: 'Yeşil alan, saksı ve bank düzenlemesi; sahanın görünümünü iyileştirir.',
@@ -665,8 +683,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'wide_entry',
       name: 'Geniş Giriş Rampası',
       category: 'structure',
-      price: 18000,
-      dailyUpkeep: 30,
+      price: 39500,
+      dailyUpkeep: 40,
       // Twice the width of a default mouth — two full lanes, not one lane
       // with a broader apron — and two grid rows deep: exactly the verge it
       // bridges, plus enough overlap that both ends read as joined.
@@ -679,8 +697,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'wide_exit',
       name: 'Geniş Çıkış Rampası',
       category: 'structure',
-      price: 18000,
-      dailyUpkeep: 30,
+      price: 39500,
+      dailyUpkeep: 40,
       size: [6, 2],
       unlockLevel: 6,
       description: 'Çift şeritli çıkış rampası; ayrılan araçlar birbirini beklemez.',
@@ -690,8 +708,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'hotel',
       name: 'Yol Oteli',
       category: 'service',
-      price: 95000,
-      dailyUpkeep: 600,
+      price: 209000,
+      dailyUpkeep: 900,
       size: [6, 7],
       unlockLevel: 9,
       description: 'Uzun yol yolcuları için konaklama; geceleyen müşteri akışı yaratır.',
@@ -701,8 +719,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'ev_substation',
       name: 'Elektrik Altyapısı',
       category: 'energy',
-      price: 40000,
-      dailyUpkeep: 250,
+      price: 88000,
+      dailyUpkeep: 380,
       size: [2, 2],
       unlockLevel: 7,
       description: 'Trafo ve dağıtım panosu. Şebekeden enerji çeker; bataryanın ön koşuludur.',
@@ -712,8 +730,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'ev_storage',
       name: 'Enerji Depolama',
       category: 'energy',
-      price: 35000,
-      dailyUpkeep: 180,
+      price: 77000,
+      dailyUpkeep: 270,
       size: [3, 3],
       unlockLevel: 8,
       description: '200 kWh batarya; şarj üniteleri buradan çeker, trafo şebekeden doldurur. Elektrik altyapısı gerekir.',
@@ -723,8 +741,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'ev_charger_ac',
       name: 'AC Şarj Ünitesi',
       category: 'energy',
-      price: 18000,
-      dailyUpkeep: 90,
+      price: 39500,
+      dailyUpkeep: 140,
       size: [1, 2],
       unlockLevel: 7,
       description: 'Yavaş şarj ünitesi. Bataryadan çeker; şarjcı alınabilir. Enerji depolama gerekir.',
@@ -734,8 +752,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'ev_charger_dc',
       name: 'DC Hızlı Şarj',
       category: 'energy',
-      price: 45000,
-      dailyUpkeep: 220,
+      price: 99000,
+      dailyUpkeep: 330,
       size: [1, 2],
       unlockLevel: 9,
       description: 'Yüksek güçlü hızlı şarj ünitesi. Bataryayı hızlı boşaltır; şarjcı alınabilir. Enerji depolama gerekir.',
@@ -745,8 +763,8 @@ export const GAME_CONFIG: GameConfig = {
       type: 'diesel_generator',
       name: 'Dizel Jeneratör',
       category: 'energy',
-      price: 24000,
-      dailyUpkeep: 120,
+      price: 53000,
+      dailyUpkeep: 180,
       size: [2, 2],
       unlockLevel: 8,
       description: 'Batarya azalınca kendi tankındaki mazotu yakar. Sattığın dizeli tüketir; stok kritiğe inince durur. Enerji depolama gerekir.',
@@ -795,7 +813,7 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'pump_standard',
         level: 2,
-        cost: 10000,
+        cost: 22000,
         flowRateLps: 10,
         bonusSpeed: 0.10,
         effectsDescription: '10 L/sn dolum hızı, -%10 servis gecikmesi, dijital sayaç ekranı.'
@@ -803,7 +821,7 @@ export const GAME_CONFIG: GameConfig = {
       3: {
         type: 'pump_standard',
         level: 3,
-        cost: 22000,
+        cost: 48500,
         flowRateLps: 13,
         bonusSpeed: 0.25,
         effectsDescription: '13 L/sn ultra hızlı dolum, arıza riski -%25, premium gövde tasarımı.'
@@ -813,14 +831,14 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'tank',
         level: 2,
-        cost: 20000,
+        cost: 44000,
         capacityLiters: 3000,
         effectsDescription: 'Her yakıtın depolama kapasitesini 3.000 L seviyesine çıkarır.'
       },
       3: {
         type: 'tank',
         level: 3,
-        cost: 45000,
+        cost: 99000,
         capacityLiters: 6000,
         effectsDescription: 'Büyük Tank: Her yakıtın depolama kapasitesini 6.000 L seviyesine çıkarır.'
       }
@@ -829,13 +847,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'mini_market',
         level: 2,
-        cost: 22000,
+        cost: 48500,
         effectsDescription: 'Müşteri sepet tutarı +%20 artar, vitrin ve iç aydınlatma büyür.'
       },
       3: {
         type: 'mini_market',
         level: 3,
-        cost: 50000,
+        cost: 110000,
         effectsDescription: 'Süpermarket raf düzeni, sepet harcama çarpanı +%45 artar.'
       }
     },
@@ -843,13 +861,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'price_sign',
         level: 2,
-        cost: 7000,
+        cost: 15500,
         effectsDescription: 'LED Dijital Fiyat Paneli; uzaktan talep çekiciliği +%5 artar.'
       },
       3: {
         type: 'price_sign',
         level: 3,
-        cost: 15000,
+        cost: 33000,
         effectsDescription: 'Büyük Dijital Pylon; promosyon ışıklandırması ve yüksek görünürlük.'
       }
     },
@@ -857,13 +875,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'toilet',
         level: 2,
-        cost: 5000,
+        cost: 11000,
         effectsDescription: 'Daha fazla kabin: ziyaretçi sayısı +%30, moral etkisi +%25 artar.'
       },
       3: {
         type: 'toilet',
         level: 3,
-        cost: 12000,
+        cost: 26500,
         effectsDescription: 'Engelli kabini ve bebek bakım odası: ziyaretçi +%60, moral etkisi +%50.'
       }
     },
@@ -871,13 +889,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'cafe',
         level: 2,
-        cost: 12000,
+        cost: 26500,
         effectsDescription: 'Espresso makinesi ve vitrin: fiş başı harcama +%25 artar.'
       },
       3: {
         type: 'cafe',
         level: 3,
-        cost: 28000,
+        cost: 61500,
         effectsDescription: 'Oturma alanı ve fırın: fiş başı harcama +%55 artar.'
       }
     },
@@ -885,13 +903,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'restaurant',
         level: 2,
-        cost: 25000,
+        cost: 55000,
         effectsDescription: 'Geniş menü ve teras: hesap başı harcama +%25 artar.'
       },
       3: {
         type: 'restaurant',
         level: 3,
-        cost: 60000,
+        cost: 132000,
         effectsDescription: 'Şef mutfağı ve açık büfe: hesap başı harcama +%55 artar.'
       }
     },
@@ -899,13 +917,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'hotel',
         level: 2,
-        cost: 50000,
+        cost: 110000,
         effectsDescription: '10 oda; yenilenen odalarla konaklama geliri +%20 artar.'
       },
       3: {
         type: 'hotel',
         level: 3,
-        cost: 120000,
+        cost: 264000,
         effectsDescription: '16 oda, spa ve kahvaltı salonu; konaklama geliri +%40 artar.'
       }
     },
@@ -913,13 +931,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'ev_substation',
         level: 2,
-        cost: 30000,
+        cost: 66000,
         effectsDescription: 'Şebeke sözleşmesi büyür: bataryaya saatte 120 kWh çekilir.'
       },
       3: {
         type: 'ev_substation',
         level: 3,
-        cost: 65000,
+        cost: 143000,
         effectsDescription: 'Sanayi sözleşmesi: bataryaya saatte 240 kWh çekilir.'
       }
     },
@@ -927,13 +945,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'ev_storage',
         level: 2,
-        cost: 25000,
+        cost: 55000,
         effectsDescription: 'Batarya 400 kWh tutar; şarj kuyruğu daha geç boşalır.'
       },
       3: {
         type: 'ev_storage',
         level: 3,
-        cost: 55000,
+        cost: 121000,
         effectsDescription: 'Batarya 800 kWh tutar; hızlı şarj üniteleri gün boyu dolu çalışır.'
       }
     },
@@ -941,13 +959,13 @@ export const GAME_CONFIG: GameConfig = {
       2: {
         type: 'rest_complex',
         level: 2,
-        cost: 90000,
+        cost: 198000,
         effectsDescription: 'Tüm birimler yenilenir: ziyaret başı harcama +%25 artar.'
       },
       3: {
         type: 'rest_complex',
         level: 3,
-        cost: 200000,
+        cost: 440000,
         effectsDescription: 'Bölgenin en büyük tesisi: ziyaret başı harcama +%55 artar.'
       }
     }
@@ -1271,8 +1289,8 @@ export const GAME_CONFIG: GameConfig = {
       tierLevels: [
         {
           level: 1,
-          hireCost: 7500,
-          dailyWage: 650,
+          hireCost: 12000,
+          dailyWage: 900,
           speedMultiplier: 0.75,
           actionDelaySeconds: 2.0,
           maxConcurrentPumps: 1,
@@ -1280,8 +1298,8 @@ export const GAME_CONFIG: GameConfig = {
         },
         {
           level: 2,
-          hireCost: 4000,
-          dailyWage: 800,
+          hireCost: 7000,
+          dailyWage: 1100,
           speedMultiplier: 0.90,
           actionDelaySeconds: 1.2,
           maxConcurrentPumps: 1,
@@ -1290,8 +1308,8 @@ export const GAME_CONFIG: GameConfig = {
         },
         {
           level: 3,
-          hireCost: 9000,
-          dailyWage: 1050,
+          hireCost: 15000,
+          dailyWage: 1450,
           speedMultiplier: 1.10,
           actionDelaySeconds: 0.6,
           maxConcurrentPumps: 2,
@@ -1305,8 +1323,8 @@ export const GAME_CONFIG: GameConfig = {
       minReputation: 4.00,
       minActiveAttendants: 2,
       minProfitableDaysInLast3: 2,
-      hireCost: 45000,
-      dailyWage: 2800,
+      hireCost: 90000,
+      dailyWage: 4000,
       defaultKasaReserve: 8000,
       // Three grades, and the job grows with them. The first manager keeps the
       // lights on: money in, fuel ordered, staff at their posts, worn pumps
@@ -1320,7 +1338,7 @@ export const GAME_CONFIG: GameConfig = {
         {
           level: 1,
           upgradeCost: 0,
-          dailyWage: 2800,
+          dailyWage: 4000,
           minReputation: 4.0,
           tourSeconds: 45,
           duties: ['collectTills', 'fuelOrder', 'assignAttendants', 'maintenance'],
@@ -1329,8 +1347,8 @@ export const GAME_CONFIG: GameConfig = {
         },
         {
           level: 2,
-          upgradeCost: 60000,
-          dailyWage: 3600,
+          upgradeCost: 120000,
+          dailyWage: 5200,
           minReputation: 4.25,
           tourSeconds: 32,
           duties: [
@@ -1342,8 +1360,8 @@ export const GAME_CONFIG: GameConfig = {
         },
         {
           level: 3,
-          upgradeCost: 95000,
-          dailyWage: 4500,
+          upgradeCost: 190000,
+          dailyWage: 6500,
           minReputation: 4.5,
           tourSeconds: 22,
           duties: [
@@ -1357,8 +1375,8 @@ export const GAME_CONFIG: GameConfig = {
     }
   },
   pumpFuelModules: {
-    diesel: { cost: 6000, minLevel: 3 },
-    lpg: { cost: 9000, minLevel: 8 }
+    diesel: { cost: 13000, minLevel: 3 },
+    lpg: { cost: 20000, minLevel: 8 }
   },
   loans: [
     {
@@ -1439,6 +1457,7 @@ export const GAME_CONFIG: GameConfig = {
      */
     refundRatio: 0.4,
     moveFeeRatio: 0.02,
+    priceGrowthPerUnit: 1.3,
     tankerSpeedSecondsMin: 36,
     tankerSpeedSecondsMax: 60,
     tankerUnloadSpeedLps: 100,
@@ -1502,7 +1521,7 @@ export const GAME_CONFIG: GameConfig = {
     nightFillFloorPercent: 25,
     solar: {
       unlockLevel: 8,
-      pricePerCell: 600,
+      pricePerCell: 1300,
       upkeepPerCell: 4,
       peakKwhPerCell: 0.8,
       sunrise: 6,
@@ -1518,9 +1537,39 @@ export const GAME_CONFIG: GameConfig = {
     }
   },
   roadUpgrade: {
-    price: 250000,
+    price: 550000,
     minLevel: 8,
     minReputation: 4.0
+  },
+  // Emre'nin kuralı (2026-09-08): sınırsız alım yok. Arsa başına bir market,
+  // bir tuvalet, bir restoran, bir kahveci; istasyonda toplam bir tesis, bir
+  // yağ, bir lastik, bir yıkama, bir otel; şarj direği AC'de beş, DC'de on.
+  // Pompa ve direk gibi tekrar alınanlar her seferinde pahalanır; süs ve
+  // aydınlatma daha yavaş, ki onuncu direk bir pompa etmesin.
+  buildingRules: {
+    mini_market: { maxPerSide: 1 },
+    toilet: { maxPerSide: 1 },
+    restaurant: { maxPerSide: 1 },
+    cafe: { maxPerSide: 1 },
+    rest_complex: { maxTotal: 1 },
+    hotel: { maxTotal: 1 },
+    oil_change: { maxTotal: 1 },
+    tyre_service: { maxTotal: 1 },
+    car_wash: { maxTotal: 1 },
+    ev_charger_ac: { maxTotal: 5 },
+    ev_charger_dc: { maxTotal: 10 },
+    ev_substation: { maxPerSide: 1 },
+    ev_storage: { maxPerSide: 1 },
+    diesel_generator: { maxPerSide: 1 },
+    air_water: { maxPerSide: 1 },
+    truck_park: { maxPerSide: 1 },
+    car_park: { maxPerSide: 2 },
+    pylon_sign: { maxTotal: 1 },
+    tank_farm: { maxTotal: 1 },
+    tank_expansion: { maxTotal: 1 },
+    light_pole: { priceGrowth: 1.1 },
+    trash_can: { priceGrowth: 1.1 },
+    decoration: { priceGrowth: 1.1 }
   },
   grid: {
     initialWidth: 16,

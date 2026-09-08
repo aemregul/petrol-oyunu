@@ -26,6 +26,7 @@ import {
   vehiclesCanStillLeave
 } from './simulationEngine';
 import { FLAT_TYPES } from './pathfinding';
+import { buildLimitReason } from './catalogRules';
 
 export interface Footprint {
   minX: number;
@@ -388,14 +389,13 @@ export function evaluatePlacement(
     return { valid: false, reason: `Seviye ${catalog.unlockLevel} gerekiyor.` };
   }
 
-  // Storage is one farm and, at the top of its ladder, one expansion beside
-  // it. Capacity grows by upgrading what stands, not by carpeting the plot.
-  if (
-    (buildingType === 'tank_farm' || buildingType === 'tank_expansion') &&
-    Object.values(state.buildings).some((b) => b.type === buildingType)
-  ) {
-    return { valid: false, reason: 'Maksimum alım sayısına ulaşıldı.' };
-  }
+  // How many of a thing may stand, per block or on the station, is a rule
+  // of the catalogue (buildingRules); a block that is full says so before
+  // the ground is even looked at.
+  const limit = buildLimitReason(state, buildingType, drivewaySideAt(position[1]));
+  if (limit) return { valid: false, reason: limit };
+
+  // Storage capacity grows by upgrading what stands, not by carpeting the plot.
   if (buildingType === 'tank_expansion') {
     const farm = Object.values(state.buildings).find((b) => b.type === 'tank_farm');
     if (!farm || farm.level < 3) {

@@ -4,6 +4,7 @@ import { GAME_CONFIG, BuildingCatalogItem } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
 import { X, Hammer, Lock, Milestone, Sun } from 'lucide-react';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../../domain/services/energy';
+import { unitPrice, ownedCount, catalogLimitReason } from '../../domain/services/catalogRules';
 import { buyableParcels, parcelPrice, paveCost, parseParcelKey, LAND_BOUNDS, PARCEL } from '../../domain/services/land';
 import { sounds } from '../../audio/soundEffects';
 import { CatalogPreview, CatalogPhotoBooth } from '../CatalogPreview';
@@ -187,6 +188,9 @@ export function catalogLock(state: GameState, item: BuildingCatalogItem): string
   const has = (type: string) => Object.values(state.buildings).some((b) => b.type === type);
   if (state.player.level < item.unlockLevel) return `Seviye ${item.unlockLevel} gerekli`;
   if (item.type.startsWith('tank_') && has(item.type)) return 'Zaten kurulu — yükseltin';
+  // Both blocks full, or the station's one of it already standing.
+  const limit = catalogLimitReason(state, item.type);
+  if (limit) return limit;
   if (item.type === 'tank_expansion') {
     const farm = Object.values(state.buildings).find((b) => b.type === 'tank_farm');
     if (!farm || farm.level < 3) return 'Tank Sahası Sv.3 gerekli';
@@ -363,8 +367,12 @@ export const BuildModal: React.FC = () => {
 
           {items.map((item) => {
             const lock = catalogLock(gameState, item);
-            const canAfford = gameState.player.cash >= item.price;
+            const price = unitPrice(gameState, item.type);
+            const canAfford = gameState.player.cash >= price;
             const feature = featureBadge(item);
+            const rule = GAME_CONFIG.buildingRules[item.type];
+            const cap = rule?.maxTotal ?? rule?.maxPerSide;
+            const owned = ownedCount(gameState, item.type);
 
             return (
               <div key={item.type} className={CARD}>
@@ -378,6 +386,14 @@ export const BuildModal: React.FC = () => {
                   <span className={BADGE_PLAIN}>{item.size[0]}×{item.size[1]}</span>
                   {item.dailyUpkeep > 0 && (
                     <span className={BADGE_PLAIN}>₺{item.dailyUpkeep}/gün</span>
+                  )}
+                  {cap !== undefined && (
+                    <span
+                      className={BADGE_PLAIN}
+                      title={rule?.maxTotal !== undefined ? 'İstasyon genelinde sınır' : 'Arsa başına sınır'}
+                    >
+                      {owned}/{cap}{rule?.maxPerSide !== undefined && rule?.maxTotal === undefined ? ' · arsa başı' : ''}
+                    </span>
                   )}
                 </div>
 
@@ -398,7 +414,7 @@ export const BuildModal: React.FC = () => {
                     className={`${BUY} ${canAfford ? BUY_ON : BUY_OFF}`}
                   >
                     {!canAfford && <Hammer className="w-3.5 h-3.5" />}
-                    <span>₺{item.price.toLocaleString('tr-TR')}</span>
+                    <span>₺{price.toLocaleString('tr-TR')}</span>
                   </button>
                 )}
               </div>

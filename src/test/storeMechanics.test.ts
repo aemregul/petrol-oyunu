@@ -86,7 +86,7 @@ describe('tank packages', () => {
     // A second farm is never on the menu.
     const second = evaluatePlacement(state, 'tank_farm', [4, 4], 0);
     expect(second.valid).toBe(false);
-    expect(second.reason).toContain('Maksimum alım');
+    expect(second.reason).toContain('yalnızca bir');
 
     // The expansion waits until the farm has topped out.
     const early = evaluatePlacement(state, 'tank_expansion', [4, 4], 0);

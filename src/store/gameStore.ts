@@ -44,6 +44,7 @@ import {
   energyCapacityOn
 } from '../domain/services/simulationEngine';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
+import { unitPrice } from '../domain/services/catalogRules';
 import {
   managerDailyWage,
   managerLevel,
@@ -1113,11 +1114,14 @@ export const useGameStore = create<GameStore>((set, get) => {
       return false;
     }
 
-    if (!carried && gameState.player.cash < catalog.price) {
+    // The next one costs more than the last (Emre, 2026-09-08): the price
+    // is the catalogue's, compounded by how many are already owned.
+    const price = unitPrice(gameState, buildMode.buildingType);
+    if (!carried && gameState.player.cash < price) {
       get().addNotification({
         type: 'WARNING',
         title: 'Yetersiz Bakiye',
-        message: `${catalog.name} için ${catalog.price.toLocaleString('tr-TR')} TL gerekiyor.`
+        message: `${catalog.name} için ${price.toLocaleString('tr-TR')} TL gerekiyor.`
       });
       return false;
     }
@@ -1129,7 +1133,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!carried) {
       const tx = TransactionService.executeCashTransaction(state, {
         type: 'BUILD',
-        amount: -catalog.price,
+        amount: -price,
         description: `${catalog.name} inşası`
       });
       if (!tx.success) return false;

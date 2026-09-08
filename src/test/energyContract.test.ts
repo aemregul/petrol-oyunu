@@ -214,7 +214,7 @@ describe('buying panels', () => {
     const afterRoof = useGameStore.getState().gameState.player.cash;
     expect(useGameStore.getState().fitSolarCanopy(pump.id)).toBe(true);
     expect(useGameStore.getState().gameState.pumps[pump.id].hasSolarCanopy).toBe(true);
-    expect(useGameStore.getState().gameState.player.cash).toBe(afterRoof - 15 * 600);
+    expect(useGameStore.getState().gameState.player.cash).toBe(afterRoof - 15 * GAME_CONFIG.ev.solar.pricePerCell);
   });
 
   it('takes the panels off and leaves the canopy standing', () => {
@@ -231,7 +231,7 @@ describe('buying panels', () => {
     expect(after.hasSolarCanopy).toBeUndefined();
     // Refunded at the trade-in rate for a healthy island: price × ratio.
     expect(useGameStore.getState().gameState.player.cash - before).toBe(
-      Math.round((15 * 600 * GAME_CONFIG.economy.refundRatio) / 10) * 10
+      Math.round((15 * GAME_CONFIG.ev.solar.pricePerCell * GAME_CONFIG.economy.refundRatio) / 10) * 10
     );
     // Nothing to take off a bare roof.
     expect(useGameStore.getState().removeSolarCanopy(pump.id)).toBe(false);
