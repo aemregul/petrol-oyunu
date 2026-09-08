@@ -22,7 +22,9 @@ const VIEW_ICONS: Record<CameraViewId, React.ElementType> = {
 };
 
 const WEATHER_DISPLAY = {
-  SUNNY: { icon: Sun, color: 'text-kyel-dark', label: 'Güneşli' },
+  // Ink, not dark yellow: on the yellow clock box a yellow sun vanished
+  // (Emre, 2026-09-08).
+  SUNNY: { icon: Sun, color: 'text-ink', label: 'Güneşli' },
   OVERCAST: { icon: Cloud, color: 'text-ink', label: 'Parçalı Bulutlu' },
   RAIN: { icon: CloudRain, color: 'text-kblu', label: 'Yağmurlu' }
 } as const;
@@ -192,7 +194,7 @@ export const HUD: React.FC = () => {
               className="bg-kyel border-2 border-ink rounded-md px-2.5 py-1 font-display text-base text-ink flex items-center gap-1.5 tabular-nums"
               title={`${weatherStyle.label} · Gün ${dayState.currentDay}`}
             >
-              <WeatherIcon className={`w-4 h-4 ${weatherStyle.color}`} />
+              <WeatherIcon className={`w-5 h-5 ${weatherStyle.color}`} strokeWidth={2.75} />
               {/* The display face has no tabular figures, so a fixed box keeps
                   the strip from twitching as the minutes tick. */}
               <span className="inline-block w-[3.3em] text-center">{timeFormatted}</span>
