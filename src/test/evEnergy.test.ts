@@ -171,10 +171,13 @@ describe('the electric line', () => {
     expect(energyAvailable(state, 'near')).toBeCloseTo(before - 20 + perSecond * half, 0);
 
     const cash = state.player.cash;
+    // The tariff is the player's, set from the office (Emre, 2026-09-08),
+    // not the catalogue's.
+    state.evPricing = { ac: GAME_CONFIG.ev.acPricePerKwh, dc: 20 };
     advance(state, GAME_CONFIG.ev.dcChargeSeconds / 2 + 0.5);
-    // Charged, paid for 40 kWh, and on its way.
+    // Charged, paid for 40 kWh at the board's price, and on its way.
     expect(['OPTIONAL_SHOP', 'TO_PARK', 'EXIT', 'DESPAWN']).toContain(car.state);
-    expect(state.player.cash).toBeGreaterThanOrEqual(cash + Math.round(40 * GAME_CONFIG.ev.dcPricePerKwh));
+    expect(state.player.cash).toBeGreaterThanOrEqual(cash + Math.round(40 * 20));
   });
 
   it('lets an attendant on the post start it', () => {

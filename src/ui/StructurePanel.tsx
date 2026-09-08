@@ -11,7 +11,8 @@ import {
   solarKwhPerHourNow,
   solarCellsFeeding,
   generatorRunning,
-  hourOfDay
+  hourOfDay,
+  evPricePerKwh
 } from '../domain/services/simulationEngine';
 import { gridKwhPerHourFor, gridPriceAt, isNightTariff, dieselForGenerator } from '../domain/services/energy';
 import { sounds } from '../audio/soundEffects';
@@ -85,7 +86,7 @@ export const StructurePanel: React.FC = () => {
     : plugged.state === 'FUELING'
       ? { text: 'Şarj ediyor', tone: 'text-kgrn' }
       : { text: 'Müşteri bekliyor', tone: 'text-kyel-dark' };
-  const kwhPrice = building.type === 'ev_charger_dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+  const kwhPrice = evPricePerKwh(gameState, building.type === 'ev_charger_dc' ? 'dc' : 'ac');
 
   // The contract on the substation, the sun on the roofs, the diesel in the
   // generator: the three lines that fill the bank.

@@ -642,6 +642,12 @@ export interface GameState {
   };
   tanks: Record<FuelType, FuelTankEntity>;
   pricing: Record<FuelType, FuelPricingState>;
+  /**
+   * What a kWh sells for at each kind of charging post, set from the office
+   * like the fuel prices (Emre, 2026-09-08). Optional because saves written
+   * before it carry none; absent reads as the catalogue tariff.
+   */
+  evPricing?: { ac: number; dc: number };
   pumps: Record<string, PumpEntity>;
   vehicles: Record<string, VehicleEntity>;
   employees: Record<string, EmployeeEntity>;

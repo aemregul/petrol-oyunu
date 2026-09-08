@@ -212,6 +212,7 @@ export function createInitialGameState(): GameState {
       averageCost: 0,
       active: false
     },
+    evPricing: { ac: GAME_CONFIG.ev.acPricePerKwh, dc: GAME_CONFIG.ev.dcPricePerKwh },
     managerSettings: {
       autoFuelOrder: false,
       orderThresholdPercent: 20,

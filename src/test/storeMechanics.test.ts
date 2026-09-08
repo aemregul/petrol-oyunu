@@ -307,6 +307,23 @@ describe('the manager', () => {
   });
 });
 
+describe('pricing the charging posts', () => {
+  // Emre, 2026-09-08: AC and DC kWh prices are set from the office like the
+  // fuel prices. One kind at a time, the other left as it was, never below
+  // a lira.
+  it('sets one tariff without touching the other', () => {
+    useGameStore.getState().setEvPrice('dc', 15);
+    let ev = useGameStore.getState().gameState.evPricing!;
+    expect(ev.dc).toBe(15);
+    expect(ev.ac).toBe(GAME_CONFIG.ev.acPricePerKwh);
+
+    useGameStore.getState().setEvPrice('ac', 0.2);
+    ev = useGameStore.getState().gameState.evPricing!;
+    expect(ev.ac).toBe(1);
+    expect(ev.dc).toBe(15);
+  });
+});
+
 describe('renaming the station', () => {
   // Emre'nin isteği (2026-09-03): istasyonun adı profilden değişir ve
   // tabelalar kendiliğinden güncellenir. Tabelalar (fiyat totemi, pilon)

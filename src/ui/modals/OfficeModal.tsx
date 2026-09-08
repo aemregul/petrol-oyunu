@@ -3,7 +3,7 @@ import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
 import { calculateEndOfDayReputation } from '../../domain/formulas/economy';
-import { stopChance } from '../../domain/services/simulationEngine';
+import { stopChance, evPricePerKwh } from '../../domain/services/simulationEngine';
 import { FuelType, MissionEntity } from '../../domain/types/gameState';
 import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Sparkles, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
@@ -11,6 +11,7 @@ import { sounds } from '../../audio/soundEffects';
 type OfficeTab = 'summary' | 'price' | 'accounts' | 'missions';
 
 const FUELS: FuelType[] = ['gasoline', 'diesel', 'lpg'];
+const EV_KINDS: Array<'ac' | 'dc'> = ['ac', 'dc'];
 
 function formatTarget(value: number): string {
   return value >= 1000 ? value.toLocaleString('tr-TR') : `${Math.round(value * 10) / 10}`;
@@ -293,6 +294,7 @@ export const OfficeModal: React.FC = () => {
   const cleanStation = useGameStore((s) => s.cleanStation);
   const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
   const setFuelPrice = useGameStore((s) => s.setFuelPrice);
+  const setEvPrice = useGameStore((s) => s.setEvPrice);
   const claimMissionReward = useGameStore((s) => s.claimMissionReward);
 
   const officeTab = useGameStore((s) => s.officeTab);
@@ -353,6 +355,10 @@ export const OfficeModal: React.FC = () => {
     if (!pricing) return;
     sounds.playClick();
     setFuelPrice(fuelType, Math.max(10, pricing.playerPrice + delta), 'CUSTOM');
+  };
+  const installedChargers = {
+    ac: Object.values(gameState.buildings).some((b) => b.type === 'ev_charger_ac'),
+    dc: Object.values(gameState.buildings).some((b) => b.type === 'ev_charger_dc')
   };
   // How the board pulls custom against a plain station at the regional price.
   const customerFlow = Math.max(0, Math.round((stopChance(gameState, 'near') / 0.3) * 100));
@@ -577,6 +583,49 @@ export const OfficeModal: React.FC = () => {
                         onClick={() => adjustPrice(fuel, 0.1)}
                         className="game-btn bg-card hover:bg-board text-kgrn w-11 h-11 rounded-md flex items-center justify-center"
                         aria-label={`${conf.shortName} fiyatını artır`}
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                    </div>
+                  );
+                })}
+                {/* The charging posts sell by the kWh and are priced here
+                    too, once there is one to sell from (Emre, 2026-09-08).
+                    The catalogue tariff stands in for the regional average;
+                    the grid's daytime rate is what a kWh costs to buy. */}
+                {EV_KINDS.filter((kind) => installedChargers[kind]).map((kind) => {
+                  const price = evPricePerKwh(gameState, kind);
+                  const listed = kind === 'dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+                  const above = price > listed + 0.005;
+                  const below = price < listed - 0.005;
+                  const label = kind === 'dc' ? 'DC Hızlı Şarj' : 'AC Şarj';
+                  return (
+                    <div key={kind} className="flex items-center gap-3 py-2.5 border-b-2 border-dotted border-mute/60">
+                      <span className="text-[15px] font-display tracking-wide text-ink flex-1">
+                        {label} <span className="text-[11px] text-mute">/kWh</span>
+                      </span>
+                      <span
+                        className={`text-[12px] font-bold font-mono tabular-nums ${
+                          above ? 'text-kred' : below ? 'text-kgrn' : 'text-mute'
+                        }`}
+                        title={`Şebeke gündüz ₺${GAME_CONFIG.ev.gridPricePerKwh.toFixed(2)} · Bölge ₺${listed.toFixed(2)}`}
+                      >
+                        {GAME_CONFIG.ev.gridPricePerKwh.toFixed(2)} {above ? '▲' : below ? '▼' : '•'}
+                      </span>
+                      <button
+                        onClick={() => { sounds.playClick(); setEvPrice(kind, price - 0.5); }}
+                        className="game-btn bg-card hover:bg-board text-kred w-11 h-11 rounded-md flex items-center justify-center"
+                        aria-label={`${label} fiyatını düşür`}
+                      >
+                        <Minus className="w-5 h-5" />
+                      </button>
+                      <span className="w-24 h-11 rounded-md bg-board border-2 border-ink flex items-center justify-center text-[15px] font-display tabular-nums text-ink">
+                        ₺{price.toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => { sounds.playClick(); setEvPrice(kind, price + 0.5); }}
+                        className="game-btn bg-card hover:bg-board text-kgrn w-11 h-11 rounded-md flex items-center justify-center"
+                        aria-label={`${label} fiyatını artır`}
                       >
                         <Plus className="w-5 h-5" />
                       </button>

@@ -37,6 +37,7 @@ import {
   closeForecourt,
   evictFromPump,
   servicePump,
+  evPricePerKwh,
   dailyPriceReputationDelta,
   dismissVehicle,
   DRIVEWAY_Z,
@@ -522,6 +523,8 @@ interface GameStore {
 
   // Economy / Pricing
   setFuelPrice: (fuelType: FuelType, price: number, strategy?: 'CHEAP' | 'BALANCED' | 'HIGH_MARGIN' | 'CUSTOM') => void;
+  /** What a kWh sells for at the AC or DC posts. */
+  setEvPrice: (kind: 'ac' | 'dc', price: number) => void;
   takeLoan: (loanId: string) => boolean;
 
   // Employees & Manager
@@ -2607,6 +2610,23 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     pricing.playerPrice = Number(price.toFixed(2));
     pricing.priceStrategy = strategy;
+
+    const effects = createEffects();
+    trackMissionMetric(state, 'PRICE_SET', 1, effects);
+    flushEffects(state, effects);
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+  },
+
+  setEvPrice: (kind, price) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    state.evPricing = {
+      ac: evPricePerKwh(state, 'ac'),
+      dc: evPricePerKwh(state, 'dc'),
+      [kind]: Number(Math.max(1, price).toFixed(2))
+    };
 
     const effects = createEffects();
     trackMissionMetric(state, 'PRICE_SET', 1, effects);

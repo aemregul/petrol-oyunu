@@ -65,6 +65,7 @@ function fitText(
  */
 export const PriceTotem: React.FC<PriceTotemProps> = ({ level, nameOverride }) => {
   const pricing = useGameStore((s) => s.gameState.pricing);
+  const evPricing = useGameStore((s) => s.gameState.evPricing);
   const tanks = useGameStore((s) => s.gameState.tanks);
   const buildings = useGameStore((s) => s.gameState.buildings);
   const ownName = useGameStore((s) => s.gameState.station.name);
@@ -97,7 +98,7 @@ export const PriceTotem: React.FC<PriceTotemProps> = ({ level, nameOverride }) =
       out.push({
         label: 'AC ŞARJ',
         color: '#38bdf8',
-        value: GAME_CONFIG.ev.acPricePerKwh.toFixed(2),
+        value: (evPricing?.ac ?? GAME_CONFIG.ev.acPricePerKwh).toFixed(2),
         dim: false
       });
     }
@@ -105,12 +106,12 @@ export const PriceTotem: React.FC<PriceTotemProps> = ({ level, nameOverride }) =
       out.push({
         label: 'DC ŞARJ',
         color: '#a78bfa',
-        value: GAME_CONFIG.ev.dcPricePerKwh.toFixed(2),
+        value: (evPricing?.dc ?? GAME_CONFIG.ev.dcPricePerKwh).toFixed(2),
         dim: false
       });
     }
     return out;
-  }, [pricing, tanks, chargers]);
+  }, [pricing, evPricing, tanks, chargers]);
 
   // Prices only change when the player or the manager sets them, so the canvas
   // is redrawn on change rather than every frame.

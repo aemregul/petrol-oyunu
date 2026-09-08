@@ -3344,12 +3344,38 @@ export function dispenseStep(
  * stock to draw down and no wholesale cost to book against it — the tariff is
  * the margin, which is why the substation and the points are the investment.
  */
+/**
+ * What a kWh sells for at a post of this kind: the player's price from the
+ * office, or the catalogue tariff for a save that never set one.
+ */
+export function evPricePerKwh(state: GameState, kind: 'ac' | 'dc'): number {
+  const fallback = kind === 'dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+  return state.evPricing?.[kind] ?? fallback;
+}
+
+/**
+ * How the charging tariff sits against the going rate — the catalogue price
+ * stands in for a regional average, there being no electricity market — so
+ * an electric driver weighs the board the way a petrol driver does. Without
+ * this, a kWh could be priced at anything and nobody would drive past.
+ */
+function evPriceIndex(state: GameState, side: DrivewaySide): number {
+  const kinds = new Set(chargingPoints(state, side).map((p) => p.kind));
+  if (kinds.size === 0) return 1;
+  let sum = 0;
+  for (const kind of kinds) {
+    const listed = kind === 'dc' ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+    sum += evPricePerKwh(state, kind) / listed;
+  }
+  return sum / kinds.size;
+}
+
 export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
   const point = vehicle.chargingBuildingId
     ? state.buildings[vehicle.chargingBuildingId]
     : null;
   const fast = point?.type === 'ev_charger_dc';
-  const tariff = fast ? GAME_CONFIG.ev.dcPricePerKwh : GAME_CONFIG.ev.acPricePerKwh;
+  const tariff = evPricePerKwh(state, fast ? 'dc' : 'ac');
 
   // The "tank" of an electric car is its battery, in kWh; what went in is
   // what is paid for.
@@ -5233,8 +5259,9 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const archetype = pickWeighted(archetypes, (a) => {
     const customer = GAME_CONFIG.customerTypes[a];
     const preferred = customer.preferredFuel;
-    const index =
-      preferred !== 'any' && sellableFuels.includes(preferred as FuelType)
+    const index = customer.requiresCharger
+      ? evPriceIndex(state, side)
+      : preferred !== 'any' && sellableFuels.includes(preferred as FuelType)
         ? fuelPriceIndex(state, preferred as FuelType)
         : meanIndex;
     const presence = stops
