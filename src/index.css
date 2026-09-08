@@ -198,6 +198,38 @@
   }
 
   /* Anything meant to be pressed sits on its own hard shadow and drops onto it. */
+  /*
+   * Trial (Emre, 2026-09-08): a card that borrows the scene's light instead
+   * of sitting on top of it like a web page. Four touches — paper grain, a
+   * soft warm shadow in place of the hard offset, an ink mixed from the
+   * scene's dark green-brown rather than pure black, and a face that lets a
+   * little of the world through. The sticker colours are pulled a notch
+   * toward the scene's dusty paint. Applied to the clock box only, to judge.
+   */
+  .k-world {
+    position: relative;
+    color: #2a2418;
+    border: 2px solid #3b3424;
+    border-radius: 0.5rem;
+    background-color: rgba(232, 182, 58, 0.92);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    box-shadow:
+      0 1px 0 rgba(255, 244, 214, 0.55) inset,
+      0 0.18rem 0.35rem rgba(43, 33, 24, 0.35),
+      0 0.6rem 1.1rem rgba(43, 33, 24, 0.22);
+  }
+  .k-world::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.16;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.15 0 0 0 0 0.1 0 0 0 0.9 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+  }
+
   .game-btn {
     @apply transition-all duration-75 border-2 border-ink rounded-md;
     box-shadow: 0.2rem 0.2rem 0 #2b2118;

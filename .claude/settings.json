@@ -366,7 +366,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:5199/)",
       "Bash(curl -s http://127.0.0.1:5199/)",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad/manager-shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad)",
-      "Bash(node /Users/emre/petrol-oyunu/_manager_shot.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad)"
+      "Bash(node /Users/emre/petrol-oyunu/_manager_shot.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad)",
+      "Bash(node /Users/emre/petrol-oyunu/_clock.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad/clock-world.png)"
     ],
     "additionalDirectories": [
       "/private/tmp",

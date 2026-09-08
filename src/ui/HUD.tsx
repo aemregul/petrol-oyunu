@@ -191,7 +191,7 @@ export const HUD: React.FC = () => {
 
           <div className="hud-day flex items-center gap-2">
             <div
-              className="bg-kyel border-2 border-ink rounded-md px-2.5 py-1 font-display text-base text-ink flex items-center gap-1.5 tabular-nums"
+              className="k-world px-2.5 py-1 font-display text-base flex items-center gap-1.5 tabular-nums"
               title={`${weatherStyle.label} · Gün ${dayState.currentDay}`}
             >
               <WeatherIcon className={`w-5 h-5 ${weatherStyle.color}`} strokeWidth={2.75} />
@@ -213,12 +213,16 @@ export const HUD: React.FC = () => {
           </div>
         </div>
 
-        {/* Under the strip: what is in the tanks and the battery, centred;
-            the day's events hang off the right end. */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="hud-under-left w-48 shrink-0" />
+        {/* Under the strip: what is in the tanks and the battery, dead
+            centre; the day's events hang off the right end. Three grid
+            columns with the outer two sharing the leftover equally, so the
+            tanks sit at the screen's centre whether or not an event card is
+            showing — a flex row with a fixed left spacer slid them right the
+            moment the card went away (Emre, 2026-09-08). */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2">
+          <div />
           <StockStrip />
-          <div className="hud-events">
+          <div className="hud-events justify-self-end">
             <ActiveEventsBar />
           </div>
         </div>
