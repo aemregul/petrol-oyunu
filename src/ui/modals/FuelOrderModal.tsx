@@ -4,7 +4,12 @@ import { FuelType } from '../../domain/types/gameState';
 import { GAME_CONFIG, SupplierType } from '../../config/gameConfig';
 import { X, Truck, Calendar } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
-import { isFuelDealOn, FUEL_DEAL_DISCOUNT } from '../../domain/services/simulationEngine';
+import {
+  isFuelDealOn,
+  FUEL_DEAL_DISCOUNT,
+  litersOnOrder,
+  orderableLiters
+} from '../../domain/services/simulationEngine';
 
 // One button press is one order step (Emre, 2026-09-09: 600 L was unreachable at 200).
 const FUEL_ORDER_STEP = GAME_CONFIG.fuels.gasoline.orderStepLiters;
@@ -43,7 +48,11 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
   const pricing = gameState.pricing[fuelType];
 
   const unlocked    = tank && tank.capacity > 0;
-  const free        = unlocked ? Math.floor(Math.max(0, tank.capacity - tank.stock)) : 0;
+  // What is already bought and on its way counts as in the tank here: a
+  // tanker on the road and the card still offering MAX again would send a
+  // second lorry to a full tank (Emre, 2026-09-09).
+  const onOrder     = unlocked ? Math.floor(litersOnOrder(gameState, fuelType)) : 0;
+  const free        = unlocked ? Math.floor(orderableLiters(gameState, fuelType)) : 0;
   const full        = free < 1;
 
   const supplier    = GAME_CONFIG.suppliers.find((s) => s.id === supplierId)
@@ -99,10 +108,11 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
   };
 
   const tone = FUEL_TONE[fuelType];
-  const fillPct = unlocked
-    ? full
-      ? 100
-      : Math.min(100, Math.round((tank.stock / tank.capacity) * 100))
+  // Two segments: what is in the tank, and — fainter — what is on its way to
+  // it. Together they show the tank the way the order rule sees it.
+  const fillPct = unlocked ? Math.min(100, Math.round((tank.stock / tank.capacity) * 100)) : 0;
+  const onOrderPct = unlocked
+    ? Math.min(100 - fillPct, Math.round((onOrder / tank.capacity) * 100))
     : 0;
 
   const diffLiters = unlocked ? clampedLiters : 0;
@@ -124,10 +134,13 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
       <div className="flex-1 min-w-0">
         <div className="font-display text-base text-ink">{FUEL_LABEL[fuelType]}</div>
         {full ? (
-          <div className="text-xs text-mute">Tank dolu</div>
+          <div className="text-xs text-mute">
+            {onOrder > 0 ? `Tank dolu · ${onOrder} L yolda` : 'Tank dolu'}
+          </div>
         ) : (
           <div className="text-xs text-mute">
             {tank.stock.toFixed(0)} / {tank.capacity} L
+            {onOrder > 0 && <span className="ml-1.5 font-medium">· {onOrder} L yolda</span>}
             <span className="ml-1.5 text-kgrn font-medium">
               +{diffLiters} L · alış {unitCost.toFixed(1)} TL/L
             </span>
@@ -138,12 +151,19 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
             )}
           </div>
         )}
-        {/* Bar */}
-        <div className="mt-1.5 w-full k-bar">
+        {/* Bar: in the tank, then on the road */}
+        <div className="mt-1.5 w-full k-bar flex">
           <div
             className={`h-full transition-all ${tone.bar}`}
             style={{ width: `${fillPct}%` }}
           />
+          {onOrderPct > 0 && (
+            <div
+              className={`h-full transition-all opacity-40 ${tone.bar}`}
+              style={{ width: `${onOrderPct}%` }}
+              title={`${onOrder} L yolda`}
+            />
+          )}
         </div>
       </div>
 

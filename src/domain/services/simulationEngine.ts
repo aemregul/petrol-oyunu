@@ -7298,6 +7298,26 @@ export function servicePump(state: GameState, pump: PumpEntity, description: str
 /* Shared order placement (used by the player and the manager alike)   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Litres of this fuel bought and not yet in the tank: on the road, at the
+ * gate, or still unloading. They are as good as in the tank for the question
+ * "how much more can I order" — Emre, 2026-09-09: a 1499 L tanker on its way
+ * and the order card still offered another 1499, which would have arrived to
+ * a full tank and gone straight back as a refund.
+ */
+export function litersOnOrder(state: GameState, fuelType: FuelType): number {
+  return state.fuelOrders
+    .filter((o) => o.fuelType === fuelType && o.state !== 'COMPLETED')
+    .reduce((sum, o) => sum + o.liters, 0);
+}
+
+/** What the tank still has room for, counting what is already on its way. */
+export function orderableLiters(state: GameState, fuelType: FuelType): number {
+  const tank = state.tanks[fuelType];
+  if (!tank) return 0;
+  return Math.max(0, tank.capacity - tank.stock - litersOnOrder(state, fuelType));
+}
+
 export function placeFuelOrder(
   state: GameState,
   fuelType: FuelType,
@@ -7313,7 +7333,8 @@ export function placeFuelOrder(
     return false;
   }
 
-  const freeCapacity = tank.capacity - tank.stock;
+  const onOrder = litersOnOrder(state, fuelType);
+  const freeCapacity = orderableLiters(state, fuelType);
   if (!Number.isFinite(liters) || liters < 1) {
     notify(effects, 'WARNING', 'Geçersiz Miktar', 'En az 1 litre sipariş edilebilir.');
     return false;
@@ -7323,7 +7344,9 @@ export function placeFuelOrder(
       effects,
       'WARNING',
       'Kapasite Yetersiz',
-      `Sipariş boş kapasiteyi (${freeCapacity.toFixed(0)} L) aşamaz.`
+      onOrder > 0
+        ? `Sipariş kalan kapasiteyi (${freeCapacity.toFixed(0)} L) aşamaz — ${onOrder.toFixed(0)} L zaten yolda.`
+        : `Sipariş boş kapasiteyi (${freeCapacity.toFixed(0)} L) aşamaz.`
     );
     return false;
   }

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
 import {
   placeFuelOrder,
+  litersOnOrder,
+  orderableLiters,
   runSimulationTick,
   FORECOURT_FRONT
 } from '../domain/services/simulationEngine';
@@ -208,5 +210,40 @@ describe('GAME_CONFIG.suppliers', () => {
     const hzl = GAME_CONFIG.suppliers.find((s) => s.id === 'hizli_lojistik')!;
     expect(hzl.priceMultiplier).toBe(1.07);
     expect(hzl.speedMultiplier).toBeLessThan(1);
+  });
+});
+
+// ─── Yoldaki yakıt depodaymış gibi sayılır ──────────────────────────────────
+
+describe('placeFuelOrder — yoldaki litreler kapasiteden düşer', () => {
+  // Emre, 2026-09-09: 1499 L tanker yoldayken sipariş kartı yine 1499 L MAX
+  // veriyordu; ikinci tanker dolu depoya gelip iade olacaktı. Sipariş
+  // edilebilen miktar = kapasite − stok − yolda.
+  it('refuses a second order that would overfill the tank once the first arrives', () => {
+    const s = baseState();
+    expect(orderableLiters(s, 'gasoline')).toBe(1500);
+
+    expect(placeFuelOrder(s, 'gasoline', 1000, createEffects())).toBe(true);
+    expect(litersOnOrder(s, 'gasoline')).toBe(1000);
+    expect(orderableLiters(s, 'gasoline')).toBe(500);
+
+    const effects = createEffects();
+    expect(placeFuelOrder(s, 'gasoline', 1000, effects)).toBe(false);
+    expect(effects.notifications.map((n) => n.message).join(' ')).toContain('yolda');
+
+    expect(placeFuelOrder(s, 'gasoline', 500, createEffects())).toBe(true);
+    expect(orderableLiters(s, 'gasoline')).toBe(0);
+    expect(placeFuelOrder(s, 'gasoline', 1, createEffects())).toBe(false);
+  });
+
+  it('frees the room again as the fuel lands in the tank', () => {
+    const s = baseState();
+    placeFuelOrder(s, 'gasoline', 900, createEffects());
+    const order = s.fuelOrders[s.fuelOrders.length - 1];
+    // Delivered without the drive: the ledger is what this test is about.
+    order.state = 'COMPLETED';
+    s.tanks.gasoline.stock = 900;
+    expect(litersOnOrder(s, 'gasoline')).toBe(0);
+    expect(orderableLiters(s, 'gasoline')).toBe(600);
   });
 });
