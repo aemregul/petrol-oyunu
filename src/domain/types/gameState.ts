@@ -412,6 +412,12 @@ export interface GameEventEffects {
   wholesalePriceModifier?: number;
   trafficMultiplier?: number;
   tipMultiplier?: number;
+  /**
+   * Scales how often a given kind of driver turns up — on the road and at
+   * the pumps — while the event runs. A "convoy" is this, not a story on
+   * the card: the road actually fills with the cars the text promises.
+   */
+  archetypeWeightMultiplier?: Partial<Record<VehicleArchetype, number>>;
   /** One-shot deltas applied the moment the event fires. */
   reputationDelta?: number;
   cashDelta?: number;

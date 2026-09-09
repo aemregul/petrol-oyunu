@@ -165,7 +165,10 @@ export const GAME_EVENTS: GameEventConfig[] = [
     weight: 5,
     minLevel: 4,
     durationHours: 2,
-    effects: { tipMultiplier: 3, trafficMultiplier: 1.2 }
+    // The convoy is the luxury share on the road, not the +20% by itself:
+    // ×6 lifts it from about one car in sixteen to one in three passing and
+    // nearly half of those who stop (Emre, 2026-09-09).
+    effects: { tipMultiplier: 3, trafficMultiplier: 1.2, archetypeWeightMultiplier: { luxury: 6 } }
   },
   {
     id: 'fleet_contract',

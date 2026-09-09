@@ -2982,16 +2982,22 @@ export interface EventModifiers {
   traffic: number;
   tip: number;
   pumpsDisabled: boolean;
+  /** Per-archetype draw weight scale; absent means 1. */
+  archetypeWeights: Partial<Record<VehicleArchetype, number>>;
 }
 
 /** Collapses every running event into the multipliers the tick needs. */
 export function getEventModifiers(state: GameState): EventModifiers {
-  const mods: EventModifiers = { traffic: 1, tip: 1, pumpsDisabled: false };
+  const mods: EventModifiers = { traffic: 1, tip: 1, pumpsDisabled: false, archetypeWeights: {} };
 
   for (const event of state.activeEvents) {
     if (event.effects.trafficMultiplier) mods.traffic *= event.effects.trafficMultiplier;
     if (event.effects.tipMultiplier) mods.tip *= event.effects.tipMultiplier;
     if (event.effects.pumpsDisabled) mods.pumpsDisabled = true;
+    for (const [archetype, mult] of Object.entries(event.effects.archetypeWeightMultiplier ?? {})) {
+      const key = archetype as VehicleArchetype;
+      mods.archetypeWeights[key] = (mods.archetypeWeights[key] ?? 1) * (mult ?? 1);
+    }
   }
 
   return mods;
@@ -3167,6 +3173,10 @@ export function eventEffectSummary(effects: GameEventEffects): string {
     parts.push(`alış ${pct >= 0 ? '+' : ''}${pct}%`);
   }
   if (effects.tipMultiplier !== undefined) parts.push(`bahşiş ×${effects.tipMultiplier}`);
+  for (const [archetype, mult] of Object.entries(effects.archetypeWeightMultiplier ?? {})) {
+    const name = GAME_CONFIG.customerTypes[archetype]?.name ?? archetype;
+    parts.push(`${name.toLocaleLowerCase('tr-TR')} ×${mult}`);
+  }
   if (effects.pumpsDisabled) parts.push('pompalar ve şarj kapalı');
   if (effects.reputationDelta) parts.push(`itibar ${effects.reputationDelta > 0 ? '+' : ''}${effects.reputationDelta.toFixed(2)}`);
   if (effects.cashDelta) parts.push(`${effects.cashDelta > 0 ? '+' : '−'}₺${Math.abs(effects.cashDelta).toLocaleString('tr-TR')}`);
@@ -5391,7 +5401,9 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     const presence = stops
       ? customer.stationStopWeight ?? 1
       : customer.roadTrafficWeight ?? 1;
-    return archetypeAppetite(customer.priceSensitivity, index) * presence;
+    // An event can tilt who is out today: a VIP convoy is a road full of
+    // luxury cars, on the carriageway and at the pumps alike.
+    return archetypeAppetite(customer.priceSensitivity, index) * presence * (mods.archetypeWeights[a] ?? 1);
   });
   const conf = GAME_CONFIG.customerTypes[archetype];
   const fuelType: FuelType =

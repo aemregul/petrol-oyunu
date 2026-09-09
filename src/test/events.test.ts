@@ -90,8 +90,55 @@ describe('the road\'s events', () => {
     expect(eventEffectSummary({ trafficMultiplier: 0.5 })).toBe('trafik -50%');
     expect(eventEffectSummary({ wholesalePriceModifier: -0.06 })).toBe('alış -6%');
     expect(eventEffectSummary({ tipMultiplier: 3, trafficMultiplier: 1.2 })).toBe('trafik +20% · bahşiş ×3');
+    expect(
+      eventEffectSummary({ tipMultiplier: 3, trafficMultiplier: 1.2, archetypeWeightMultiplier: { luxury: 6 } })
+    ).toBe('trafik +20% · bahşiş ×3 · lüks / spor ×6');
     expect(eventEffectSummary({ pumpsDisabled: true })).toBe('pompalar ve şarj kapalı');
     expect(eventEffectSummary({ cashDelta: 6000, trafficMultiplier: 1.35 })).toBe('trafik +35% · +₺6.000');
+  });
+
+  /**
+   * Emre, 2026-09-09: "VIP konvoyu geldiğinde trafikte bir akış görmüyorum".
+   * The event was three-times tips and a +20% the road swallowed whole; no
+   * car on it looked any different. Now the luxury share of who drives past
+   * — and who turns in — climbs while the convoy is in town.
+   */
+  it('fills the road with luxury cars while the VIP convoy is in town', () => {
+    const spawnShare = (withConvoy: boolean): { luxury: number; total: number } => {
+      seed = 3;
+      const state = createInitialGameState();
+      state.dayState.timeSpeed = 1;
+      state.station.open = false;
+      state.player.level = 1;
+      // Nothing else may fire and muddy the mix.
+      state.dayState.eventsToday = 99;
+      if (withConvoy) {
+        triggerEvent(state, GAME_EVENTS.find((e) => e.id === 'vip_convoy')!, createEffects());
+      }
+      const effects = createEffects();
+      const seen = new Set<string>();
+      let luxury = 0;
+      for (let i = 0; i < 20000; i++) {
+        state.dayState.gameTime = 12;
+        for (const e of state.activeEvents) e.remainingHours = 2;
+        runSimulationTick(state, 0.1, effects);
+        for (const v of Object.values(state.vehicles)) {
+          if (seen.has(v.id)) continue;
+          seen.add(v.id);
+          if (v.archetype === 'luxury') luxury++;
+        }
+      }
+      return { luxury, total: seen.size };
+    };
+
+    const quiet = spawnShare(false);
+    const convoy = spawnShare(true);
+    expect(quiet.total).toBeGreaterThan(200);
+    expect(convoy.total).toBeGreaterThan(200);
+    // One in sixteen on an ordinary day; about one in three with the convoy.
+    expect(quiet.luxury / quiet.total).toBeLessThan(0.12);
+    expect(convoy.luxury / convoy.total).toBeGreaterThan(0.24);
+    expect(convoy.luxury / convoy.total).toBeLessThan(0.36);
   });
 
   it('cuts the grid and the charging posts during an outage, not only the pumps', () => {
