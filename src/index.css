@@ -143,6 +143,14 @@
     max-width: min(20rem, calc(100vw - 1rem));
   }
 
+  /* The tanker cards sit over the bottom bar and, while a structure is
+     being placed, over the placement dock as well — the two used to share
+     the corner (Emre, 2026-09-09). */
+  .hud-tanker {
+    right: var(--hud-edge);
+    bottom: calc(var(--hud-bottom-clearance) + var(--placement-dock-height));
+  }
+
   /*
    * The event cards hang under the reputation card in the top-right corner,
    * in every mode. They used to sit mid-height on the right and, while

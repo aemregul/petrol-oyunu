@@ -72,7 +72,9 @@ export const HUD: React.FC = () => {
         `${Math.max(0, window.innerHeight - bottomBarRect.top) + 12}px`
       );
       hud.style.setProperty('--placement-dock-width', `${dockRect?.width ?? 0}px`);
-      hud.style.setProperty('--placement-dock-height', `${dockRect?.height ?? 0}px`);
+      // The dock's height plus a gap, so anything stacked above it — the
+      // tanker cards — clears it while it is up (Emre, 2026-09-09).
+      hud.style.setProperty('--placement-dock-height', `${dockRect ? dockRect.height + 8 : 0}px`);
     };
 
     updateSafeAreas();

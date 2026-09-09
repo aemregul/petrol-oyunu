@@ -25,7 +25,7 @@ export const TankerStatusBar: React.FC = () => {
   };
 
   return (
-    <div className="absolute bottom-20 right-4 flex flex-col gap-1.5 items-stretch pointer-events-none">
+    <div className="hud-tanker absolute flex flex-col gap-1.5 items-stretch pointer-events-none">
       {fuelOrders.map((order) => {
         const fuel = GAME_CONFIG.fuels[order.fuelType];
         return (
