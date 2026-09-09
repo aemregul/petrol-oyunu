@@ -688,6 +688,8 @@ export interface GameState {
      */
     theme?: 'light' | 'dark';
     showTutorialTips: boolean;
+    /** The first-run tour has been taken or skipped; absent means not yet. */
+    tourSeen?: boolean;
   };
   notifications: GameNotification[];
   transactionLog: TransactionRecord[];

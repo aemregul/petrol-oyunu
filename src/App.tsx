@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { StationScene } from './rendering/StationScene';
 import { HUD } from './ui/HUD';
 import { ModalContainer } from './ui/ModalContainer';
+import { TourOverlay } from './ui/TourOverlay';
 import { NotificationToast } from './ui/NotificationToast';
 import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
@@ -37,6 +38,17 @@ export const App: React.FC = () => {
     sounds.setMasterVolume(masterVolume);
     sounds.toggleMute(sfxVolume <= 0);
   }, [masterVolume, sfxVolume]);
+
+  // The first-run tour (Emre, 2026-09-09): once the gate is through and the
+  // station is on screen, a player who has never taken it gets it. A moment's
+  // delay lets the scene draw first, so the spotlight has something to cut.
+  const tourSeen = useGameStore((s) => s.gameState.settings.tourSeen ?? false);
+  const startTour = useGameStore((s) => s.startTour);
+  useEffect(() => {
+    if (gateOpen || tourSeen) return;
+    const id = window.setTimeout(startTour, 1500);
+    return () => window.clearTimeout(id);
+  }, [gateOpen, tourSeen, startTour]);
 
   // The palette is a data attribute on the root: every token in index.css
   // reads through it, so the whole HUD turns with one switch.
@@ -157,6 +169,7 @@ export const App: React.FC = () => {
           <StationScene />
           <HUD />
           <ModalContainer />
+          <TourOverlay />
         </>
       )}
       <WelcomeGate />

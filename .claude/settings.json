@@ -398,7 +398,9 @@
       "Bash(grep -rn \"\\\\${pump\\\\.id}\\\\|{pump\\\\.id}\\\\|pump\\\\.id\\\\.toUpperCase\\\\|\\\\${p\\\\.id}\\\\|{p\\\\.id}\" src/ui src/rendering)",
       "Bash(grep -n \"\\\\${pump\\\\.id}\" src/domain/services/simulationEngine.ts src/store/gameStore.ts)",
       "Bash(grep -rnF '${pump.id}' src/domain src/store src/ui src/rendering)",
-      "Bash(grep -rnF '${p.id}' src/domain src/store src/ui)"
+      "Bash(grep -rnF '${p.id}' src/domain src/store src/ui)",
+      "Bash(node /Users/emre/petrol-oyunu/_tour.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)",
+      "Bash(pkill -f \"ms-playwright\")"
     ],
     "additionalDirectories": [
       "/private/tmp",

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { X, ArrowLeft, Bell, LogOut, RotateCcw } from 'lucide-react';
+import { X, ArrowLeft, Bell, LogOut, RotateCcw, BookOpen, Play } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { styleFor, timeAgo } from '../notificationStyle';
 import { TONE_DOT, TONE_TEXT } from '../gameStyle';
@@ -116,6 +116,7 @@ export const SettingsModal: React.FC = () => {
   const markNotificationsRead = useGameStore((s) => s.markNotificationsRead);
   const clearNotifications = useGameStore((s) => s.clearNotifications);
   const signOutAccount = useGameStore((s) => s.signOutAccount);
+  const startTour = useGameStore((s) => s.startTour);
 
   const [page, setPage] = useState<'settings' | 'log'>('settings');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -223,6 +224,25 @@ export const SettingsModal: React.FC = () => {
                 value={settings.language}
                 onPick={(id) => updateSettings({ language: id as 'tr' | 'en' })}
               />
+
+              <SectionTitle>Rehber</SectionTitle>
+              <Hint>Neyin ne olduğu, neyin neden kilitli olduğu, olayların anlamı ve daha hızlı büyümenin yolları.</Hint>
+              <div className="grid grid-cols-2 gap-3 pb-1">
+                <button
+                  onClick={() => { sounds.playClick(); setActiveModal('GUIDE'); }}
+                  className="game-btn py-3 rounded-md text-[14px] font-display tracking-wide bg-kvio text-white flex items-center justify-center gap-2"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Rehberi Aç</span>
+                </button>
+                <button
+                  onClick={() => { sounds.playClick(); startTour(); }}
+                  className="game-btn py-3 rounded-md text-[14px] font-display tracking-wide bg-card hover:bg-board text-ink flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  <span>Turu Yeniden Başlat</span>
+                </button>
+              </div>
 
               <SectionTitle>Görünüm</SectionTitle>
               <Hint>Koyu mod kartları ve yazıları karartır; sahne olduğu gibi kalır.</Hint>

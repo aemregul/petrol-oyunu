@@ -120,6 +120,8 @@ export const HUD: React.FC = () => {
   const prevXp = currentLvlConf ? currentLvlConf.requiredTotalXp : 0;
   const targetXp = nextLvlConf ? nextLvlConf.requiredTotalXp : prevXp + 1000;
   const xpPercent = Math.min(100, Math.max(0, ((player.xp - prevXp) / (targetXp - prevXp)) * 100));
+  // The next three rungs of the ladder, for the level tile's hover card.
+  const upcomingLevels = GAME_CONFIG.levels.filter((l) => l.level > player.level).slice(0, 3);
 
   // The bottom bar's doors, in the order they sit. Colour marks the door,
   // red marks the one that is open.
@@ -175,7 +177,7 @@ export const HUD: React.FC = () => {
             {gameState.station.name || 'Gül Petrol'}
           </div>
 
-          <div className="hud-tiles flex justify-center gap-2 min-w-0">
+          <div className="hud-tiles flex justify-center gap-2 min-w-0" data-tour="stats">
             <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[8.5rem]">
               <div className="k-label">Kasa</div>
               <div className="font-display text-xl leading-tight text-kgrn tabular-nums">₺{player.cash.toLocaleString('tr-TR')}</div>
@@ -188,13 +190,36 @@ export const HUD: React.FC = () => {
               <div className="k-label">İtibar</div>
               <div className="font-display text-xl leading-tight text-kred tabular-nums">★ {player.reputation.toFixed(2)}</div>
             </div>
-            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[6.5rem]" title={`${player.xp} XP`}>
+            <div className="hud-tile relative group bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[6.5rem] cursor-help" data-tour="level">
               <div className="k-label">Seviye</div>
               <div className="flex items-center gap-2">
                 <span className="font-display text-xl leading-tight text-ink tabular-nums">{player.level}</span>
                 <span className="k-bar flex-1 h-2 min-w-[2.5rem]">
                   <i className="bg-kblu" style={{ width: `${xpPercent}%` }} />
                 </span>
+              </div>
+              {/* What the next levels open, on hover (Emre, 2026-09-09):
+                  the bar on its own said only "more", never what. */}
+              <div className="hidden group-hover:block absolute left-1/2 top-full -translate-x-1/2 mt-2 z-30 w-80 game-surface p-3 text-left">
+                <div className="flex items-baseline justify-between gap-2 pb-2 border-b-2 border-dotted border-mute/60">
+                  <span className="font-display text-[15px] text-ink">Seviye {player.level}</span>
+                  <span className="text-[11px] font-bold font-mono text-mute tabular-nums">
+                    {nextLvlConf ? `${Math.max(0, nextLvlConf.requiredTotalXp - player.xp).toLocaleString('tr-TR')} XP kaldı` : 'Son seviye'}
+                  </span>
+                </div>
+                {upcomingLevels.length === 0 ? (
+                  <div className="text-[12px] font-semibold text-mute pt-2">Her şey açık. Şimdi büyütme zamanı.</div>
+                ) : (
+                  upcomingLevels.map((l, i) => (
+                    <div key={l.level} className={`flex gap-2 pt-2 text-[12px] font-semibold ${i === 0 ? 'text-ink' : 'text-mute'}`}>
+                      <span className="font-display w-9 shrink-0">Sv.{l.level}</span>
+                      <span>{l.unlockedFeatures}{l.rewardCash > 0 ? ` · ₺${l.rewardCash.toLocaleString('tr-TR')} ödül` : ''}</span>
+                    </div>
+                  ))
+                )}
+                <div className="text-[11px] font-semibold text-mute pt-2">
+                  Deneyim: her servis, sipariş, inşaat ve görev. Tam liste Ayarlar → Rehber.
+                </div>
               </div>
             </div>
           </div>
@@ -203,6 +228,7 @@ export const HUD: React.FC = () => {
             <div
               className="k-world px-2.5 py-1 font-display text-base flex items-center gap-1.5 tabular-nums"
               title={`${weatherStyle.label} · Gün ${dayState.currentDay}`}
+              data-tour="clock"
             >
               <WeatherIcon className={`w-5 h-5 ${weatherStyle.color}`} strokeWidth={2.75} />
               {/* The display face has no tabular figures, so a fixed box keeps
@@ -231,7 +257,7 @@ export const HUD: React.FC = () => {
             moment the card went away (Emre, 2026-09-08). */}
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2">
           <div />
-          <StockStrip />
+          <div data-tour="stock"><StockStrip /></div>
           <div className="hud-events justify-self-end">
             <ActiveEventsBar />
           </div>
@@ -247,6 +273,7 @@ export const HUD: React.FC = () => {
               view switch and the two things the wheel cannot do. */}
           <button
             onClick={cycleCameraView}
+            data-tour="camera"
             className="game-surface game-btn w-12 h-12 hover:bg-card flex items-center justify-center text-ink hover:text-ink"
             title={`Bakış açısı: ${currentView.label} — sıradaki: ${nextView.label}`}
           >
@@ -259,6 +286,7 @@ export const HUD: React.FC = () => {
           <button
             onClick={toggleEditMode}
             disabled={!canEdit}
+            data-tour="edit"
             className={`game-surface game-btn w-12 h-12 flex items-center justify-center transition-all ${
               !canEdit
                 ? 'text-mute/50 cursor-not-allowed'
@@ -486,6 +514,7 @@ export const HUD: React.FC = () => {
               <button
                 key={item.key}
                 onClick={item.open}
+                data-tour={item.key}
                 className={`relative flex items-center gap-2 px-3.5 py-2 font-display text-[15px] tracking-wide border-2 border-ink rounded-md transition-colors ${
                   on ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
                 }`}
@@ -510,6 +539,7 @@ export const HUD: React.FC = () => {
               <button
                 key={item.key}
                 onClick={item.open}
+                data-tour={item.key}
                 className={`relative w-9 h-9 flex items-center justify-center border-2 border-ink rounded-md transition-colors ${
                   on ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
                 }`}

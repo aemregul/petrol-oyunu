@@ -47,6 +47,7 @@ import {
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import { unitPrice } from '../domain/services/catalogRules';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
+import { TOUR_STEP_COUNT } from '../ui/tour/tourCount';
 import {
   managerDailyWage,
   managerLevel,
@@ -314,7 +315,8 @@ export type ActiveModalType =
   | 'OFFICE'
   | 'MISSIONS'
   | 'NOTIFICATIONS'
-  | 'ACCOUNT';
+  | 'ACCOUNT'
+  | 'GUIDE';
 
 export interface PerformanceMetrics {
   fps: number;
@@ -440,6 +442,16 @@ interface GameStore {
 
   // UI / Modal Actions
   setActiveModal: (modal: ActiveModalType) => void;
+  /**
+   * The first-run tour (Emre, 2026-09-09). UI state, not saved; whether it
+   * has been taken lives in settings.tourSeen. The clock is stopped while
+   * it is up and put back to what it was.
+   */
+  tour: { active: boolean; step: number; resumeSpeed: GameState['dayState']['timeSpeed'] };
+  startTour: () => void;
+  nextTourStep: () => void;
+  prevTourStep: () => void;
+  endTour: () => void;
   selectVehicle: (id: string | null) => void;
   selectPump: (id: string | null) => void;
   selectBuilding: (id: string | null) => void;
@@ -751,6 +763,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   selectedPumpId: null,
   selectedBuildingId: null,
   officeTab: 'summary',
+  tour: { active: false, step: 0, resumeSpeed: 1 },
   openOffice: (tab = 'summary') => set({ officeTab: tab, activeModal: 'OFFICE' }),
   fittingCanopy: false,
   buildMode: {
@@ -777,6 +790,37 @@ export const useGameStore = create<GameStore>((set, get) => {
     activeVehicles: 0,
     drawCalls: 120,
     simTickMs: 0.5
+  },
+
+  startTour: () => {
+    const { gameState, tour } = get();
+    const resumeSpeed: GameState['dayState']['timeSpeed'] = tour.active ? tour.resumeSpeed : gameState.dayState.timeSpeed || 1;
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    state.dayState.timeSpeed = 0;
+    set({ gameState: state, activeModal: 'NONE', tour: { active: true, step: 0, resumeSpeed } });
+  },
+  nextTourStep: () => {
+    const { tour } = get();
+    if (!tour.active) return;
+    if (tour.step >= TOUR_STEP_COUNT - 1) {
+      get().endTour();
+      return;
+    }
+    set({ tour: { ...tour, step: tour.step + 1 } });
+  },
+  prevTourStep: () => {
+    const { tour } = get();
+    if (!tour.active || tour.step === 0) return;
+    set({ tour: { ...tour, step: tour.step - 1 } });
+  },
+  endTour: () => {
+    const { gameState, tour } = get();
+    if (!tour.active) return;
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    state.settings.tourSeen = true;
+    state.dayState.timeSpeed = tour.resumeSpeed || 1;
+    SaveManager.saveGame(state);
+    set({ gameState: state, tour: { active: false, step: 0, resumeSpeed: 1 } });
   },
 
   setActiveModal: (modal) => {
