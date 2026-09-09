@@ -12,7 +12,7 @@ import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
 import { watchAccount, finishRedirectSignIn, describeAuthError } from './services/account';
 import { sounds } from './audio/soundEffects';
-import { WelcomeGate, gateIsOpen } from './ui/WelcomeGate';
+import { WelcomeGate, GateCurtain, gateIsOpen, gateSettled } from './ui/WelcomeGate';
 import {
   ElectricVehicleShowcase,
   ModelShowcase,
@@ -35,6 +35,12 @@ export const App: React.FC = () => {
   const gateOpen = useGameStore((s) =>
     gateIsOpen({ accountReady: s.accountReady, accountResolved: s.accountResolved, account: s.account })
   );
+  // Firebase "kim var kim yok" demeden oyun çizilmez: yoksa girişsiz oyuncu
+  // kapı gelene kadar oyunu görür (Emre, 2026-09-09).
+  const settled = useGameStore((s) =>
+    gateSettled({ accountReady: s.accountReady, accountResolved: s.accountResolved })
+  );
+  const gameVisible = settled && !gateOpen;
 
   // Oturum, oyunun değil tarayıcının ömrünü yaşar: Firebase kim olduğumuzu
   // söyledikçe store'a işlenir. Yapılandırma yoksa watchAccount tek seferlik
@@ -55,10 +61,10 @@ export const App: React.FC = () => {
   const tourSeen = useGameStore((s) => s.gameState.settings.tourSeen ?? false);
   const startTour = useGameStore((s) => s.startTour);
   useEffect(() => {
-    if (gateOpen || tourSeen) return;
+    if (!gameVisible || tourSeen) return;
     const id = window.setTimeout(startTour, 1500);
     return () => window.clearTimeout(id);
-  }, [gateOpen, tourSeen, startTour]);
+  }, [gameVisible, tourSeen, startTour]);
 
   // The palette is a data attribute on the root: every token in index.css
   // reads through it, so the whole HUD turns with one switch.
@@ -210,7 +216,7 @@ export const App: React.FC = () => {
       <SimulationLoop />
       {/* Kapı açıkken oyun sahnesini ve HUD'ı hiç çizmeyiz: kapının kendi 3B
           sahnesi var, ikisi birden iki WebGL bağlamı demek olurdu. */}
-      {!gateOpen && (
+      {gameVisible && (
         <>
           <StationScene />
           <HUD />
@@ -219,6 +225,7 @@ export const App: React.FC = () => {
           <TourOverlay />
         </>
       )}
+      {!settled && <GateCurtain />}
       <WelcomeGate />
       <NotificationToast />
       <PerformanceOverlay />

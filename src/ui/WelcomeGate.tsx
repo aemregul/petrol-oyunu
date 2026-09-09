@@ -71,6 +71,38 @@ export function gateIsOpen(state: {
   return state.accountReady && state.accountResolved && !state.account;
 }
 
+/**
+ * Kapının kararı verildi mi? Firebase varken "kim var kim yok" gelene kadar
+ * ne kapı ne oyun çizilir: ikisi de çizilmezse oyuncu iki üç saniyeliğine
+ * oyunu görüp sonra giriş ekranına düşmez (Emre, 2026-09-09). Firebase
+ * yoksa karar baştan bellidir.
+ */
+export function gateSettled(state: { accountReady: boolean; accountResolved: boolean }): boolean {
+  return !state.accountReady || state.accountResolved;
+}
+
+/**
+ * Karar gelene kadar gösterilen perde: kapının gecesiyle aynı zemin, tek
+ * satır marka. Bir saniyeden az sürer; sahne değil, bekleme odasıdır.
+ */
+export const GateCurtain: React.FC = () => (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950 select-none">
+    <div
+      className="flex flex-col items-center gap-2"
+      style={{ animation: 'gate-in 400ms ease-out both' }}
+    >
+      <style>{`
+        @keyframes gate-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+      `}</style>
+      <div className="flex items-center gap-2.5">
+        <Fuel className="h-6 w-6 text-emerald-400" />
+        <h1 className="text-2xl sm:text-3xl font-black tracking-[0.12em] text-white">PROJECT HIGHWAY</h1>
+      </div>
+      <p className="text-[12px] font-bold text-sky-300/80 tracking-wide">Ruhsat kontrol ediliyor…</p>
+    </div>
+  </div>
+);
+
 /** Kâğıt üstündeki alan: belge doldurur gibi. */
 const FIELD =
   'w-full flex items-center gap-2.5 rounded-lg border-2 border-stone-300 bg-white px-3 py-2.5 focus-within:border-sky-500 transition-colors';
