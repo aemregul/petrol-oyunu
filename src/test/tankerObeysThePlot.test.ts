@@ -40,6 +40,55 @@ function stationWithDelivery(): GameState {
 }
 
 describe('the delivery lorry obeys the plot', () => {
+  /**
+   * A lorry held behind road traffic used to throw away every intermediate
+   * point and replan straight to the tank. That straight line met the apron
+   * at whichever outer edge happened to face the farm, so the detour entered
+   * through the fence instead of the driveway. The road may make a delivery
+   * wait; it may never turn the player's unowned land into a shortcut.
+   */
+  it('keeps the driveway in its route when traffic holds it on the road', () => {
+    const state = stationWithDelivery();
+    state.station.open = false;
+    const block = blockLayout(state, 'near')!;
+    const entryX = drivewayLaneX(block.entry, 0);
+    const effects = createEffects();
+
+    let heldSeconds = 0;
+    for (let i = 0; i < 300 && heldSeconds < 4.2; i++) {
+      const truck = state.fuelOrders[0].truck;
+      if (truck) {
+        heldSeconds += 0.05;
+        // Pin a car two units ahead. The tanker sees it as road traffic and
+        // reaches the old four-second reroute branch deterministically.
+        state.vehicles.road_blocker = {
+          id: 'road_blocker',
+          archetype: 'commuter',
+          fuelType: 'gasoline',
+          tankCapacity: 60,
+          currentFuel: 20,
+          state: 'AT_PUMP',
+          worldPosition: [truck.worldPosition[0] + 2, 0, block.roadLaneZ],
+          targetWaypoint: null,
+          route: [],
+          heading: Math.PI / 2,
+          speed: 0,
+          routeProgress: 0,
+          waitingTimeSeconds: 0,
+          patience: 1000,
+          shoppingIntent: false
+        } as never;
+      }
+      runSimulationTick(state, 0.05, effects);
+    }
+
+    const truck = state.fuelOrders[0].truck;
+    expect(heldSeconds).toBeGreaterThan(4);
+    expect(truck).toBeDefined();
+    expect(truck!.worldPosition[2]).toBeCloseTo(block.roadLaneZ);
+    expect(truck!.targetWaypoint).toEqual([entryX, 0, block.roadLaneZ]);
+  });
+
   it('never drives through a building or off the concrete', () => {
     let value = 5 >>> 0;
     const spy = vi.spyOn(Math, 'random').mockImplementation(() => {

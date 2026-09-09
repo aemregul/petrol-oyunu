@@ -4396,8 +4396,15 @@ function advanceTruck(
   if (truck.blockedSeconds < 4) return false;
   truck.blockedSeconds = 0;
 
-  const destination = truck.route[truck.route.length - 1] ?? truck.targetWaypoint;
-  if (!destination) return false;
+  // Keep every remaining waypoint, above all the driveway mouth. Replanning
+  // to the final berth alone draws a diagonal from the carriageway to the
+  // tank; where that line meets the apron becomes an accidental new entrance
+  // through the fence. Traffic may delay the lorry, but it must still use the
+  // real gate once the road clears.
+  const remaining: Array<[number, number, number]> = truck.targetWaypoint
+    ? [truck.targetWaypoint, ...truck.route]
+    : [...truck.route];
+  if (remaining.length === 0) return false;
 
   const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
 
@@ -4405,7 +4412,7 @@ function advanceTruck(
     state,
     { worldPosition: truck.worldPosition } as VehicleEntity,
     block.side,
-    [destination],
+    remaining,
     { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
     frontageKeepOut(block),
     undefined,
