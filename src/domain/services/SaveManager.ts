@@ -196,6 +196,14 @@ export class SaveManager {
   }
 
   /**
+   * A save from somewhere other than this browser's storage — the cloud copy
+   * — put through the same migration a local one gets.
+   */
+  public static fromRaw(raw: unknown): GameState {
+    return this.migrateState(raw);
+  }
+
+  /**
    * Reset save data
    */
   public static resetSave(): GameState {

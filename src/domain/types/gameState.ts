@@ -662,6 +662,12 @@ export interface GameState {
    * before it carry none; absent reads as the catalogue tariff.
    */
   evPricing?: { ac: number; dc: number };
+  /**
+   * The account this save belongs to, once it has been carried to the
+   * cloud. A save with another owner on a shared machine must never be
+   * pushed over the newcomer's game (Emre, 2026-09-09).
+   */
+  ownerUid?: string;
   pumps: Record<string, PumpEntity>;
   vehicles: Record<string, VehicleEntity>;
   employees: Record<string, EmployeeEntity>;

@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Her oyuncu yalnızca kendi kaydını okur ve yazar (saves/{uid}).
+    match /saves/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Geri bildirim: giriş yapmış herkes ekler, kimse okuyamaz.
+    match /feedback/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

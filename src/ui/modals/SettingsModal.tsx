@@ -117,6 +117,8 @@ export const SettingsModal: React.FC = () => {
   const clearNotifications = useGameStore((s) => s.clearNotifications);
   const signOutAccount = useGameStore((s) => s.signOutAccount);
   const startTour = useGameStore((s) => s.startTour);
+  const cloudSync = useGameStore((s) => s.cloudSync);
+  const pushCloudSaveNow = useGameStore((s) => s.pushCloudSaveNow);
 
   const [page, setPage] = useState<'settings' | 'log'>('settings');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -310,7 +312,27 @@ export const SettingsModal: React.FC = () => {
                   </button>
                 )}
               </div>
-              <Hint>Oyun kaydı otomatik tutulur (her 15 sn).</Hint>
+              <Hint>
+                {account && account.provider !== 'guest'
+                  ? cloudSync.status === 'synced' && cloudSync.at
+                    ? `Bulut kaydı eşitlendi (${timeAgo(cloudSync.at, now)}); değişiklikler her 10 saniyede bir gider. Başka bir cihazdan aynı hesapla girince kaldığın yerden devam edersin.`
+                    : cloudSync.status === 'syncing'
+                      ? 'Bulut kaydı eşitleniyor…'
+                      : cloudSync.status === 'error'
+                        ? `Bulut kaydı eşitlenemedi: ${cloudSync.message ?? 'bilinmeyen hata'}. Kayıt bu cihazda duruyor.`
+                        : 'Bulut kaydı hazırlanıyor.'
+                  : account
+                    ? 'Misafir hesabı bu cihaza bağlı; Google ya da e-posta ile giriş yaparsan kaydın hesabına taşınır.'
+                    : 'Oyun kaydı bu cihazda otomatik tutulur (her 15 sn).'}
+              </Hint>
+              {account && account.provider !== 'guest' && (
+                <div className="pb-2">
+                  <Switch
+                    label={cloudSync.status === 'syncing' ? 'Eşitleniyor…' : 'Şimdi Buluta Kaydet'}
+                    onClick={() => { void pushCloudSaveNow(); }}
+                  />
+                </div>
+              )}
 
               <SectionTitle>Baştan Başla</SectionTitle>
               <Hint>

@@ -18,6 +18,9 @@ import {
 } from './rendering/ModelShowcase';
 import { BuildingShowcase } from './rendering/BuildingShowcase';
 
+/** How often a changed save goes up to the cloud, in milliseconds. */
+const CLOUD_PUSH_EVERY_MS = 10_000;
+
 /** Pixels of virtual drag one arrow-key press is worth. */
 const PAN_STEP_PX = 60;
 
@@ -62,6 +65,33 @@ export const App: React.FC = () => {
     () => watchAccount((profile) => useGameStore.setState({ account: profile, accountResolved: true })),
     []
   );
+
+  // The cloud copy of the save (Emre, 2026-09-09). When an account signs in
+  // the two copies are reconciled; after that the local save goes up every
+  // ten seconds it has changed, and once more when the tab is left. Ten,
+  // not thirty: a player who closes the tab and opens it elsewhere should
+  // find the last few moments too, and a save is a dozen kilobytes.
+  const accountUid = useGameStore((s) => s.account?.uid ?? null);
+  const accountProvider = useGameStore((s) => s.account?.provider ?? null);
+  const syncCloudSave = useGameStore((s) => s.syncCloudSave);
+  const pushCloudSaveNow = useGameStore((s) => s.pushCloudSaveNow);
+  useEffect(() => {
+    if (!accountUid || accountProvider === 'guest') return;
+    void syncCloudSave();
+    const push = () => {
+      const { gameState, cloudSync } = useGameStore.getState();
+      if (gameState.updatedAt > cloudSync.pushedAt) void pushCloudSaveNow();
+    };
+    const id = window.setInterval(push, CLOUD_PUSH_EVERY_MS);
+    const onHide = () => { if (document.visibilityState === 'hidden') push(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', push);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', push);
+    };
+  }, [accountUid, accountProvider, syncCloudSave, pushCloudSaveNow]);
   const setCameraZoom = useGameStore((s) => s.setCameraZoom);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const buildMode = useGameStore((s) => s.buildMode);

@@ -48,6 +48,7 @@ import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services
 import { unitPrice } from '../domain/services/catalogRules';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
 import { TOUR_STEP_COUNT } from '../ui/tour/tourCount';
+import { cloudSaveAvailable, fetchCloudSave, followsAccount, pushCloudSave, reconcile } from '../services/cloudSave';
 import {
   managerDailyWage,
   managerLevel,
@@ -387,6 +388,14 @@ interface GameStore {
   signInEmail: (email: string, password: string, register: boolean) => Promise<boolean>;
   signInGuest: () => Promise<void>;
   signOutAccount: () => Promise<void>;
+  /**
+   * The cloud copy of the save (Emre, 2026-09-09). `syncCloudSave` runs when
+   * an account signs in and decides which copy wins; `pushCloudSaveNow`
+   * sends the current one up, on a timer and when the tab is left.
+   */
+  cloudSync: { status: 'off' | 'idle' | 'syncing' | 'synced' | 'error'; at: number | null; message: string | null; pushedAt: number };
+  syncCloudSave: () => Promise<void>;
+  pushCloudSaveNow: (state?: GameState) => Promise<void>;
   selectedVehicleId: string | null;
   selectedPumpId: string | null;
   selectedBuildingId: string | null;
@@ -759,6 +768,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   gameState: revived.state,
   activeModal: revived.modal,
   account: null,
+  cloudSync: { status: 'off', at: null, message: null, pushedAt: 0 },
   accountReady: accountBackendReady(),
   accountBusy: false,
   accountResolved: !accountBackendReady(),
@@ -2418,6 +2428,61 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
   },
 
+  syncCloudSave: async () => {
+    const { account, gameState } = get();
+    if (!followsAccount(account) || !cloudSaveAvailable()) {
+      set({ cloudSync: { ...get().cloudSync, status: 'off' } });
+      return;
+    }
+    set({ cloudSync: { ...get().cloudSync, status: 'syncing', message: null } });
+    try {
+      const cloud = await fetchCloudSave(account.uid);
+      const verdict = reconcile(gameState, cloud?.meta ?? null, account.uid);
+      if (verdict === 'pull' && cloud) {
+        // The cloud copy is the player's real progress: it takes the place
+        // of whatever this browser had, and is saved here too.
+        const revived = reviveLoadedSave(SaveManager.fromRaw(cloud.raw));
+        revived.state.ownerUid = account.uid;
+        SaveManager.saveGame(revived.state);
+        set({ gameState: revived.state, activeModal: revived.modal, selectedVehicleId: null, selectedPumpId: null, selectedBuildingId: null });
+        get().addNotification({
+          type: 'INFO',
+          title: 'Kayıt Buluttan Geldi',
+          message: `${revived.state.station.name} · Gün ${revived.state.dayState.currentDay} · Seviye ${revived.state.player.level}. Kaldığın yerden devam.`
+        });
+      } else if (verdict === 'fresh') {
+        // Somebody else's game was on this machine and this account has
+        // none of its own yet: a clean start, and the other save stays in
+        // its owner's cloud copy where it belongs.
+        const fresh = SaveManager.resetSave();
+        fresh.ownerUid = account.uid;
+        SaveManager.saveGame(fresh);
+        set({ gameState: reviveLoadedSave(fresh).state, activeModal: 'NONE', selectedVehicleId: null, selectedPumpId: null, selectedBuildingId: null });
+        await pushCloudSave(account.uid, get().gameState);
+      } else {
+        const own = get().gameState;
+        own.ownerUid = account.uid;
+        await pushCloudSave(account.uid, own);
+        SaveManager.saveGame(own);
+      }
+      set({ cloudSync: { status: 'synced', at: Date.now(), message: null, pushedAt: get().gameState.updatedAt } });
+    } catch (e) {
+      set({ cloudSync: { ...get().cloudSync, status: 'error', message: e instanceof Error ? e.message : 'Eşitlenemedi.' } });
+    }
+  },
+
+  pushCloudSaveNow: async (state) => {
+    const { account } = get();
+    if (!followsAccount(account) || !cloudSaveAvailable()) return;
+    const current = state ?? get().gameState;
+    try {
+      await pushCloudSave(account.uid, current);
+      set({ cloudSync: { status: 'synced', at: Date.now(), message: null, pushedAt: current.updatedAt } });
+    } catch (e) {
+      set({ cloudSync: { ...get().cloudSync, status: 'error', message: e instanceof Error ? e.message : 'Eşitlenemedi.' } });
+    }
+  },
+
   signOutAccount: async () => {
     try {
       await accountSignOut();
@@ -3308,6 +3373,9 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   resetGameSave: () => {
     const fresh = SaveManager.resetSave();
+    // A deliberate fresh start replaces the cloud copy too, or the next
+    // sign-in would quietly bring the old game back.
+    void get().pushCloudSaveNow(fresh);
     sounds.playClick();
     set({
       gameState: fresh,
