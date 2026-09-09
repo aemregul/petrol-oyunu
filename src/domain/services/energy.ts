@@ -47,6 +47,16 @@ export function solarUpkeep(size: [number, number]): number {
   return roofCells(size) * GAME_CONFIG.ev.solar.upkeepPerCell;
 }
 
+/** What washing one roof of panels costs. */
+export function solarCleanCost(size: [number, number]): number {
+  return roofCells(size) * GAME_CONFIG.ev.solar.cleanCostPerCell;
+}
+
+/** How clean this roof's glass is; a roof from before grime reads as clean. */
+export function solarCleanlinessOf(pump: PumpEntity): number {
+  return pump.solarCleanliness ?? 100;
+}
+
 /** What a roof of this size makes at a clear noon, kWh per game hour. */
 export function solarPeakKwhPerHour(size: [number, number]): number {
   return roofCells(size) * GAME_CONFIG.ev.solar.peakKwhPerCell;

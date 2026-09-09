@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -138,7 +138,17 @@ export const HUD: React.FC = () => {
     { key: 'fuel', label: 'Tedarik', title: 'Yakıt Siparişi', dot: 'bg-kgrn', badge: 0, open: () => setActiveModal('FUEL_ORDER'), isOn: (m) => m === 'FUEL_ORDER' },
     { key: 'staff', label: 'Personel', title: 'Personel & Müdür', dot: 'bg-kred', badge: 0, open: () => setActiveModal('STAFF'), isOn: (m) => m === 'STAFF' }
   ];
+  // What the maintenance desk would like a word about: a failed or worn
+  // bay, a dirty forecourt, a roof of panels gone dull (Emre, 2026-09-08).
+  const attention =
+    Object.values(gameState.pumps).filter((p) => p.state === 'BROKEN' || p.health < 40).length +
+    (gameState.station.cleanliness < 40 ? 1 : 0) +
+    Object.values(gameState.pumps).filter(
+      (p) => p.hasCanopy && p.hasSolarCanopy && (p.solarCleanliness ?? 100) < 50
+    ).length;
+
   const ICONS: Array<Door & { icon: React.ElementType; badgeTone: string }> = [
+    { key: 'maintenance', label: '', title: 'Bakım', dot: '', badge: attention, badgeTone: 'bg-kred', icon: Wrench, open: () => openOffice('maintenance'), isOn: (m, t) => m === 'OFFICE' && t === 'maintenance' },
     { key: 'missions', label: '', title: 'Görevler', dot: '', badge: claimableMissions, badgeTone: 'bg-kgrn', icon: ClipboardList, open: () => openOffice('missions'), isOn: (m, t) => m === 'OFFICE' && t === 'missions' },
     { key: 'account', label: '', title: 'Hesabım', dot: '', badge: 0, badgeTone: '', icon: UserRound, open: () => setActiveModal('ACCOUNT'), isOn: (m) => m === 'ACCOUNT' },
     { key: 'bell', label: '', title: 'Bildirimler', dot: '', badge: unreadNotifications, badgeTone: 'bg-kred', icon: Bell, open: () => setActiveModal('NOTIFICATIONS'), isOn: (m) => m === 'NOTIFICATIONS' },

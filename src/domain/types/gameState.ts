@@ -164,6 +164,11 @@ export interface PumpEntity {
   hasCanopy?: boolean;
   /** Panels on that roof, feeding the block's battery bank by day. */
   hasSolarCanopy?: boolean;
+  /**
+   * How clean the glass is, 0–100. Dust takes it down, rain and a wash bring
+   * it back, and a dirty roof makes less. Absent reads as clean.
+   */
+  solarCleanliness?: number;
 }
 
 export interface VehicleEntity {

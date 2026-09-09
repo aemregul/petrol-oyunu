@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
-import { createEffects, runSimulationTick } from '../domain/services/simulationEngine';
+import { createEffects, runSimulationTick, stopChance, nightLighting } from '../domain/services/simulationEngine';
 import { unitPrice } from '../domain/services/catalogRules';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState } from '../domain/types/gameState';
@@ -96,5 +96,33 @@ describe('a day at the starting station', () => {
     const paybackDays = nextPump / net;
     expect(paybackDays).toBeGreaterThan(8);
     expect(paybackDays).toBeLessThan(35);
+  });
+});
+
+describe('the forecourt after dark', () => {
+  // Level 2 promised "Aydınlatmalı Gece Trafiği"; until now no light pole
+  // was ever read by the engine. A dark forecourt now loses forty percent of
+  // its night stops, and four poles win them all back.
+  it('is passed by unlit and pulled into when lit', () => {
+    const dark = createInitialGameState();
+    dark.dayState.gameTime = 23;
+    expect(nightLighting(dark, 'near')).toBeCloseTo(0.6, 5);
+    const unlit = stopChance(dark, 'near');
+
+    const lit = createInitialGameState();
+    lit.dayState.gameTime = 23;
+    for (let i = 0; i < 4; i++) {
+      lit.buildings[`lp${i}`] = {
+        id: `lp${i}`, type: 'light_pole', level: 1, position: [3 + i * 2, 8], rotation: 0,
+        size: [1, 1], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+      };
+    }
+    expect(nightLighting(lit, 'near')).toBe(1);
+    // Four poles also carry a little appeal, so the lit block draws at least 1/0.6 more.
+    expect(stopChance(lit, 'near') / unlit).toBeGreaterThanOrEqual(1 / 0.6 - 1e-9);
+
+    // By day the poles are scenery: the night factor is one for both.
+    dark.dayState.gameTime = 12;
+    expect(nightLighting(dark, 'near')).toBe(1);
   });
 });

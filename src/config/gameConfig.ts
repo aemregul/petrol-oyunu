@@ -314,6 +314,12 @@ export interface GameConfig {
       /** TL per footprint cell, so a bigger roof costs more. */
       pricePerCell: number;
       upkeepPerCell: number;
+      /** What washing a roof of panels costs, per cell. */
+      cleanCostPerCell: number;
+      /** How fast the glass dirties, cleanliness points per sim second. */
+      grimePerSecond: number;
+      /** How fast rain rinses it, cleanliness points per sim second, before the grime is taken off. */
+      rainWashPerSecond: number;
       /** kWh per game hour per cell under a clear noon sun. */
       peakKwhPerCell: number;
       sunrise: number;
@@ -530,7 +536,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Mini Market',
       category: 'service',
       price: 61500,
-      dailyUpkeep: 270,
+      dailyUpkeep: 200,
       size: [5, 5],
       unlockLevel: 6,
       description: 'Yakıt alan müşterilere sepet satışı yaparak yan gelir üretir.',
@@ -541,7 +547,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Müşteri WC / Lavabo',
       category: 'service',
       price: 17500,
-      dailyUpkeep: 150,
+      dailyUpkeep: 30,
       size: [2, 2],
       unlockLevel: 6,
       description: 'Aile ve uzun yol müşterilerinin memnuniyetini +%8 artırır.',
@@ -574,7 +580,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Hava & Su Ünitesi',
       category: 'service',
       price: 13000,
-      dailyUpkeep: 60,
+      dailyUpkeep: 50,
       size: [1, 2],
       unlockLevel: 3,
       description: 'Lastik havası ve su ikmali; kısa duraklamalarda memnuniyeti artırır.',
@@ -607,7 +613,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Oto Yıkama',
       category: 'service',
       price: 70500,
-      dailyUpkeep: 300,
+      dailyUpkeep: 260,
       size: [2, 3],
       unlockLevel: 6,
       description: 'Tünel tipi otomatik yıkama hattı.',
@@ -618,7 +624,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Yağ Değişim İstasyonu',
       category: 'service',
       price: 57000,
-      dailyUpkeep: 240,
+      dailyUpkeep: 220,
       size: [3, 3],
       unlockLevel: 6,
       description: 'Çift kanallı yağ ve filtre değişim servisi.',
@@ -629,7 +635,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Lastik Servisi',
       category: 'service',
       price: 53000,
-      dailyUpkeep: 220,
+      dailyUpkeep: 200,
       size: [3, 3],
       unlockLevel: 5,
       description: 'Lastik değişimi, balans ve rot ayarı yapılan servis birimi.',
@@ -640,7 +646,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Kahveci',
       category: 'service',
       price: 48500,
-      dailyUpkeep: 210,
+      dailyUpkeep: 160,
       size: [3, 3],
       unlockLevel: 5,
       description: 'Yol kahvesi ve atıştırmalık satan küçük büfe.',
@@ -651,7 +657,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Restoran',
       category: 'service',
       price: 99000,
-      dailyUpkeep: 480,
+      dailyUpkeep: 350,
       size: [6, 6],
       unlockLevel: 8,
       description: 'Oturmalı yol restoranı; uzun yol yolcularını uzun süre tutar.',
@@ -662,7 +668,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Dinlenme Tesisi',
       category: 'service',
       price: 330000,
-      dailyUpkeep: 1350,
+      dailyUpkeep: 950,
       size: [12, 6],
       unlockLevel: 10,
       description: 'Market, restoran, kahveci ve WC birimlerini tek çatı altında toplayan büyük tesis.',
@@ -709,7 +715,7 @@ export const GAME_CONFIG: GameConfig = {
       name: 'Yol Oteli',
       category: 'service',
       price: 209000,
-      dailyUpkeep: 900,
+      dailyUpkeep: 650,
       size: [6, 7],
       unlockLevel: 9,
       description: 'Uzun yol yolcuları için konaklama; geceleyen müşteri akışı yaratır.',
@@ -789,7 +795,7 @@ export const GAME_CONFIG: GameConfig = {
    */
   buildingEffects: {
     toilet:       { appeal: 0.05, patience: 0.08, satisfaction: 3 },
-    air_water:    { appeal: 0.03, satisfaction: 3, service: { chance: 0.14, avgSpend: 40 } },
+    air_water:    { appeal: 0.03, satisfaction: 3, service: { chance: 0.20, avgSpend: 100 } },
     car_park:     { appeal: 0.04, patience: 0.10 },
     truck_park:   { appeal: 0.06, patience: 0.14 },
     decoration:   { appeal: 0.02, satisfaction: 4 },
@@ -799,13 +805,13 @@ export const GAME_CONFIG: GameConfig = {
     pylon_sign:   { appeal: 0.16 },
     office:       { satisfaction: 2 },
     mini_market:  { appeal: 0.06 },
-    cafe:         { appeal: 0.07, satisfaction: 3, service: { chance: 0.26, avgSpend: 95 } },
-    restaurant:   { appeal: 0.12, patience: 0.10, satisfaction: 5, service: { chance: 0.30, avgSpend: 240 } },
-    car_wash:     { appeal: 0.10, satisfaction: 4, service: { chance: 0.20, avgSpend: 320 } },
-    oil_change:   { appeal: 0.08, service: { chance: 0.12, avgSpend: 620 } },
-    tyre_service: { appeal: 0.08, service: { chance: 0.10, avgSpend: 780 } },
-    hotel:        { appeal: 0.14, satisfaction: 4, service: { chance: 0.08, avgSpend: 1650 } },
-    rest_complex: { appeal: 0.26, patience: 0.20, satisfaction: 9, service: { chance: 0.45, avgSpend: 430 } }
+    cafe:         { appeal: 0.07, satisfaction: 3, service: { chance: 0.26, avgSpend: 200 } },
+    restaurant:   { appeal: 0.12, patience: 0.10, satisfaction: 5, service: { chance: 0.30, avgSpend: 600 } },
+    car_wash:     { appeal: 0.10, satisfaction: 4, service: { chance: 0.25, avgSpend: 600 } },
+    oil_change:   { appeal: 0.08, service: { chance: 0.08, avgSpend: 2500 } },
+    tyre_service: { appeal: 0.08, service: { chance: 0.12, avgSpend: 1500 } },
+    hotel:        { appeal: 0.14, satisfaction: 4, service: { chance: 0.08, avgSpend: 3000 } },
+    rest_complex: { appeal: 0.26, patience: 0.20, satisfaction: 9, service: { chance: 0.45, avgSpend: 900 } }
   },
 
   buildingUpgrades: {
@@ -980,20 +986,20 @@ export const GAME_CONFIG: GameConfig = {
    */
   facilities: {
     toilet: {
-      visitChance: 0.22,
+      visitChance: 0.35,
       avgSpend: 0,
       costRatio: 0.1,
       visitSeconds: 5,
       levelIncome: [1, 1, 1],
       levelDemand: [1, 1.3, 1.6],
-      virtualShare: 0.3,
+      virtualShare: 0.7,
       walkFromPump: true,
       tariffs: [
         { label: 'Ücretsiz', price: 0, demand: 1, moral: 1 },
-        { label: '₺5', price: 5, demand: 0.8, moral: 0.5 },
-        { label: '₺10', price: 10, demand: 0.6, moral: 0 }
+        { label: '₺15', price: 15, demand: 0.8, moral: 0.5 },
+        { label: '₺25', price: 25, demand: 0.6, moral: 0 }
       ],
-      defaultTariff: 0,
+      defaultTariff: 1,
       driverAway: "Sürücü WC'ye gitti",
       blurb: 'Yol yorgunları için. Ücret koyarsan gelir gelir ama memnuniyet biraz düşer.'
     },
@@ -1001,50 +1007,50 @@ export const GAME_CONFIG: GameConfig = {
       // The odds and the basket come from the driver — a family fills a
       // trolley where a courier grabs a coffee — so these are only the
       // fallback for an archetype the table does not know.
-      visitChance: 0.18,
-      avgSpend: 120,
-      costRatio: 0.65,
+      visitChance: 0.45,
+      avgSpend: 300,
+      costRatio: 0.55,
       visitSeconds: 8,
       levelIncome: [1, 1.2, 1.45],
-      virtualShare: 0.35,
+      virtualShare: 0.6,
       walkFromPump: true,
       driverAway: 'Sürücü markete gitti',
       blurb: 'Yakıt alan ve park eden müşterilere sepet satışı. Raflar her sabah dolar.'
     },
     cafe: {
-      visitChance: 0.16,
-      avgSpend: 95,
+      visitChance: 0.30,
+      avgSpend: 200,
       costRatio: 0.45,
       visitSeconds: 9,
       levelIncome: [1, 1.25, 1.55],
-      virtualShare: 0.35,
+      virtualShare: 0.6,
       walkFromPump: true,
       driverAway: 'Sürücü kahveciye gitti',
       blurb: 'Yol kahvesi ve atıştırmalık. Park yeri olan istasyonda çok daha fazla müşteri uğrar.'
     },
     restaurant: {
-      visitChance: 0.12,
-      avgSpend: 240,
+      visitChance: 0.28,
+      avgSpend: 600,
       costRatio: 0.5,
       visitSeconds: 16,
       levelIncome: [1, 1.25, 1.55],
-      virtualShare: 0.3,
+      virtualShare: 0.45,
       walkFromPump: true,
       driverAway: 'Sürücü restorana gitti',
       blurb: 'Oturmalı yol restoranı; müşteri uzun kalır, hesap büyük gelir.'
     },
     hotel: {
-      visitChance: 0.05,
+      visitChance: 0.08,
       avgSpend: 0,
       costRatio: 0.3,
       visitSeconds: 45,
       levelIncome: [1, 1.2, 1.4],
-      virtualShare: 0.25,
+      virtualShare: 0.3,
       walkFromPump: false,
       tariffs: [
-        { label: 'Ekonomik', price: 900, demand: 1.3, moral: 0.6 },
-        { label: 'Standart', price: 1400, demand: 1, moral: 1 },
-        { label: 'Lüks', price: 2100, demand: 0.65, moral: 1.3 }
+        { label: 'Ekonomik', price: 2000, demand: 1.3, moral: 0.6 },
+        { label: 'Standart', price: 3000, demand: 1, moral: 1 },
+        { label: 'Lüks', price: 4500, demand: 0.65, moral: 1.3 }
       ],
       defaultTariff: 1,
       nightBoost: 2.2,
@@ -1053,12 +1059,12 @@ export const GAME_CONFIG: GameConfig = {
       blurb: 'Uzun yol yolcuları için konaklama. Akşam saatlerinde dolar; her misafir bir oda ve bir park yeri tutar.'
     },
     rest_complex: {
-      visitChance: 0.3,
-      avgSpend: 430,
+      visitChance: 0.5,
+      avgSpend: 900,
       costRatio: 0.5,
       visitSeconds: 12,
       levelIncome: [1, 1.25, 1.55],
-      virtualShare: 0.35,
+      virtualShare: 0.5,
       walkFromPump: true,
       driverAway: 'Sürücü tesise gitti',
       blurb: 'Market, restoran, kahveci ve WC tek çatı altında; her ziyaret büyük hesap yazar.'
@@ -1074,8 +1080,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 36,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'gasoline',
-      marketBaseProbability: 0.18,
-      marketAvgBasket: 110,
+      marketBaseProbability: 0.36,
+      marketAvgBasket: 280,
       tipChanceModifier: 1.0,
       specialBehavior: 'Hızlı hizmet bekler.',
       roadTrafficWeight: 1.5
@@ -1089,8 +1095,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 48,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'gasoline',
-      marketBaseProbability: 0.42,
-      marketAvgBasket: 180,
+      marketBaseProbability: 0.70,
+      marketAvgBasket: 450,
       tipChanceModifier: 1.0,
       specialBehavior: 'Markete ve tuvalete girme olasılığı yüksektir.',
       roadTrafficWeight: 1.1
@@ -1104,8 +1110,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 26,
       priceSensitivity: 'HIGH',
       preferredFuel: 'lpg',
-      marketBaseProbability: 0.10,
-      marketAvgBasket: 90,
+      marketBaseProbability: 0.20,
+      marketAvgBasket: 220,
       tipChanceModifier: 0.8,
       specialBehavior: 'Kısa kuyruk arar, sabırsızdır.',
       roadTrafficWeight: 0.75,
@@ -1120,8 +1126,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 22,
       priceSensitivity: 'HIGH',
       preferredFuel: 'gasoline',
-      marketBaseProbability: 0.08,
-      marketAvgBasket: 80,
+      marketBaseProbability: 0.16,
+      marketAvgBasket: 200,
       tipChanceModifier: 1.2,
       specialBehavior: 'Hızlı hizmette ekstra hız bonusu bahşişi bırakır.',
       roadTrafficWeight: 0.85
@@ -1135,8 +1141,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 44,
       priceSensitivity: 'LOW',
       preferredFuel: 'diesel',
-      marketBaseProbability: 0.22,
-      marketAvgBasket: 150,
+      marketBaseProbability: 0.44,
+      marketAvgBasket: 380,
       tipChanceModifier: 1.0,
       specialBehavior: 'Dizel ağırlıklıdır, yüksek hacimli yakıt alır.',
       roadTrafficWeight: 0.9
@@ -1150,8 +1156,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 60,
       priceSensitivity: 'LOW',
       preferredFuel: 'diesel',
-      marketBaseProbability: 0.35,
-      marketAvgBasket: 200,
+      marketBaseProbability: 0.70,
+      marketAvgBasket: 500,
       tipChanceModifier: 1.1,
       specialBehavior: 'Büyük dolum yapar, sabrı uzundur.',
       roadTrafficWeight: 0.65,
@@ -1167,8 +1173,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 52,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'any',
-      marketBaseProbability: 0.38,
-      marketAvgBasket: 190,
+      marketBaseProbability: 0.70,
+      marketAvgBasket: 480,
       tipChanceModifier: 1.3,
       specialBehavior: 'Şarj süresi uzundur; beklerken tesisleri kullanır.',
       requiresCharger: true,
@@ -1191,8 +1197,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 30,
       priceSensitivity: 'LOW',
       preferredFuel: 'gasoline',
-      marketBaseProbability: 0.25,
-      marketAvgBasket: 220,
+      marketBaseProbability: 0.50,
+      marketAvgBasket: 550,
       tipChanceModifier: 2.2,
       specialBehavior: 'Temiz sahada ve yüksek puanda yüklü bahşiş verir.',
       roadTrafficWeight: 0.75
@@ -1206,8 +1212,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 24,
       priceSensitivity: 'LOW',
       preferredFuel: 'gasoline',
-      marketBaseProbability: 0.05,
-      marketAvgBasket: 100,
+      marketBaseProbability: 0.10,
+      marketAvgBasket: 250,
       tipChanceModifier: 1.1,
       specialBehavior: 'Trafikte sık devriye gezer, istasyona nadiren uğrar.',
       roadTrafficWeight: 1,
@@ -1223,8 +1229,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 20,
       priceSensitivity: 'LOW',
       preferredFuel: 'diesel',
-      marketBaseProbability: 0.03,
-      marketAvgBasket: 90,
+      marketBaseProbability: 0.06,
+      marketAvgBasket: 220,
       tipChanceModifier: 1.0,
       specialBehavior: 'Trafikte görünür ancak acil görevi nedeniyle çok nadir durur.',
       roadTrafficWeight: 0.8,
@@ -1240,8 +1246,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 42,
       priceSensitivity: 'LOW',
       preferredFuel: 'diesel',
-      marketBaseProbability: 0.08,
-      marketAvgBasket: 140,
+      marketBaseProbability: 0.16,
+      marketAvgBasket: 350,
       tipChanceModifier: 1.1,
       specialBehavior: 'Büyük deposu vardır; trafikte görünür, yakıt için seyrek uğrar.',
       roadTrafficWeight: 0.8,
@@ -1257,8 +1263,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 58,
       priceSensitivity: 'MEDIUM',
       preferredFuel: 'diesel',
-      marketBaseProbability: 0.35,
-      marketAvgBasket: 280,
+      marketBaseProbability: 0.70,
+      marketAvgBasket: 700,
       tipChanceModifier: 1.0,
       specialBehavior: 'Büyük depo doldurur; yolcular tesiste daha fazla harcama yapar.',
       roadTrafficWeight: 1,
@@ -1274,8 +1280,8 @@ export const GAME_CONFIG: GameConfig = {
       basePatienceSeconds: 30,
       priceSensitivity: 'LOW',
       preferredFuel: 'gasoline',
-      marketBaseProbability: 0.12,
-      marketAvgBasket: 180,
+      marketBaseProbability: 0.24,
+      marketAvgBasket: 450,
       tipChanceModifier: 1.5,
       specialBehavior: 'Yüksek tüketimli gösterişli araçtır ve istasyona seyrek uğrar.',
       roadTrafficWeight: 0.6,
@@ -1382,30 +1388,30 @@ export const GAME_CONFIG: GameConfig = {
     {
       id: 'loan_micro',
       name: 'İşletme Sermayesi Kredisi',
-      principal: 10000,
+      principal: 30000,
       totalCostRatio: 0.10,
       termDays: 5,
-      dailyPayment: 2200,
+      dailyPayment: 6600,
       minLevel: 5,
       minReputation: 3.00
     },
     {
       id: 'loan_growth',
       name: 'Büyüme & Yatırım Kredisi',
-      principal: 35000,
+      principal: 105000,
       totalCostRatio: 0.14,
       termDays: 10,
-      dailyPayment: 3990,
+      dailyPayment: 11970,
       minLevel: 5,
       minReputation: 3.50
     },
     {
       id: 'loan_expansion',
       name: 'Arsa & Genişleme Kredisi',
-      principal: 90000,
+      principal: 270000,
       totalCostRatio: 0.18,
       termDays: 18,
-      dailyPayment: 5900,
+      dailyPayment: 17700,
       minLevel: 6,
       minReputation: 4.00,
       requiredExpansion: 'A'
@@ -1413,10 +1419,10 @@ export const GAME_CONFIG: GameConfig = {
     {
       id: 'loan_corporate',
       name: 'Kurumsal Ölçeklendirme Kredisi',
-      principal: 200000,
+      principal: 600000,
       totalCostRatio: 0.25,
       termDays: 30,
-      dailyPayment: 8333,
+      dailyPayment: 25000,
       minLevel: 10,
       minReputation: 4.50
     }
@@ -1523,6 +1529,13 @@ export const GAME_CONFIG: GameConfig = {
       unlockLevel: 8,
       pricePerCell: 1300,
       upkeepPerCell: 4,
+      // The glass has its own grime (Emre, 2026-09-08), apart from the
+      // forecourt's: a fortnight of dust takes a roof to about a third of
+      // clean, a day of rain gives most of it back, and a wash is cheap
+      // against what a dirty roof stops making.
+      cleanCostPerCell: 40,
+      grimePerSecond: 0.02,
+      rainWashPerSecond: 0.08,
       peakKwhPerCell: 0.8,
       sunrise: 6,
       sunset: 20,

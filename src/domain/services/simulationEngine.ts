@@ -84,7 +84,10 @@ import {
   gridPriceAt,
   isNightTariff,
   solarCellsOn,
-  solarFactor
+  solarFactor,
+  roofCells,
+  solarCleanCost,
+  solarCleanlinessOf
 } from './energy';
 
 export type SoundCue =
@@ -4071,6 +4074,21 @@ function afterService(
 }
 
 /** The visit is over, one way or another: the driver is back in and the car goes. */
+/**
+ * A driver who could not get to the bay still wanted the shop. On a cramped
+ * plot the trip to the park failed often enough that a facility earned a
+ * fraction of its odds and nobody could tell why (Emre, 2026-09-08); now
+ * the visit is booked the way a no-park visit is — a fraction, through the
+ * window — and the car goes. The player still has every reason to lay the
+ * park out so the cars actually reach it.
+ */
+function giveUpParking(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
+  const building = vehicle.visitBuildingId ? state.buildings[vehicle.visitBuildingId] : null;
+  const conf = building ? facilityConfig(building.type) : null;
+  if (building && conf) bookVisit(state, building, vehicle, conf.virtualShare, effects);
+  endVisit(state, vehicle);
+}
+
 function endVisit(state: GameState, vehicle: VehicleEntity): void {
   vehicle.visitor = undefined;
   vehicle.visitBuildingId = null;
@@ -4833,12 +4851,44 @@ export function solarCellsFeeding(state: GameState, side: DrivewaySide): number 
 
 /** What this block's panels are putting into the bank right now, kWh per game hour. */
 export function solarKwhPerHourNow(state: GameState, side: DrivewaySide): number {
-  const factor = solarFactor(
-    hourOfDay(state.dayState.gameTime),
-    state.dayState.weather,
-    state.station.cleanliness
-  );
-  return solarCellsFeeding(state, side) * GAME_CONFIG.ev.solar.peakKwhPerCell * factor;
+  // Roof by roof: each has its own glass, and its own grime on it.
+  const hour = hourOfDay(state.dayState.gameTime);
+  const cells = roofCells(GAME_CONFIG.buildings.canopy.size);
+  let kwh = 0;
+  for (const pump of Object.values(state.pumps)) {
+    if (!pump.hasCanopy || !pump.hasSolarCanopy) continue;
+    if (drivewaySideAt(pump.position[1]) !== side) continue;
+    const factor = solarFactor(hour, state.dayState.weather, solarCleanlinessOf(pump));
+    kwh += cells * GAME_CONFIG.ev.solar.peakKwhPerCell * factor;
+  }
+  return kwh;
+}
+
+/**
+ * Dust on the glass, and rain taking it off again. A roof of panels dirties
+ * on its own clock, apart from the forecourt's (Emre, 2026-09-08): the
+ * concrete is swept, the glass is washed, and each is a job of its own.
+ */
+function tickSolarGrime(state: GameState, dt: number): void {
+  const { grimePerSecond, rainWashPerSecond } = GAME_CONFIG.ev.solar;
+  const rain = state.dayState.weather === 'RAIN' ? rainWashPerSecond : 0;
+  for (const pump of Object.values(state.pumps)) {
+    if (!pump.hasCanopy || !pump.hasSolarCanopy) continue;
+    pump.solarCleanliness = clamp(solarCleanlinessOf(pump) + (rain - grimePerSecond) * dt, 0, 100);
+  }
+}
+
+/**
+ * Washes one roof of panels and pays for it. Shared by the office and the
+ * manager's rounds. Returns what was paid, or null if the till could not.
+ */
+export function washSolarPanels(state: GameState, pump: PumpEntity, description: string): number | null {
+  if (!pump.hasCanopy || !pump.hasSolarCanopy) return null;
+  const cost = solarCleanCost(GAME_CONFIG.buildings.canopy.size);
+  const tx = TransactionService.executeCashTransaction(state, { type: 'CLEAN', amount: -cost, description });
+  if (!tx.success) return null;
+  pump.solarCleanliness = 100;
+  return cost;
 }
 
 /** Whether this generator is burning diesel right now. */
@@ -5069,8 +5119,36 @@ export function stopChance(state: GameState, side: DrivewaySide = 'near'): numbe
 
   // The event modifier belongs to the road, not to the driver's decision —
   // a busier day brings more cars past, not more willing ones.
-  return clamp(0.3 * appeal * price * reputation * rush, 0, MAX_STOP_RATE);
+  return clamp(
+    0.3 * appeal * price * reputation * rush * nightLighting(state, side),
+    0,
+    MAX_STOP_RATE
+  );
 }
+
+/** The hours a forecourt is read by its own lights. */
+export function isNightHour(hour: number): boolean {
+  return hour >= 22 || hour < 6;
+}
+
+/**
+ * How willing a driver is to pull into this block after dark. Level 2
+ * promised "Aydınlatmalı Gece Trafiği" and nothing in the engine ever read
+ * a light pole (Emre, 2026-09-08): a dark forecourt is passed by, and each
+ * pole on the block wins back a share of the night until four of them light
+ * it fully. By day the poles are only scenery.
+ */
+export function nightLighting(state: GameState, side: DrivewaySide): number {
+  if (!isNightHour(hourOfDay(state.dayState.gameTime))) return 1;
+  const poles = Object.values(state.buildings).filter(
+    (b) => b.type === 'light_pole' && drivewaySideAt(b.position[1]) === side
+  ).length;
+  return Math.min(1, DARK_STOP_SHARE + poles * LIGHT_POLE_STOP_SHARE);
+}
+
+/** What a driver makes of an unlit forecourt at night, and what each pole adds. */
+const DARK_STOP_SHARE = 0.6;
+const LIGHT_POLE_STOP_SHARE = 0.1;
 
 /**
  * Fuels the station can actually sell: stocked in the farm AND dispensable by
@@ -6170,7 +6248,7 @@ function tickVehicles(
         // Boxed in on the way to the bay: give the bay up and go, rather
         // than stand in the aisle for the rest of the day.
         if (isWedged(vehicle) || (vehicle.solidStuckSeconds ?? 0) > 20) {
-          endVisit(state, vehicle);
+          giveUpParking(state, vehicle, effects);
         }
         break;
       }
@@ -6462,6 +6540,7 @@ const PUMP_AGEING_PER_SECOND = 0.022;
 function tickStationCondition(state: GameState, dt: number, effects: SimEffects): void {
   // Idle grime accumulates slowly across the whole forecourt.
   state.station.cleanliness = clamp(state.station.cleanliness - 0.035 * dt, 0, 100);
+  tickSolarGrime(state, dt);
 
   for (const pump of Object.values(state.pumps)) {
     if (pump.state === 'BROKEN' || pump.state === 'MAINTENANCE') continue;
@@ -6759,6 +6838,27 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
         state.player.statistics.cleanActionsCount++;
         trackMissionMetric(state, 'STATION_CLEANED', 1, effects);
         logAction('MAINTENANCE', `Saha temizlendi (%${Math.round(state.station.cleanliness)}).`, 'SUCCESS', cost);
+      }
+    }
+  }
+
+  // The same duty covers the glass: a roof of panels below half is washed.
+  if (dutyActive(state, 'cleanStation')) {
+    for (const pump of Object.values(state.pumps)) {
+      if (!pump.hasCanopy || !pump.hasSolarCanopy) continue;
+      if (solarCleanlinessOf(pump) >= MANAGER_CLEAN_BELOW) continue;
+      const cost = solarCleanCost(GAME_CONFIG.buildings.canopy.size);
+      if (cost > budget) {
+        const last = state.managerLogs.find((l) => l.category === 'MAINTENANCE' && l.reason.includes('panel'));
+        if (last?.result !== 'SKIPPED_RESERVE') {
+          logAction('MAINTENANCE', 'Güneş panelleri kirlendi; kasa rezervi yıkama için yetmedi.', 'SKIPPED_RESERVE', cost);
+        }
+        break;
+      }
+      const paid = washSolarPanels(state, pump, `${pump.id} güneş paneli yıkama (müdür)`);
+      if (paid !== null) {
+        budget -= paid;
+        logAction('MAINTENANCE', `${pump.id} güneş panelleri yıkandı.`, 'SUCCESS', paid);
       }
     }
   }

@@ -233,10 +233,10 @@ describe('facilities - the card', () => {
   });
 
   it('grows income with level where the ladder says so', () => {
-    expect(facilitySpend(building('c', 'cafe', [5, 5]), 'commuter')).toBe(95);
-    expect(facilitySpend(building('c', 'cafe', [5, 5], { level: 3 }), 'commuter')).toBeCloseTo(95 * 1.55, 6);
+    expect(facilitySpend(building('c', 'cafe', [5, 5]), 'commuter')).toBe(200);
+    expect(facilitySpend(building('c', 'cafe', [5, 5], { level: 3 }), 'commuter')).toBeCloseTo(200 * 1.55, 6);
     // The hotel charges the card price, lifted by the room upgrade.
-    expect(facilitySpend(building('h', 'hotel', [5, 5], { tariff: 2, level: 2 }), 'family')).toBeCloseTo(2100 * 1.2, 6);
+    expect(facilitySpend(building('h', 'hotel', [5, 5], { tariff: 2, level: 2 }), 'family')).toBeCloseTo(4500 * 1.2, 6);
     // A shop's basket is the driver's own.
     expect(facilitySpend(building('m', 'mini_market', [5, 5]), 'family')).toBe(
       GAME_CONFIG.customerTypes.family.marketAvgBasket
@@ -270,10 +270,10 @@ describe('facilities - the visit', () => {
     // Nothing is paid until the driver is through the door.
     expect(state.buildings.wc.till).toBe(0);
     expect(advanceUntil(state, () => car.visitor?.phase === 'INSIDE', 60)).toBe(true);
-    expect(state.buildings.wc.till).toBe(5);
-    expect(state.buildings.wc.todayRevenue).toBe(5);
+    expect(state.buildings.wc.till).toBe(15);
+    expect(state.buildings.wc.todayRevenue).toBe(15);
     expect(state.buildings.wc.todayVisits).toBe(1);
-    expect(state.dayState.todayStats.marketRevenue).toBe(5);
+    expect(state.dayState.todayStats.marketRevenue).toBe(15);
     // The station's own cash saw none of it.
     const cashBefore = state.player.cash;
 
@@ -350,7 +350,7 @@ describe('facilities - the visit', () => {
     expect(car.worldPosition).toEqual([8.5, 0, 5.6]);
 
     expect(advanceUntil(state, () => car.state === 'EXIT' || car.state === 'DESPAWN', 60)).toBe(true);
-    expect(state.buildings.wc.till).toBe(5);
+    expect(state.buildings.wc.till).toBe(15);
     expect(state.pumps.pump_1.currentVehicleId).toBeNull();
     expect(state.pumps.pump_1.state).toBe('IDLE');
   });
@@ -559,9 +559,9 @@ describe('facilities - the store', () => {
       GAME_CONFIG.facilities.toilet.tariffs![useGameStore.getState().gameState.buildings.wc.tariff ?? 0].label;
     expect(labels()).toBe('Ücretsiz');
     useGameStore.getState().cycleFacilityTariff('wc');
-    expect(labels()).toBe('₺5');
+    expect(labels()).toBe('₺15');
     useGameStore.getState().cycleFacilityTariff('wc');
-    expect(labels()).toBe('₺10');
+    expect(labels()).toBe('₺25');
     useGameStore.getState().cycleFacilityTariff('wc');
     expect(labels()).toBe('Ücretsiz');
     // A building with no card has nothing to cycle.

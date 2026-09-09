@@ -2,14 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
-import { calculateEndOfDayReputation } from '../../domain/formulas/economy';
+import { calculateEndOfDayReputation, calculateRepairCost } from '../../domain/formulas/economy';
+import { solarCleanCost, solarCleanlinessOf } from '../../domain/services/energy';
+import { Wrench, Droplets, Sun as SunIcon } from 'lucide-react';
 import { stopChance, evPricePerKwh } from '../../domain/services/simulationEngine';
 import { managerDailyWage } from '../../domain/services/managerDuties';
 import { FuelType, MissionEntity } from '../../domain/types/gameState';
-import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Sparkles, Tag } from 'lucide-react';
+import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
-type OfficeTab = 'summary' | 'price' | 'accounts' | 'missions';
+type OfficeTab = 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance';
 
 const FUELS: FuelType[] = ['gasoline', 'diesel', 'lpg'];
 const EV_KINDS: Array<'ac' | 'dc'> = ['ac', 'dc'];
@@ -292,6 +294,8 @@ export const OfficeModal: React.FC = () => {
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const relocateStructure = useGameStore((s) => s.relocateStructure);
   const cleanStation = useGameStore((s) => s.cleanStation);
+  const cleanSolarPanels = useGameStore((s) => s.cleanSolarPanels);
+  const repairPump = useGameStore((s) => s.repairPump);
   const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
   const setFuelPrice = useGameStore((s) => s.setFuelPrice);
   const setEvPrice = useGameStore((s) => s.setEvPrice);
@@ -347,6 +351,7 @@ export const OfficeModal: React.FC = () => {
     { id: 'accounts', label: 'Muhasebe', onPick: () => setTab('accounts') },
     { id: 'tenders', label: 'İhaleler', onPick: () => undefined, soon: true },
     { id: 'missions', label: 'Görevler', onPick: () => setTab('missions') },
+    { id: 'maintenance', label: 'Bakım', onPick: () => setTab('maintenance') },
     { id: 'branches', label: 'Şubeler', onPick: () => undefined, soon: true }
   ];
 
@@ -537,15 +542,7 @@ export const OfficeModal: React.FC = () => {
                   label={station.open ? 'İstasyonu Kapat' : 'İstasyonu Aç'}
                   tone="red"
                 />
-                <ActionButton
-                  onClick={() => {
-                    sounds.playClick();
-                    cleanStation();
-                  }}
-                  icon={Sparkles}
-                  label={`Sahayı Temizle (${lira(GAME_CONFIG.economy.siteCleanCost)})`}
-                  disabled={station.cleanliness >= 99.5 || player.cash < GAME_CONFIG.economy.siteCleanCost}
-                />
+                {/* Cleaning moved to the Bakım tab with the rest of the upkeep (Emre, 2026-09-09). */}
                 <ActionButton onClick={moveOffice} icon={Move} label="Ofisi Taşı" disabled={!office} />
               </div>
             </>
@@ -664,6 +661,85 @@ export const OfficeModal: React.FC = () => {
                   )}
                 </Section>
               )}
+            </>
+          ) : tab === 'maintenance' ? (
+            // The maintenance desk (Emre, 2026-09-08): the forecourt, every
+            // bay and every roof of panels on one page, each with what it
+            // needs and what that costs, so nothing has to be hunted for
+            // out on the plot.
+            <>
+              <Section title="Saha">
+                <div className="flex items-center gap-3 py-3">
+                  <span className="text-[15px] font-display text-ink flex-1">Temizlik</span>
+                  <span className="k-bar w-28 h-2.5"><i style={{ width: `${Math.round(gameState.station.cleanliness)}%` }} className={gameState.station.cleanliness < 40 ? 'bg-kred' : 'bg-kgrn'} /></span>
+                  <span className="font-display tabular-nums text-ink w-12 text-right">%{Math.round(gameState.station.cleanliness)}</span>
+                  <button
+                    onClick={() => { sounds.playClick(); cleanStation(); }}
+                    disabled={gameState.station.cleanliness >= 100 || player.cash < GAME_CONFIG.economy.siteCleanCost}
+                    className={`game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide ${gameState.station.cleanliness >= 100 || player.cash < GAME_CONFIG.economy.siteCleanCost ? 'bg-card text-mute' : 'bg-kgrn text-white'}`}
+                  >
+                    Temizle · {lira(GAME_CONFIG.economy.siteCleanCost)}
+                  </button>
+                </div>
+                <p className="text-[12px] font-semibold text-mute pb-2">Kirli saha müşteri memnuniyetini düşürür. Her temizlik +25 puan.</p>
+              </Section>
+
+              <Section title="Pompalar">
+                {Object.values(gameState.pumps).map((pump) => {
+                  const cost = calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health);
+                  const broken = pump.state === 'BROKEN';
+                  const fine = pump.health >= 99.5;
+                  return (
+                    <div key={pump.id} className="flex items-center gap-3 py-3 border-b-2 border-dotted border-mute/60">
+                      <Wrench className={`w-4 h-4 shrink-0 ${broken ? 'text-kred' : pump.health < 40 ? 'text-kyel-dark' : 'text-mute'}`} />
+                      <span className="text-[15px] font-display text-ink flex-1">
+                        {pump.id}{broken ? <span className="text-kred text-xs font-black ml-2">ARIZALI</span> : null}
+                      </span>
+                      <span className="k-bar w-28 h-2.5"><i style={{ width: `${Math.round(pump.health)}%` }} className={broken || pump.health < 40 ? 'bg-kred' : 'bg-kgrn'} /></span>
+                      <span className="font-display tabular-nums text-ink w-12 text-right">%{Math.round(pump.health)}</span>
+                      <button
+                        onClick={() => { sounds.playClick(); repairPump(pump.id); }}
+                        disabled={fine || player.cash < cost}
+                        className={`game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide ${fine || player.cash < cost ? 'bg-card text-mute' : broken ? 'bg-kred text-white' : 'bg-kgrn text-white'}`}
+                      >
+                        {fine ? 'Sağlam' : `${broken ? 'Tamir' : 'Bakım'} · ${lira(cost)}`}
+                      </button>
+                    </div>
+                  );
+                })}
+                <p className="text-[12px] font-semibold text-mute py-2">Sağlığı %25 altına düşen pompa arızalanabilir; arızalı pompa müşteri kaybettirir.</p>
+              </Section>
+
+              <Section title="Güneş Panelleri">
+                {Object.values(gameState.pumps).filter((p) => p.hasCanopy && p.hasSolarCanopy).length === 0 ? (
+                  <p className="text-[12px] font-semibold text-mute py-3">Güneşli sundurma yok. İnşaat → Enerji sekmesinden bir sundurmaya panel takılabilir.</p>
+                ) : (
+                  Object.values(gameState.pumps).filter((p) => p.hasCanopy && p.hasSolarCanopy).map((pump) => {
+                    const clean = solarCleanlinessOf(pump);
+                    const cost = solarCleanCost(GAME_CONFIG.buildings.canopy.size);
+                    const spotless = clean >= 99;
+                    return (
+                      <div key={pump.id} className="flex items-center gap-3 py-3 border-b-2 border-dotted border-mute/60">
+                        <SunIcon className={`w-4 h-4 shrink-0 ${clean < 50 ? 'text-kyel-dark' : 'text-mute'}`} />
+                        <span className="text-[15px] font-display text-ink flex-1">{pump.id} çatısı</span>
+                        <span className="k-bar w-28 h-2.5"><i style={{ width: `${Math.round(clean)}%` }} className={clean < 50 ? 'bg-kyel' : 'bg-kgrn'} /></span>
+                        <span className="font-display tabular-nums text-ink w-12 text-right">%{Math.round(clean)}</span>
+                        <button
+                          onClick={() => { sounds.playClick(); cleanSolarPanels(pump.id); }}
+                          disabled={spotless || player.cash < cost}
+                          className={`game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide flex items-center gap-1 ${spotless || player.cash < cost ? 'bg-card text-mute' : 'bg-kblu text-white'}`}
+                        >
+                          <Droplets className="w-3.5 h-3.5" />
+                          {spotless ? 'Temiz' : `Yıka · ${lira(cost)}`}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+                <p className="text-[12px] font-semibold text-mute py-2">
+                  Kirli cam üretimi %{Math.round((1 - GAME_CONFIG.ev.solar.minGrimeFactor) * 100)} düşürür. Yağmur panelleri kısmen yıkar. Sv.2 müdür "Sahayı temizle" göreviyle yıkatabilir.
+                </p>
+              </Section>
             </>
           ) : tab === 'accounts' ? (
             <>

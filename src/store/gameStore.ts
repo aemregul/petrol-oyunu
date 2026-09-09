@@ -38,6 +38,7 @@ import {
   evictFromPump,
   servicePump,
   evPricePerKwh,
+  washSolarPanels,
   dailyPriceReputationDelta,
   dismissVehicle,
   DRIVEWAY_Z,
@@ -388,8 +389,8 @@ interface GameStore {
    * Fiyat tab: one card, many doors, never a second card with a different
    * face (Emre, 2026-09-07).
    */
-  officeTab: 'summary' | 'price' | 'accounts' | 'missions';
-  openOffice: (tab?: 'summary' | 'price' | 'accounts' | 'missions') => void;
+  officeTab: 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance';
+  openOffice: (tab?: 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance') => void;
   buildMode: BuildModeState;
   /** Set while a lifted building is being carried to its new spot. */
   relocating: {
@@ -499,6 +500,8 @@ interface GameStore {
   cleanVehicleWindows: (vehicleId: string) => void;
   dismissCustomer: (vehicleId: string) => void;
   cleanStation: () => boolean;
+  /** Washes the panels on one pump's roof. */
+  cleanSolarPanels: (pumpId: string) => boolean;
   /**
    * İstasyonun adını değiştirir. Ad tek yerde yaşar (station.name); fiyat
    * totemi ve pilon tabelası onu reaktif okuduğundan tabelalar kendiliğinden
@@ -2431,6 +2434,34 @@ export const useGameStore = create<GameStore>((set, get) => {
       type: 'INFO',
       title: 'Saha Temizlendi',
       message: `İstasyon temizlik puanı: %${Math.round(state.station.cleanliness)}`
+    });
+    return true;
+  },
+
+  cleanSolarPanels: (pumpId) => {
+    const { gameState } = get();
+    const pump = gameState.pumps[pumpId];
+    if (!pump || !pump.hasCanopy || !pump.hasSolarCanopy) return false;
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const paid = washSolarPanels(state, state.pumps[pumpId], `${pump.id} güneş paneli yıkama`);
+    if (paid === null) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: 'Panel yıkama için kasa yetmiyor.'
+      });
+      return false;
+    }
+    state.player.statistics.cleanActionsCount++;
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Paneller Yıkandı',
+      message: `${pump.id} çatısındaki paneller yeniden tam verimde. (₺${paid.toLocaleString('tr-TR')})`
     });
     return true;
   },
