@@ -274,7 +274,7 @@ export const PumpPanel: React.FC = () => {
               >
                 <Umbrella className="w-3.5 h-3.5" />
                 <span>
-                  Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle birlikte)' : ''} — +₺{canopyRefund.toLocaleString('tr-TR')} iade
+                  Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle birlikte)' : ''} — ₺{canopyRefund.toLocaleString('tr-TR')} iade
                 </span>
               </button>
             ) : (

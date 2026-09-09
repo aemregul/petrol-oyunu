@@ -371,7 +371,7 @@ export const StructurePanel: React.FC = () => {
                 onClick={() => sellStructure(building.id)}
                 className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
               >
-                Yık — +₺{value.toLocaleString('tr-TR')}
+                Yık — ₺{value.toLocaleString('tr-TR')} iade
               </button>
             )}
 
