@@ -461,7 +461,10 @@
       "Bash(grep -n \"SIGNS\\\\|const .*= {$\" src/rendering/BuildingMesh.tsx)",
       "Bash(grep -vE \"^\\\\s*$|RUN|Duration|Start at|Test Files|stdout\")",
       "Bash(node _shot.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/83a3e0ab-182b-4634-8e70-1a957ffd3c42/scratchpad/welcome.png 2400 1350 12000)",
-      "Bash(awk '/^function approachBay\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)"
+      "Bash(awk '/^function approachBay\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
+      "Bash(awk '/^function solidSpans\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
+      "Bash(awk '/^export function defaultMouthX\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
+      "Bash(awk '/^export function drivewayMouths\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp",

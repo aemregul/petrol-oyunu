@@ -182,6 +182,17 @@ export function unpavedHoles(
   }
   if (paved.length === 0) return NO_HOLES;
 
+  // The near block's box is measured from the origin (plots.width/height),
+  // so a bare parcel at column 0 beside paved column 1 is inside the box
+  // without being inside the concrete's own bounding box — it has to be a
+  // wall too. The far block is measured over its concrete already.
+  if (!far) {
+    minCol = 0;
+    minRow = 0;
+    maxCol = Math.max(maxCol, Math.ceil(plots.width / PARCEL.width) - 1);
+    maxRow = Math.max(maxRow, Math.ceil(plots.height / PARCEL.depth) - 1);
+  }
+
   const cols = maxCol - minCol + 1;
   const rows = maxRow - minRow + 1;
   // Concrete fills its own bounding box and covers every parcel owned here:

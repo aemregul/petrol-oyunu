@@ -644,8 +644,10 @@ export function foldCanopiesIntoPumps(state: GameState): void {
  */
 function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveModalType } {
   // Older saves measured the plot across both sides of the highway, which
-  // dragged the exit driveway off the forecourt as the far side grew.
-  const bounds = stationBounds(loaded.station.plots.ownedParcels);
+  // dragged the exit driveway off the forecourt as the far side grew — and
+  // later ones measured it over bought-but-bare land, which put the lorry's
+  // berth and the exit on grass. The box is the concrete on this side.
+  const bounds = stationBounds(loaded.station.plots.pavedParcels);
   loaded.station.plots.width = bounds.width;
   loaded.station.plots.height = bounds.height;
 
@@ -1864,11 +1866,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     });
     if (!tx.success) return false;
 
-    // Land arrives bare and fenced; concrete is a separate job.
+    // Land arrives bare and fenced; concrete is a separate job. The forecourt
+    // box (lanes, mouths, the lorry's berth, the apron clamp) is the CONCRETE,
+    // so buying does not grow it — paving does. Grown on purchase, the box
+    // reached over the fence: the exit mouth moved onto bare ground, lorries
+    // berthed behind the tank farm on grass, cars cut across it (Emre,
+    // 2026-09-09: "tankerler arsa dışında").
     state.station.plots.ownedParcels.push(parcelKey(col, row));
-    const bounds = stationBounds(state.station.plots.ownedParcels);
-    state.station.plots.width = bounds.width;
-    state.station.plots.height = bounds.height;
 
     sounds.playBuildPlace();
     SaveManager.saveGame(state);
@@ -1913,6 +1917,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!tx.success) return false;
 
     state.station.plots.pavedParcels.push(parcelKey(col, row));
+    // Concrete is what the forecourt box measures — see buyHoveredParcel.
+    const bounds = stationBounds(state.station.plots.pavedParcels);
+    state.station.plots.width = bounds.width;
+    state.station.plots.height = bounds.height;
 
     sounds.playBuildPlace();
     SaveManager.saveGame(state);
