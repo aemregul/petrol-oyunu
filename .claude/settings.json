@@ -438,7 +438,17 @@
       "Bash(curl -s \"https://petrol-oyunu.vercel.app/?nocache=$\\(date +%s\\)\" -H \"Cache-Control: no-cache\")",
       "Bash(rm -f /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/p2-*.png)",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/gate-probe2.mjs)",
-      "Bash(pkill -f \"vite preview --port 4173\")"
+      "Bash(pkill -f \"vite preview --port 4173\")",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-repro.mjs HIGH)",
+      "Bash(sed -i '' \"s#chromium.launch\\({ args: \\\\['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'\\\\] }\\)#chromium.launch\\({ channel: process.env.PW_CHANNEL || undefined, args: \\(process.env.PW_ARGS || ''\\).split\\(' '\\).filter\\(Boolean\\) }\\)#\" /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-repro.mjs)",
+      "Bash(PW_ARGS=\"--use-angle=metal --ignore-gpu-blocklist\" node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-repro.mjs HIGH gpu)",
+      "Bash(sed -i '' 's#const canvas = document.querySelector\\(.canvas.\\);#const r3fGlobal = window.__r3f;#; s#const r3f = canvas.__r3f;#const r3f = null;#; s#const state = root?.getState?.\\(\\);#const state = r3fGlobal;#' /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-inspect.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-inspect.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs MEDIUM)",
+      "Bash(sed -i \"s/s.setGraphicsQuality\\('HIGH'\\)/s.setGraphicsQuality\\(process.env.TO || 'HIGH'\\)/; s/graphicsQuality: 'HIGH' } } }\\);/graphicsQuality: 'MEDIUM' } } }\\);/\" /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs)",
+      "Bash(sed -i '' \"s/if \\(typeof s.setGraphicsQuality === 'function'\\) s.setGraphicsQuality\\('HIGH'\\);/const to = 'MEDIUM';/; s/graphicsQuality: 'HIGH' } } }\\);/graphicsQuality: to } } }\\);/\" /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs HIGH)",
+      "Bash(pkill -f \"vite --port 5210\")"
     ],
     "additionalDirectories": [
       "/private/tmp",

@@ -7,9 +7,16 @@ import { useGameStore } from '../store/gameStore';
  * Lives inside the Canvas because that is the only place `gl.info` exists.
  */
 export const RenderStatsProbe: React.FC = () => {
-  const { gl } = useThree();
+  const { gl, scene } = useThree();
   const updatePerfMetrics = useGameStore((s) => s.updatePerfMetrics);
   const sinceUpdate = useRef(0);
+
+  // Development aid, like window.__store: lets browser-driven tests read the
+  // renderer and the scene graph (shadow map state, lights, casters).
+  // Stripped from production builds.
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>).__r3f = { gl, scene };
+  }
 
   useFrame((_, delta) => {
     sinceUpdate.current += delta;

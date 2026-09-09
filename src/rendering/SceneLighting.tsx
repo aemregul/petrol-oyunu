@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
@@ -38,6 +38,37 @@ const SUN_KEYFRAMES = [
   { hour: 22.5, color: '#7182bb', intensity: 0.68, ambient: 0.48, sky: '#2e3959' },
   { hour: 24, color: '#6f7fb8', intensity: 0.62, ambient: 0.46, sky: '#26314e' }
 ];
+
+/** The slice of a light's shadow this file has to manage. */
+export interface ResizableShadow {
+  mapSize: { x: number; y: number; set(x: number, y: number): unknown };
+  map: { width: number; height: number; dispose(): void } | null;
+}
+
+/**
+ * Puts a live light's shadow map at `size`, dropping the old texture if it
+ * was a different size. Returns true when a map was dropped.
+ *
+ * three.js only allocates a shadow map when there is none (WebGLShadowMap
+ * checks `shadow.map === null` and nothing else); a changed mapSize on a
+ * light that already has one leaves the texture as it was but still sets the
+ * depth pass's viewport from the new size. So switching Orta → Yüksek in
+ * play drew a 2048 depth image into a 1024 texture: only a quarter fitted,
+ * and every shadow the lookup found was scaled two-fold away from the box's
+ * corner — the road's hedge, the columns' heads and the cars landed as long
+ * dark streaks and blobs far out on the grass (Emre, 2026-09-09: "yüksek
+ * ayarda bu gölge bozulmalarına bak"). Dropping the map makes three build a
+ * fresh one, at the right size, on the next frame.
+ */
+export function resizeShadowMap(shadow: ResizableShadow, size: number): boolean {
+  shadow.mapSize.set(size, size);
+  const stale = shadow.map !== null && (shadow.map.width !== size || shadow.map.height !== size);
+  if (stale && shadow.map) {
+    shadow.map.dispose();
+    shadow.map = null;
+  }
+  return stale;
+}
 
 function sampleSun(hour: number) {
   const first = SUN_KEYFRAMES[0];
@@ -167,6 +198,12 @@ export const SceneLighting: React.FC = () => {
   });
 
   const shadowSize = quality === 'HIGH' ? 2048 : 1024;
+
+  // A quality change in play must rebuild the sun's shadow map at the new
+  // size; the prop below only changes the number, not the texture.
+  useEffect(() => {
+    if (sunRef.current) resizeShadowMap(sunRef.current.shadow, shadowSize);
+  }, [shadowSize]);
 
   return (
     <>
