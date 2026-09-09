@@ -64,6 +64,22 @@ export function accountBackendReady(): boolean {
 
 let app: FirebaseApp | null = null;
 
+/**
+ * The Firebase app, if the keys are there — for the parts of the game that
+ * talk to Firebase without needing a signed-in user (the feedback box, for
+ * one). Null when the game runs without a backend.
+ */
+export function firebaseAppIfReady(): FirebaseApp | null {
+  if (!accountBackendReady()) return null;
+  app ??= initializeApp({
+    apiKey: config.apiKey!,
+    authDomain: config.authDomain!,
+    projectId: config.projectId!,
+    appId: config.appId!
+  });
+  return app;
+}
+
 function auth(): Auth {
   if (!accountBackendReady()) {
     throw new Error('Firebase yapılandırması eksik: .env dosyasına VITE_FIREBASE_* anahtarlarını ekleyin.');

@@ -318,7 +318,8 @@ export type ActiveModalType =
   | 'MISSIONS'
   | 'NOTIFICATIONS'
   | 'ACCOUNT'
-  | 'GUIDE';
+  | 'GUIDE'
+  | 'FEEDBACK';
 
 export interface PerformanceMetrics {
   fps: number;

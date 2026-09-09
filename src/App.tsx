@@ -3,6 +3,7 @@ import { StationScene } from './rendering/StationScene';
 import { HUD } from './ui/HUD';
 import { ModalContainer } from './ui/ModalContainer';
 import { TourOverlay } from './ui/TourOverlay';
+import { FeedbackButton } from './ui/FeedbackButton';
 import { NotificationToast } from './ui/NotificationToast';
 import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
@@ -169,6 +170,7 @@ export const App: React.FC = () => {
           <StationScene />
           <HUD />
           <ModalContainer />
+          <FeedbackButton />
           <TourOverlay />
         </>
       )}
