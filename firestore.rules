@@ -5,10 +5,15 @@ service cloud.firestore {
     match /saves/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
-    // Geri bildirim: giriş yapmış herkes ekler, kimse okuyamaz.
+    // Geri bildirim: giriş yapmış herkes ekler; yalnızca yönetici okur
+    // (Yönetici Paneli > Oyuncu notları). E_POSTAN_BURAYA yerine Google ile
+    // giriş yaptığın e-postayı yaz; .env'deki VITE_ADMIN_EMAILS ile aynı olsun.
     match /feedback/{id} {
       allow create: if request.auth != null;
-      allow read, update, delete: if false;
+      allow read: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['E_POSTAN_BURAYA'];
+      allow update, delete: if false;
     }
     match /{document=**} {
       allow read, write: if false;

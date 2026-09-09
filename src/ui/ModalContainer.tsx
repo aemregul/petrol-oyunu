@@ -13,6 +13,7 @@ import { NotificationsModal } from './modals/NotificationsModal';
 import { AccountModal } from './modals/AccountModal';
 import { GuideModal } from './modals/GuideModal';
 import { FeedbackModal } from './modals/FeedbackModal';
+import { AdminModal } from './modals/AdminModal';
 
 export const ModalContainer: React.FC = () => {
   const activeModal = useGameStore((s) => s.activeModal);
@@ -44,6 +45,8 @@ export const ModalContainer: React.FC = () => {
       return <GuideModal />;
     case 'FEEDBACK':
       return <FeedbackModal />;
+    case 'ADMIN':
+      return <AdminModal />;
     default:
       return null;
   }

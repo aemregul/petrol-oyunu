@@ -4,6 +4,7 @@ import { X, ArrowLeft, Bell, LogOut, RotateCcw, BookOpen, Play } from 'lucide-re
 import { sounds } from '../../audio/soundEffects';
 import { styleFor, timeAgo } from '../notificationStyle';
 import { TONE_DOT, TONE_TEXT } from '../gameStyle';
+import { isAdmin } from '../../services/admin';
 
 /**
  * The settings card, in the office's dress: one paper card, sections with a
@@ -269,6 +270,12 @@ export const SettingsModal: React.FC = () => {
                 onPick={(id) => updateSettings({ graphicsQuality: id as 'LOW' | 'MEDIUM' | 'HIGH' })}
                 tone="red"
               />
+              <div className="pt-2">
+                <Switch
+                  label={`FPS Göster: ${settings.showFps ? 'Açık' : 'Kapalı'}`}
+                  onClick={() => updateSettings({ showFps: !settings.showFps })}
+                />
+              </div>
 
               <SectionTitle>Ses</SectionTitle>
               <div className="bg-board border-2 border-ink rounded-md px-4 py-2">
@@ -332,6 +339,16 @@ export const SettingsModal: React.FC = () => {
                     onClick={() => { void pushCloudSaveNow(); }}
                   />
                 </div>
+              )}
+
+              {isAdmin(account) && (
+                <>
+                  <SectionTitle>Yönetici</SectionTitle>
+                  <Hint>Bu bölümü yalnızca .env'de adı geçen hesaplar görür.</Hint>
+                  <div className="pb-2">
+                    <Switch label="Yönetici Panelini Aç" tone="amber" onClick={() => setActiveModal('ADMIN')} />
+                  </div>
+                </>
               )}
 
               <SectionTitle>Baştan Başla</SectionTitle>

@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, ShieldCheck, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -13,6 +13,7 @@ import { FacilityPanel } from './FacilityPanel';
 import { StructurePanel } from './StructurePanel';
 import { CAMERA_VIEWS, type CameraViewId } from '../rendering/cameraFrame';
 import { TONE_BUTTON } from './gameStyle';
+import { isAdmin } from '../services/admin';
 
 /** The face the camera button wears in each of the three views. */
 const VIEW_ICONS: Record<CameraViewId, React.ElementType> = {
@@ -35,6 +36,7 @@ export const HUD: React.FC = () => {
   const placementDockRef = useRef<HTMLDivElement>(null);
   const gameState = useGameStore((s) => s.gameState);
   const activeModal = useGameStore((s) => s.activeModal);
+  const account = useGameStore((s) => s.account);
   const [confirmMerge, setConfirmMerge] = useState(false);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const openOffice = useGameStore((s) => s.openOffice);
@@ -156,7 +158,11 @@ export const HUD: React.FC = () => {
     { key: 'missions', label: '', title: 'Görevler', dot: '', badge: claimableMissions, badgeTone: 'bg-kgrn', icon: ClipboardList, open: () => openOffice('missions'), isOn: (m, t) => m === 'OFFICE' && t === 'missions' },
     { key: 'account', label: '', title: 'Hesabım', dot: '', badge: 0, badgeTone: '', icon: UserRound, open: () => setActiveModal('ACCOUNT'), isOn: (m) => m === 'ACCOUNT' },
     { key: 'bell', label: '', title: 'Bildirimler', dot: '', badge: unreadNotifications, badgeTone: 'bg-kred', icon: Bell, open: () => setActiveModal('NOTIFICATIONS'), isOn: (m) => m === 'NOTIFICATIONS' },
-    { key: 'settings', label: '', title: 'Ayarlar', dot: '', badge: 0, badgeTone: '', icon: SettingsIcon, open: () => setActiveModal('SETTINGS'), isOn: (m) => m === 'SETTINGS' }
+    { key: 'settings', label: '', title: 'Ayarlar', dot: '', badge: 0, badgeTone: '', icon: SettingsIcon, open: () => setActiveModal('SETTINGS'), isOn: (m) => m === 'SETTINGS' },
+    // The owner's door, for the accounts .env names and nobody else.
+    ...(isAdmin(account)
+      ? [{ key: 'admin', label: '', title: 'Yönetici Paneli', dot: '', badge: 0, badgeTone: '', icon: ShieldCheck, open: () => setActiveModal('ADMIN'), isOn: (m: typeof activeModal) => m === 'ADMIN' }]
+      : [])
   ];
 
   return (

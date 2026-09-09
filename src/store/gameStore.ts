@@ -37,6 +37,7 @@ import {
   closeForecourt,
   evictFromPump,
   servicePump,
+  triggerEvent,
   evPricePerKwh,
   washSolarPanels,
   dailyPriceReputationDelta,
@@ -47,6 +48,7 @@ import {
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import { unitPrice } from '../domain/services/catalogRules';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
+import { GAME_EVENTS } from '../config/eventConfig';
 import { TOUR_STEP_COUNT } from '../ui/tour/tourCount';
 import { cloudSaveAvailable, fetchCloudSave, followsAccount, pushCloudSave, reconcile } from '../services/cloudSave';
 import {
@@ -320,7 +322,8 @@ export type ActiveModalType =
   | 'NOTIFICATIONS'
   | 'ACCOUNT'
   | 'GUIDE'
-  | 'FEEDBACK';
+  | 'FEEDBACK'
+  | 'ADMIN';
 
 export interface PerformanceMetrics {
   fps: number;
@@ -538,6 +541,10 @@ interface GameStore {
   renameStation: (name: string) => boolean;
   /** Development aid: unlocks every level-gated feature for testing. */
   devUnlockEverything: () => void;
+  /** The owner's panel (Emre, 2026-09-09): money, level and events on demand, on the admin's own save. */
+  adminGrantCash: (amount: number) => void;
+  adminSetLevel: (level: number) => void;
+  adminTriggerEvent: (templateId: string) => void;
   /** Changes one or more player settings and keeps them in the save. */
   updateSettings: (settings: Partial<GameState['settings']>) => void;
 
@@ -2585,6 +2592,38 @@ export const useGameStore = create<GameStore>((set, get) => {
       message: `${pumpName(gameState, pump)} çatısındaki paneller yeniden tam verimde. (₺${paid.toLocaleString('tr-TR')})`
     });
     return true;
+  },
+
+  adminGrantCash: (amount) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    TransactionService.executeCashTransaction(state, {
+      type: 'TUTORIAL_REWARD',
+      amount,
+      description: `Yönetici sermayesi (+${amount.toLocaleString('tr-TR')} TL)`
+    });
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+  },
+
+  adminSetLevel: (level) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const conf = GAME_CONFIG.levels.find((l) => l.level === level);
+    if (!conf) return;
+    state.player.level = conf.level;
+    state.player.xp = conf.requiredTotalXp;
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+  },
+
+  adminTriggerEvent: (templateId) => {
+    const config = GAME_EVENTS.find((e) => e.id === templateId);
+    if (!config) return;
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const effects = createEffects();
+    triggerEvent(state, config, effects);
+    flushEffects(state, effects);
+    SaveManager.saveGame(state);
+    set({ gameState: state });
   },
 
   devUnlockEverything: () => {

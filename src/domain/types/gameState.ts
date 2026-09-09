@@ -703,6 +703,8 @@ export interface GameState {
     showTutorialTips: boolean;
     /** The first-run tour has been taken or skipped; absent means not yet. */
     tourSeen?: boolean;
+    /** Frame counter in the bottom-left corner, off unless the player asks (Settings > Grafik). */
+    showFps?: boolean;
   };
   notifications: GameNotification[];
   transactionLog: TransactionRecord[];

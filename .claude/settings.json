@@ -416,7 +416,10 @@
       "Read(//Users/emre/.config/**)",
       "Bash(git credential *)",
       "Bash(awk '/^    canopy: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)",
-      "Bash(node /Users/emre/petrol-oyunu/_gl.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad nogl)"
+      "Bash(node /Users/emre/petrol-oyunu/_gl.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad nogl)",
+      "Bash(node _admin.tmp.mjs)",
+      "Bash(node _probe.tmp.mjs)",
+      "Bash(lsof -nP -iTCP:5199 -sTCP:LISTEN)"
     ],
     "additionalDirectories": [
       "/private/tmp",
