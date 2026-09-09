@@ -7,6 +7,7 @@ import { solarCleanCost, solarCleanlinessOf } from '../../domain/services/energy
 import { Wrench, Droplets, Sun as SunIcon } from 'lucide-react';
 import { stopChance, evPricePerKwh } from '../../domain/services/simulationEngine';
 import { managerDailyWage } from '../../domain/services/managerDuties';
+import { pumpName } from '../../domain/services/pumpNames';
 import { FuelType, MissionEntity } from '../../domain/types/gameState';
 import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
@@ -693,7 +694,7 @@ export const OfficeModal: React.FC = () => {
                     <div key={pump.id} className="flex items-center gap-3 py-3 border-b-2 border-dotted border-mute/60">
                       <Wrench className={`w-4 h-4 shrink-0 ${broken ? 'text-kred' : pump.health < 40 ? 'text-kyel-dark' : 'text-mute'}`} />
                       <span className="text-[15px] font-display text-ink flex-1">
-                        {pump.id}{broken ? <span className="text-kred text-xs font-black ml-2">ARIZALI</span> : null}
+                        {pumpName(gameState, pump)}{broken ? <span className="text-kred text-xs font-black ml-2">ARIZALI</span> : null}
                       </span>
                       <span className="k-bar w-28 h-2.5"><i style={{ width: `${Math.round(pump.health)}%` }} className={broken || pump.health < 40 ? 'bg-kred' : 'bg-kgrn'} /></span>
                       <span className="font-display tabular-nums text-ink w-12 text-right">%{Math.round(pump.health)}</span>
@@ -721,7 +722,7 @@ export const OfficeModal: React.FC = () => {
                     return (
                       <div key={pump.id} className="flex items-center gap-3 py-3 border-b-2 border-dotted border-mute/60">
                         <SunIcon className={`w-4 h-4 shrink-0 ${clean < 50 ? 'text-kyel-dark' : 'text-mute'}`} />
-                        <span className="text-[15px] font-display text-ink flex-1">{pump.id} çatısı</span>
+                        <span className="text-[15px] font-display text-ink flex-1">{pumpName(gameState, pump)} çatısı</span>
                         <span className="k-bar w-28 h-2.5"><i style={{ width: `${Math.round(clean)}%` }} className={clean < 50 ? 'bg-kyel' : 'bg-kgrn'} /></span>
                         <span className="font-display tabular-nums text-ink w-12 text-right">%{Math.round(clean)}</span>
                         <button

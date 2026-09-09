@@ -146,6 +146,8 @@ export interface FuelPricingState {
 
 export interface PumpEntity {
   id: string;
+  /** The number the player knows it by ("Pompa 3"); absent on saves from before names. */
+  number?: number;
   level: number;
   position: [number, number]; // Grid [x, z]
   rotation: 0 | 90 | 180 | 270;

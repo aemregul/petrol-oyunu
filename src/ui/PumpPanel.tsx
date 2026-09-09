@@ -4,6 +4,7 @@ import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { calculateRepairCost } from '../domain/formulas/economy';
 import { Fuel, X, Wrench, Umbrella, Sun } from 'lucide-react';
 import { solarPrice, solarPeakKwhPerHour } from '../domain/services/energy';
+import { pumpNumber } from '../domain/services/pumpNames';
 import { sounds } from '../audio/soundEffects';
 
 const STATE_LABELS: Record<string, { text: string; className: string }> = {
@@ -40,7 +41,7 @@ export const PumpPanel: React.FC = () => {
   const pump = selectedPumpId ? gameState.pumps[selectedPumpId] : null;
   if (!pump || activeModal !== 'NONE' || buildMode.active) return null;
 
-  const pumpNo = pump.id.replace(/\D+/g, '') || '1';
+  const pumpNo = String(pumpNumber(gameState, pump));
   const stateInfo = STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-ink' };
 
   // Check if an attendant is assigned to this specific pump

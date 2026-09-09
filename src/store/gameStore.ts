@@ -46,6 +46,7 @@ import {
 } from '../domain/services/simulationEngine';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import { unitPrice } from '../domain/services/catalogRules';
+import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
 import {
   managerDailyWage,
   managerLevel,
@@ -407,6 +408,9 @@ interface GameStore {
       employeeId: string | null;
       hasCanopy?: boolean;
       hasSolarCanopy?: boolean;
+      /** The name and the grime on the glass go with the island. */
+      number?: number;
+      solarCleanliness?: number;
     };
     /** A battery bank's charge travels with it. */
     energyKwh?: number;
@@ -1182,6 +1186,9 @@ export const useGameStore = create<GameStore>((set, get) => {
         employeeId: null,
         currentVehicleId: null,
         flowRateLps: carried?.pump?.flowRateLps ?? 8,
+        // A bought pump takes the next number; a moved one keeps its own.
+        number: carried?.pump?.number ?? nextPumpNumber(state),
+        solarCleanliness: carried?.pump?.solarCleanliness,
         hasCanopy: carried?.pump?.hasCanopy,
         hasSolarCanopy: carried?.pump?.hasSolarCanopy
       };
@@ -1589,7 +1596,9 @@ export const useGameStore = create<GameStore>((set, get) => {
                 employeeId: pump.employeeId,
                 // The roof is bolted to the island and travels with it.
                 hasCanopy: pump.hasCanopy,
-                hasSolarCanopy: pump.hasSolarCanopy
+                hasSolarCanopy: pump.hasSolarCanopy,
+                number: pump.number,
+                solarCleanliness: pump.solarCleanliness
               }
             }
           : {}),
@@ -1932,7 +1941,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     const tx = TransactionService.executeCashTransaction(state, {
       type: 'UPGRADE',
       amount: -upgradeConf.cost,
-      description: `${pump.id} Seviye ${nextLevel} yükseltmesi`
+      description: `${pumpName(gameState, pump)} Seviye ${nextLevel} yükseltmesi`
     });
 
     if (!tx.success) return false;
@@ -1948,7 +1957,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'REWARD',
       title: 'Pompa Yükseltildi!',
-      message: `${pump.id} artık Seviye ${nextLevel}! (${upgradeConf.effectsDescription})`
+      message: `${pumpName(gameState, pump)} artık Seviye ${nextLevel}! (${upgradeConf.effectsDescription})`
     });
     return true;
   },
@@ -1969,7 +1978,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    if (servicePump(state, state.pumps[pumpId], `${pump.id} bakımı ve onarımı`) === null) return false;
+    if (servicePump(state, state.pumps[pumpId], `${pumpName(gameState, pump)} bakımı ve onarımı`) === null) return false;
 
     const repairEffects = createEffects();
     trackMissionMetric(state, 'PUMPS_REPAIRED', 1, repairEffects);
@@ -1981,7 +1990,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'INFO',
       title: 'Bakım Tamamlandı',
-      message: `${pump.id} tamamen onarıldı (%100 Sağlık).`
+      message: `${pumpName(gameState, pump)} tamamen onarıldı (%100 Sağlık).`
     });
     return true;
   },
@@ -2091,7 +2100,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     const tx = TransactionService.executeCashTransaction(state, {
       type: 'UPGRADE',
       amount: -module.cost,
-      description: `${pump.id} ${GAME_CONFIG.fuels[fuel].shortName} tabancası`
+      description: `${pumpName(gameState, pump)} ${GAME_CONFIG.fuels[fuel].shortName} tabancası`
     });
     if (!tx.success) return false;
 
@@ -2103,7 +2112,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'REWARD',
       title: 'Tabanca Takıldı',
-      message: `${pump.id} artık ${GAME_CONFIG.fuels[fuel].shortName} basıyor.`
+      message: `${pumpName(gameState, pump)} artık ${GAME_CONFIG.fuels[fuel].shortName} basıyor.`
     });
     return true;
   },
@@ -2444,7 +2453,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!pump || !pump.hasCanopy || !pump.hasSolarCanopy) return false;
 
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    const paid = washSolarPanels(state, state.pumps[pumpId], `${pump.id} güneş paneli yıkama`);
+    const paid = washSolarPanels(state, state.pumps[pumpId], `${pumpName(gameState, pump)} güneş paneli yıkama`);
     if (paid === null) {
       get().addNotification({
         type: 'WARNING',
@@ -2461,7 +2470,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'INFO',
       title: 'Paneller Yıkandı',
-      message: `${pump.id} çatısındaki paneller yeniden tam verimde. (₺${paid.toLocaleString('tr-TR')})`
+      message: `${pumpName(gameState, pump)} çatısındaki paneller yeniden tam verimde. (₺${paid.toLocaleString('tr-TR')})`
     });
     return true;
   },

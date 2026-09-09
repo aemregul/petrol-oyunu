@@ -394,7 +394,11 @@
       "Bash(awk '/^    toilet: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)",
       "Bash(awk '/^  buildings: \\\\{/,/^  \\\\},$/' src/config/gameConfig.ts)",
       "Bash(awk '/^    [a-z_]+: \\\\{$/{n=$1} /dailyUpkeep/{print n,$2}')",
-      "Bash(node /Users/emre/petrol-oyunu/_smoke.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)"
+      "Bash(node /Users/emre/petrol-oyunu/_smoke.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)",
+      "Bash(grep -rn \"\\\\${pump\\\\.id}\\\\|{pump\\\\.id}\\\\|pump\\\\.id\\\\.toUpperCase\\\\|\\\\${p\\\\.id}\\\\|{p\\\\.id}\" src/ui src/rendering)",
+      "Bash(grep -n \"\\\\${pump\\\\.id}\" src/domain/services/simulationEngine.ts src/store/gameStore.ts)",
+      "Bash(grep -rnF '${pump.id}' src/domain src/store src/ui src/rendering)",
+      "Bash(grep -rnF '${p.id}' src/domain src/store src/ui)"
     ],
     "additionalDirectories": [
       "/private/tmp",

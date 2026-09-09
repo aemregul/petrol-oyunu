@@ -76,6 +76,7 @@ import {
   clamp
 } from '../formulas/economy';
 import { dutyActive, managerDailyWage, managerTier, MANAGER_CLEAN_BELOW } from './managerDuties';
+import { pumpName } from './pumpNames';
 import { FAR_SIDE_FRONT, farSideBounds, unpavedHoles } from './land';
 import {
   dieselForGenerator,
@@ -6554,13 +6555,13 @@ function tickStationCondition(state: GameState, dt: number, effects: SimEffects)
         state,
         pump,
         effects,
-        `${pump.id} tamamen devre dışı kaldı. Bakım yaparak tekrar hizmete alın.`
+        `${pumpName(state, pump)} tamamen devre dışı kaldı. Bakım yaparak tekrar hizmete alın.`
       );
       continue;
     }
 
     if (pump.health < 25 && Math.random() < 0.004 * reliability * dt) {
-      breakPump(state, pump, effects, `${pump.id} aşırı yıpranma nedeniyle durdu. Bakım gerekiyor.`);
+      breakPump(state, pump, effects, `${pumpName(state, pump)} aşırı yıpranma nedeniyle durdu. Bakım gerekiyor.`);
     }
   }
 }
@@ -6773,7 +6774,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       const pump = idlePumps.shift();
       if (!pump) break;
       employee.assignedPumpId = pump.id;
-      logAction('STAFF', `${employee.name} boştaki ${pump.id} pompasına atandı.`, 'SUCCESS');
+      logAction('STAFF', `${employee.name} boştaki ${pumpName(state, pump)} pompasına atandı.`, 'SUCCESS');
     }
   }
 
@@ -6795,12 +6796,12 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     if (cost > budget) {
       // Once per stretch of not affording it, not once per round.
       const last = state.managerLogs.find(
-        (l) => l.category === 'MAINTENANCE' && l.reason.includes(pump.id)
+        (l) => l.category === 'MAINTENANCE' && l.reason.includes(pumpName(state, pump))
       );
       if (last?.result !== 'SKIPPED_RESERVE') {
         logAction(
           'MAINTENANCE',
-          `${pump.id} ${broken ? 'arızalı' : 'yıpranmış'}; kasa rezervi tamir için yetmedi (₺${cost.toLocaleString('tr-TR')}).`,
+          `${pumpName(state, pump)} ${broken ? 'arızalı' : 'yıpranmış'}; kasa rezervi tamir için yetmedi (₺${cost.toLocaleString('tr-TR')}).`,
           'SKIPPED_RESERVE',
           cost
         );
@@ -6808,8 +6809,8 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       continue;
     }
 
-    const paid = servicePump(state, pump, `${pump.id} ${broken ? 'arıza onarımı' : 'bakımı'} (müdür)`);
-    logAction('MAINTENANCE', `${pump.id} ${what}.`, paid === null ? 'FAILED' : 'SUCCESS', cost);
+    const paid = servicePump(state, pump, `${pumpName(state, pump)} ${broken ? 'arıza onarımı' : 'bakımı'} (müdür)`);
+    logAction('MAINTENANCE', `${pumpName(state, pump)} ${what}.`, paid === null ? 'FAILED' : 'SUCCESS', cost);
     if (paid !== null) {
       budget -= paid;
       trackMissionMetric(state, 'PUMPS_REPAIRED', 1, effects);
@@ -6855,10 +6856,10 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
         }
         break;
       }
-      const paid = washSolarPanels(state, pump, `${pump.id} güneş paneli yıkama (müdür)`);
+      const paid = washSolarPanels(state, pump, `${pumpName(state, pump)} güneş paneli yıkama (müdür)`);
       if (paid !== null) {
         budget -= paid;
-        logAction('MAINTENANCE', `${pump.id} güneş panelleri yıkandı.`, 'SUCCESS', paid);
+        logAction('MAINTENANCE', `${pumpName(state, pump)} güneş panelleri yıkandı.`, 'SUCCESS', paid);
       }
     }
   }
@@ -6869,16 +6870,16 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       // No need to nag about a bay the manager is about to service anyway.
       if (dutyActive(state, 'maintenance') && pump.state !== 'BROKEN') continue;
       const alreadyWarned = state.managerLogs.some(
-        (l) => l.category === 'MAINTENANCE' && l.reason.includes(pump.id)
+        (l) => l.category === 'MAINTENANCE' && l.reason.includes(pumpName(state, pump))
       );
       if (alreadyWarned) continue;
 
-      logAction('MAINTENANCE', `${pump.id} sağlığı %${pump.health.toFixed(0)} seviyesine düştü.`, 'SUCCESS');
+      logAction('MAINTENANCE', `${pumpName(state, pump)} sağlığı %${pump.health.toFixed(0)} seviyesine düştü.`, 'SUCCESS');
       notify(
         effects,
         'WARNING',
         'Bakım Uyarısı',
-        `${pump.id} sağlığı %${pump.health.toFixed(0)}. Arızalanmadan önce bakım yapın.`
+        `${pumpName(state, pump)} sağlığı %${pump.health.toFixed(0)}. Arızalanmadan önce bakım yapın.`
       );
     }
   }

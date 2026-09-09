@@ -15,6 +15,7 @@ import {
   managerTierAt
 } from '../../domain/services/managerDuties';
 import type { ManagerDuty } from '../../config/gameConfig';
+import { pumpName } from '../../domain/services/pumpNames';
 
 /** What each duty is called on the panel, and what it means in a line. */
 const DUTY_LABEL: Record<ManagerDuty, { label: string; hint: string }> = {
@@ -189,20 +190,42 @@ export const StaffModal: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 w-full md:w-auto">
-                          {/* Pump assignment selector */}
-                          <select
-                            value={emp.assignedPumpId || ''}
-                            onChange={(e) => assignAttendantToPump(emp.id, e.target.value || null)}
-                            className="bg-paper border-2 border-ink rounded-md text-ink font-display text-xs px-2 py-1 outline-none cursor-pointer"
-                          >
-                            <option value="">Atanmamış (Boşta)</option>
-                            {Object.values(gameState.pumps).map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.id.toUpperCase()} (Seviye {p.level})
-                              </option>
-                            ))}
-                          </select>
+                        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+                          {/* Where they stand: one chip per bay, the one they are on
+                              lit, plus "Boşta". A native select looked like a form on
+                              a card (Emre, 2026-09-09). */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              onClick={() => assignAttendantToPump(emp.id, null)}
+                              className={`game-btn px-2.5 py-1.5 rounded-md font-display text-xs tracking-wide ${
+                                emp.assignedPumpId ? 'bg-board text-ink hover:bg-card' : 'bg-kyel text-ink'
+                              }`}
+                              title="Pompadan al, boşta beklesin"
+                            >
+                              Boşta
+                            </button>
+                            {Object.values(gameState.pumps).map((p) => {
+                              const mine = emp.assignedPumpId === p.id;
+                              const taken = !mine && attendants.some((other) => other.assignedPumpId === p.id);
+                              return (
+                                <button
+                                  key={p.id}
+                                  onClick={() => assignAttendantToPump(emp.id, p.id)}
+                                  disabled={taken}
+                                  title={taken ? 'Bu pompada başka pompacı var' : `Sv.${p.level} pompa`}
+                                  className={`game-btn px-2.5 py-1.5 rounded-md font-display text-xs tracking-wide ${
+                                    mine
+                                      ? 'bg-kgrn text-white'
+                                      : taken
+                                        ? 'bg-board text-mute opacity-60 cursor-not-allowed'
+                                        : 'bg-board text-ink hover:bg-card'
+                                  }`}
+                                >
+                                  {pumpName(gameState, p)}
+                                </button>
+                              );
+                            })}
+                          </div>
 
                           {/* Upgrade Attendant */}
                           {nextTier && (
