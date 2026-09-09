@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StationScene } from './rendering/StationScene';
 import { HUD } from './ui/HUD';
 import { ModalContainer } from './ui/ModalContainer';
 import { TourOverlay } from './ui/TourOverlay';
 import { FeedbackButton } from './ui/FeedbackButton';
+import { UnsupportedGraphics } from './ui/UnsupportedGraphics';
+import { probeWebGL2 } from './services/graphicsSupport';
 import { NotificationToast } from './ui/NotificationToast';
 import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
@@ -25,6 +27,10 @@ const CLOUD_PUSH_EVERY_MS = 10_000;
 const PAN_STEP_PX = 60;
 
 export const App: React.FC = () => {
+  // Asked once, before any scene mounts: a browser with no WebGL 2 gets a
+  // card that says so instead of a black screen (Emre, 2026-09-09).
+  const graphics = useMemo(probeWebGL2, []);
+  const [tryAnyway, setTryAnyway] = useState(false);
   const rotateCamera = useGameStore((s) => s.rotateCamera);
   const gateOpen = useGameStore((s) =>
     gateIsOpen({ accountReady: s.accountReady, accountResolved: s.accountResolved, account: s.account })
@@ -180,6 +186,10 @@ export const App: React.FC = () => {
     panCamera,
     resetCamera
   ]);
+
+  if (!graphics.supported && !tryAnyway) {
+    return <UnsupportedGraphics onTryAnyway={() => setTryAnyway(true)} />;
+  }
 
   // Development aid: model line-ups for reviewing art, instead of the game.
   if (typeof window !== 'undefined') {

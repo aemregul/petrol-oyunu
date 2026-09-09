@@ -415,7 +415,8 @@
       "Bash(printenv)",
       "Read(//Users/emre/.config/**)",
       "Bash(git credential *)",
-      "Bash(awk '/^    canopy: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)"
+      "Bash(awk '/^    canopy: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)",
+      "Bash(node /Users/emre/petrol-oyunu/_gl.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad nogl)"
     ],
     "additionalDirectories": [
       "/private/tmp",
