@@ -405,7 +405,11 @@
       "Bash(awk '/^  customerTypes: \\\\{/,/^  \\\\},$/' src/config/gameConfig.ts)",
       "Bash(sed 's/Olaylar sözlüğü/Araçlar/; s/guide-events.png/guide-vehicles.png/' /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad/events-shot.mjs)",
       "Bash(node /Users/emre/petrol-oyunu/_gv.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)",
-      "Bash(awk '/^    office: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)"
+      "Bash(awk '/^    office: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)",
+      "Bash(kill 8075 8355 8383)",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
+      "Bash(awk '{print $2, $9}')",
+      "WebFetch(domain:docs.web3forms.com)"
     ],
     "additionalDirectories": [
       "/private/tmp",

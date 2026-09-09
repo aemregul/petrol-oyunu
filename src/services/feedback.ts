@@ -1,6 +1,6 @@
 /**
- * The feedback box (Emre, 2026-09-09): what a player writes in "Sorun /
- * Öneri Bildir" and where it goes.
+ * The feedback box (Emre, 2026-09-09): what a player writes in "Geliştiriciye
+ * Not Bırak" and where it goes.
  *
  * Three roads, tried in order, all decided by what is in .env so the code
  * never carries an address:
@@ -41,7 +41,7 @@ export interface FeedbackNote {
 export const FEEDBACK_MIN_CHARS = 10;
 export const FEEDBACK_MAX_CHARS = 2000;
 
-const KIND_LABEL: Record<FeedbackKind, string> = { bug: 'Hata', idea: 'Öneri', other: 'Diğer' };
+const KIND_LABEL: Record<FeedbackKind, string> = { bug: 'Hata', idea: 'Fikir', other: 'Diğer' };
 
 const env = import.meta.env as Record<string, string | undefined>;
 

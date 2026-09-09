@@ -18,8 +18,8 @@ export const FeedbackButton: React.FC = () => {
     <button
       onClick={() => { sounds.playClick(); setActiveModal('FEEDBACK'); }}
       data-tour="feedback"
-      title="Sorun / Öneri Bildir"
-      aria-label="Sorun / Öneri Bildir"
+      title="Geliştiriciye not bırak"
+      aria-label="Geliştiriciye not bırak"
       className={`fixed right-3 bottom-3 z-30 game-surface game-btn w-11 h-11 rounded-full flex items-center justify-center ${
         activeModal === 'FEEDBACK' ? 'bg-kred text-white' : 'text-ink hover:bg-card'
       }`}

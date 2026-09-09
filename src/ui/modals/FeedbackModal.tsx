@@ -13,7 +13,7 @@ import {
 } from '../../services/feedback';
 
 /**
- * "Sorun / Öneri Bildir" (Emre, 2026-09-09): a card with three chips, a
+ * "Geliştiriciye Not Bırak" (Emre, 2026-09-09): a card with three chips, a
  * box and a button. The note goes wherever .env says (see services/
  * feedback.ts); the card says where it went, honestly — a clipboard copy
  * is told as a copy, not as a delivery.
@@ -22,9 +22,9 @@ import {
 const APP_VERSION = '1.0.0';
 
 const KINDS: Array<{ id: FeedbackKind; label: string; icon: React.ElementType; hint: string }> = [
-  { id: 'bug', label: 'Hata', icon: Bug, hint: 'Bir şey yanlış çalışıyor' },
-  { id: 'idea', label: 'Öneri', icon: Lightbulb, hint: 'Şu olsa süper olur' },
-  { id: 'other', label: 'Diğer', icon: MessageCircle, hint: 'Aklına ne geldiyse' }
+  { id: 'bug', label: 'Hata', icon: Bug, hint: 'Bir şey beklediğin gibi çalışmıyor' },
+  { id: 'idea', label: 'Fikir', icon: Lightbulb, hint: 'Oyuna eklenmesini istediğin bir şey' },
+  { id: 'other', label: 'Diğer', icon: MessageCircle, hint: 'Kategoriye sığmayan her şey' }
 ];
 
 const CHANNEL_NOTE: Record<ReturnType<typeof feedbackChannel>, string> = {
@@ -69,8 +69,8 @@ export const FeedbackModal: React.FC = () => {
           <div className="flex items-center gap-3">
             <div className="game-icon-badge w-10 h-10"><MessageSquareText className="w-5 h-5" /></div>
             <div>
-              <div className="text-[10px] uppercase font-bold font-sans text-white/80 tracking-wider">Geliştiriciye not</div>
-              <div className="font-display text-xl tracking-wide">Sorun / Öneri Bildir</div>
+              <div className="text-[10px] uppercase font-bold font-sans text-white/80 tracking-wider">Patrondan patrona</div>
+              <div className="font-display text-xl tracking-wide">Geliştiriciye Not Bırak</div>
             </div>
           </div>
           <button onClick={close} className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center" aria-label="Kapat">
@@ -80,7 +80,7 @@ export const FeedbackModal: React.FC = () => {
 
         <div className="p-5 flex flex-col gap-3">
           <p className="text-[13px] font-semibold text-mute">
-            Bug mu buldun, önerin mi var? Yaz gönder, hepsini okuyoruz. Gün, seviye ve sürüm bilgin notla birlikte gider.
+            Takılan bir şey mi var, aklına parlak bir fikir mi geldi? Birkaç satır yeter; her notu tek tek okuyup değerlendiriyoruz. Gün, seviye ve sürüm bilgin notun altına kendiliğinden eklenir.
           </p>
 
           <div className="flex gap-2">
@@ -102,7 +102,7 @@ export const FeedbackModal: React.FC = () => {
           <textarea
             value={text}
             onChange={(e) => { setText(e.target.value.slice(0, FEEDBACK_MAX_CHARS)); if (status !== 'idle') setStatus('idle'); }}
-            placeholder="Örn: girişte araçlar sıkışıyor / şu özellik olsa süper olur…"
+            placeholder="Mesela: kamyonlar TIR parkına yanaşamıyor, ya da müdür gece de sipariş verebilse…"
             rows={5}
             className="w-full bg-paper border-2 border-ink rounded-md text-ink text-[13px] font-semibold p-3 focus:outline-none resize-y placeholder:text-mute/70"
           />
