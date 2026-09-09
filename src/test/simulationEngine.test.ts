@@ -229,9 +229,12 @@ describe('simulationEngine - vehicle lifecycle', () => {
     for (let i = 0; i < 40; i++) dispenseStep(state, vehicle, 0.1, effects);
     expect(vehicle.request.dispensedLiters).toBeGreaterThan(0);
 
-    const onSite = Object.values(state.vehicles).filter(
-      (v) => !['SPAWN', 'PASSING', 'EXIT', 'DESPAWN'].includes(v.state)
-    ).length;
+    const onSite = Object.values(state.vehicles).filter((v) => {
+      if (['SPAWN', 'PASSING', 'EXIT', 'DESPAWN'].includes(v.state)) return false;
+      if (v.state !== 'ROAD_APPROACH') return true;
+      const road = blockLayout(state, vehicleSide(v));
+      return !road || Math.abs(v.worldPosition[2] - road.roadLaneZ) >= 1;
+    }).length;
 
     const cleared = closeForecourt(state);
 
@@ -246,6 +249,60 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(cleared.unpaidLiters).toBeGreaterThan(0);
     expect(state.tanks.gasoline.stock).toBeCloseTo(stockBefore - cleared.unpaidLiters, 1);
     expect(state.tanks.gasoline.reservedStock).toBeCloseTo(0, 1);
+  });
+
+  /**
+   * A ROAD_APPROACH car is only a prospective customer while it is still on
+   * the highway. Closing used to treat the state name as proof that the car
+   * was already on site and hand it an exit route from the middle of the
+   * carriageway. Reopening did not undo that EXIT state, so it cut across the
+   * field, crossed the forecourt without buying fuel, and left by the exit.
+   */
+  it('keeps a road-side arrival on the highway through a quick close and reopen', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    const block = blockLayout(state, 'near')!;
+
+    advanceUntil(
+      state,
+      (s) =>
+        Object.values(s.vehicles).some(
+          (v) =>
+            v.state === 'ROAD_APPROACH' &&
+            Math.abs(v.worldPosition[2] - block.roadLaneZ) < 0.1
+        ),
+      1000
+    );
+    const arrival = Object.values(state.vehicles).find(
+      (v) =>
+        v.state === 'ROAD_APPROACH' &&
+        Math.abs(v.worldPosition[2] - block.roadLaneZ) < 0.1
+    )!;
+    expect(arrival).toBeDefined();
+
+    state.station.open = false;
+    const cleared = closeForecourt(state);
+    state.station.open = true;
+
+    // It saw the closed sign before leaving the road. It is through traffic
+    // now; reopening a moment later must not turn it back into a customer.
+    expect(cleared.left).toBe(0);
+    expect(arrival.state).toBe('PASSING');
+    expect(arrival.targetWaypoint).toEqual([block.roadEndX, 0, block.roadLaneZ]);
+
+    let furthestFromRoad = 0;
+    const servedBefore = state.dayState.todayStats.customersServed;
+    const effects = createEffects();
+    for (let i = 0; i < 2000 && state.vehicles[arrival.id]; i++) {
+      runSimulationTick(state, 0.05, effects);
+      furthestFromRoad = Math.max(
+        furthestFromRoad,
+        Math.abs(arrival.worldPosition[2] - block.roadLaneZ)
+      );
+    }
+
+    expect(furthestFromRoad).toBeLessThan(0.1);
+    expect(state.dayState.todayStats.customersServed).toBe(servedBefore);
   });
 
   it('sends the customer away when the pump fails under them', () => {

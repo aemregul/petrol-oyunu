@@ -5980,6 +5980,24 @@ function turnAway(state: GameState): void {
     (state.dayState.todayStats.customersTurnedAway ?? 0) + 1;
 }
 
+/**
+ * A prospective customer that sees the closed sign before leaving the
+ * carriageway simply carries on with the traffic. Giving it an EXIT route
+ * would assume it was already on the apron; from the road that route cuts
+ * across the field to reach the station's exit mouth.
+ */
+function continuePastStation(state: GameState, vehicle: VehicleEntity): void {
+  const block = blockFor(state, vehicle);
+  setVehicleState(vehicle, 'PASSING');
+  setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+}
+
+/** True while an arrival has not yet turned off its carriageway. */
+function arrivalStillOnRoad(state: GameState, vehicle: VehicleEntity): boolean {
+  const block = blockFor(state, vehicle);
+  return Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1;
+}
+
 function loseCustomer(
   state: GameState,
   vehicle: VehicleEntity,
@@ -6039,6 +6057,18 @@ export function closeForecourt(state: GameState): { left: number; unpaidLiters: 
   let unpaidLiters = 0;
 
   for (const vehicle of Object.values(state.vehicles)) {
+    // SPAWN and a ROAD_APPROACH still on the carriageway have chosen the
+    // station but have not entered it. They see KAPALI and drive past. This
+    // decision is final for that trip: reopening immediately does not turn
+    // them back in or give them a route through the field.
+    if (
+      vehicle.state === 'SPAWN' ||
+      (vehicle.state === 'ROAD_APPROACH' && arrivalStillOnRoad(state, vehicle))
+    ) {
+      continuePastStation(state, vehicle);
+      turnAway(state);
+      continue;
+    }
     if (!isOnForecourt(vehicle)) continue;
     unpaidLiters += dismissVehicle(state, vehicle);
     left++;
@@ -6225,6 +6255,15 @@ function tickVehicles(
 
     switch (vehicle.state) {
       case 'SPAWN': {
+        // Normally toggleStationOpen has already converted this car in
+        // closeForecourt. Keep the simulation rule here too for direct state
+        // changes and old saves paused on exactly this tick.
+        if (!state.station.open) {
+          continuePastStation(state, vehicle);
+          turnAway(state);
+          break;
+        }
+
         const approach = approachRoute(state, vehicle);
         if (!approach) {
           setVehicleState(vehicle, 'PASSING');
@@ -6258,6 +6297,12 @@ function tickVehicles(
         // full blocks the entrance, and everything behind them stacks up on
         // the carriageway waiting for a gap that cannot open.
         const stillOnRoad = Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1;
+        if (!state.station.open && stillOnRoad) {
+          continuePastStation(state, vehicle);
+          turnAway(state);
+          break;
+        }
+
         const electric = !!GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger;
         const chargeLine = electric ? chargeQueueLine(state, block, side) : null;
         if (
