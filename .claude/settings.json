@@ -464,7 +464,9 @@
       "Bash(awk '/^function approachBay\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
       "Bash(awk '/^function solidSpans\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
       "Bash(awk '/^export function defaultMouthX\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
-      "Bash(awk '/^export function drivewayMouths\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)"
+      "Bash(awk '/^export function drivewayMouths\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
+      "Bash(grep -i \"^jsdom$\\\\|^happy-dom$\")",
+      "Bash(awk '{print $2, $3\"%\", $11, $12, $13}')"
     ],
     "additionalDirectories": [
       "/private/tmp",

@@ -95,6 +95,16 @@ function flareMaterial(): THREE.SpriteMaterial {
   return (materials.flare ??= new THREE.SpriteMaterial(glowSettings('#fff3d2', 0.95)));
 }
 
+/**
+ * Light is not a thing you can click. The pool on the ground is a plane a
+ * dozen units across and it sat inside the lamp post's click group: once the
+ * lamps came on at night, every click on the apron opened the pole's panel,
+ * and the pointer never reached the ground beneath it — the build preview
+ * froze, paving and placing stopped working, and it all worked again at
+ * sunrise (Emre, 2026-09-09). None of the glow takes part in raycasting.
+ */
+const NO_RAYCAST = () => null;
+
 export interface LampGlowProps {
   /** Where the lens hangs, in the parent's space. */
   position: [number, number, number];
@@ -148,6 +158,7 @@ export const LampGlow: React.FC<LampGlowProps> = ({
         scale={[stretch, 1, 1]}
         material={poolMaterial(poolOpacity)}
         renderOrder={2}
+        raycast={NO_RAYCAST}
       >
         <planeGeometry args={[reach * 2 * spread, reach * 2 * spread]} />
       </mesh>
@@ -155,7 +166,7 @@ export const LampGlow: React.FC<LampGlowProps> = ({
       {/* Shaft of light. Open-ended and faint: enough to tie the lens to the
           pool, not enough to look like fog. */}
       {shaft && (
-        <mesh position={[x, y / 2, z]} material={shaftMaterial()} renderOrder={3}>
+        <mesh position={[x, y / 2, z]} material={shaftMaterial()} renderOrder={3} raycast={NO_RAYCAST}>
           <coneGeometry args={[reach * 0.62, y, 18, 1, true]} />
         </mesh>
       )}
@@ -166,6 +177,7 @@ export const LampGlow: React.FC<LampGlowProps> = ({
         scale={[reach * 0.7, reach * 0.7, 1]}
         material={flareMaterial()}
         renderOrder={4}
+        raycast={NO_RAYCAST}
       />
     </group>
   );
