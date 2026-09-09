@@ -10,7 +10,7 @@ import { NotificationToast } from './ui/NotificationToast';
 import { PerformanceOverlay } from './ui/PerformanceOverlay';
 import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
-import { watchAccount } from './services/account';
+import { watchAccount, finishRedirectSignIn, describeAuthError } from './services/account';
 import { sounds } from './audio/soundEffects';
 import { WelcomeGate, gateIsOpen } from './ui/WelcomeGate';
 import {
@@ -71,6 +71,11 @@ export const App: React.FC = () => {
     () => watchAccount((profile) => useGameStore.setState({ account: profile, accountResolved: true })),
     []
   );
+  // Back from a redirect sign-in (the popup-blocked fallback): a failure
+  // would otherwise vanish; a success comes through watchAccount.
+  useEffect(() => {
+    finishRedirectSignIn().catch((error) => useGameStore.setState({ accountError: describeAuthError(error) }));
+  }, []);
 
   // The cloud copy of the save (Emre, 2026-09-09). When an account signs in
   // the two copies are reconciled; after that the local save goes up every

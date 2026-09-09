@@ -82,6 +82,7 @@ export const WelcomeGate: React.FC = () => {
   const accountReady = useGameStore((s) => s.accountReady);
   const accountResolved = useGameStore((s) => s.accountResolved);
   const accountBusy = useGameStore((s) => s.accountBusy);
+  const accountError = useGameStore((s) => s.accountError);
   const signInGoogle = useGameStore((s) => s.signInGoogle);
   const signInEmail = useGameStore((s) => s.signInEmail);
   const signInGuest = useGameStore((s) => s.signInGuest);
@@ -247,8 +248,12 @@ export const WelcomeGate: React.FC = () => {
                     className="game-btn flex items-center justify-center gap-3 rounded-xl border-2 border-stone-300 bg-white px-4 py-3 text-sm font-extrabold text-stone-800 hover:bg-stone-50 disabled:opacity-50"
                   >
                     <GoogleMark />
-                    <span>Google ile devam et</span>
+                    <span>{accountBusy ? 'Giriş penceresi açık…' : 'Google ile devam et'}</span>
                   </button>
+
+                  {accountError && (
+                    <p className="text-[11px] font-bold text-red-700 text-center" role="alert">{accountError}</p>
+                  )}
 
                   <button
                     onClick={() => {
@@ -302,7 +307,9 @@ export const WelcomeGate: React.FC = () => {
                     />
                   </label>
 
-                  {formError && <p className="text-[11px] font-bold text-red-700">{formError}</p>}
+                  {(formError ?? accountError) && (
+                    <p className="text-[11px] font-bold text-red-700" role="alert">{formError ?? accountError}</p>
+                  )}
 
                   <button
                     disabled={accountBusy}

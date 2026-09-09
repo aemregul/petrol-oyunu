@@ -381,6 +381,8 @@ interface GameStore {
   account: AccountProfile | null;
   accountReady: boolean;
   accountBusy: boolean;
+  /** The last sign-in failure, shown inside the welcome gate (toasts sit under it). */
+  accountError: string | null;
   /** Firebase ilk kez "kim var kim yok" dedikten sonra true: karşılama
    *  kapısı ancak o zaman karar verir, yoksa oturumlu oyuncuya da bir an
    *  giriş ekranı parlardı. */
@@ -778,6 +780,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   cloudSync: { status: 'off', at: null, message: null, pushedAt: 0 },
   accountReady: accountBackendReady(),
   accountBusy: false,
+  accountError: null,
   accountResolved: !accountBackendReady(),
   selectedVehicleId: null,
   selectedPumpId: null,
@@ -2387,10 +2390,11 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   signInGoogle: async () => {
-    set({ accountBusy: true });
+    set({ accountBusy: true, accountError: null });
     try {
       await signInWithGoogle();
     } catch (error) {
+      set({ accountError: describeAuthError(error) });
       get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
     } finally {
       set({ accountBusy: false });
@@ -2398,12 +2402,13 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   signInEmail: async (email, password, register) => {
-    set({ accountBusy: true });
+    set({ accountBusy: true, accountError: null });
     try {
       if (register) await registerWithEmail(email, password);
       else await signInWithEmail(email, password);
       return true;
     } catch (error) {
+      set({ accountError: describeAuthError(error) });
       get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
       return false;
     } finally {
@@ -2412,10 +2417,11 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   signInGuest: async () => {
-    set({ accountBusy: true });
+    set({ accountBusy: true, accountError: null });
     try {
       await signInAsGuest();
     } catch (error) {
+      set({ accountError: describeAuthError(error) });
       get().addNotification({ type: 'WARNING', title: 'Giriş Başarısız', message: describeAuthError(error) });
     } finally {
       set({ accountBusy: false });

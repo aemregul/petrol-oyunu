@@ -16,6 +16,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -129,8 +131,40 @@ export function watchAccount(onChange: (profile: AccountProfile | null) => void)
   });
 }
 
+/**
+ * Popup first, redirect when the browser swallows the popup (Emre,
+ * 2026-09-09: "Google ile devam et'e basınca hiçbir şey açılmıyor" — a
+ * popup blocker, and the error toast was hidden under the welcome gate).
+ * Pure so the fallback rule can be pinned without Firebase.
+ */
+export async function popupThenRedirect(
+  popup: () => Promise<unknown>,
+  redirect: () => Promise<unknown>
+): Promise<void> {
+  try {
+    await popup();
+  } catch (error) {
+    if (authErrorCode(error) !== 'auth/popup-blocked') throw error;
+    await redirect();
+  }
+}
+
 export async function signInWithGoogle(): Promise<void> {
-  await signInWithPopup(auth(), new GoogleAuthProvider());
+  const provider = new GoogleAuthProvider();
+  await popupThenRedirect(
+    () => signInWithPopup(auth(), provider),
+    () => signInWithRedirect(auth(), provider)
+  );
+}
+
+/**
+ * After a redirect sign-in the page comes back with the result in the URL;
+ * this reads it. Success arrives through watchAccount anyway — what this
+ * adds is the failure, which would otherwise be silent.
+ */
+export async function finishRedirectSignIn(): Promise<void> {
+  if (!accountBackendReady()) return;
+  await getRedirectResult(auth());
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<void> {
@@ -154,8 +188,12 @@ export async function resetPassword(email: string): Promise<void> {
 }
 
 /** Firebase'in İngilizce hata kodları oyuncuya Türkçe anlatılır. */
+export function authErrorCode(error: unknown): string {
+  return (error as { code?: string })?.code ?? '';
+}
+
 export function describeAuthError(error: unknown): string {
-  const code = (error as { code?: string })?.code ?? '';
+  const code = authErrorCode(error);
   switch (code) {
     case 'auth/invalid-email':
       return 'E-posta adresi geçersiz görünüyor.';
@@ -169,9 +207,21 @@ export function describeAuthError(error: unknown): string {
       return 'Şifre en az 6 karakter olmalı.';
     case 'auth/popup-closed-by-user':
       return 'Giriş penceresi kapatıldı.';
+    case 'auth/cancelled-popup-request':
+      return 'Zaten açık bir giriş penceresi var; önce onu tamamlayın.';
+    case 'auth/popup-blocked':
+      return 'Tarayıcı giriş penceresini engelledi. Adres çubuğundaki uyarıdan izin verip tekrar deneyin ya da e-posta ile girin.';
+    case 'auth/unauthorized-domain':
+      return 'Bu adres Firebase\'de yetkili değil: Console > Authentication > Settings > Authorized domains listesine ekleyin.';
+    case 'auth/operation-not-allowed':
+      return 'Bu giriş yöntemi Firebase\'de kapalı: Authentication > Sign-in method bölümünden açın.';
+    case 'auth/operation-not-supported-in-this-environment':
+      return 'Bu tarayıcı girişi desteklemiyor (uygulama içi tarayıcı olabilir). Bağlantıyı Chrome ya da Safari\'de açın.';
+    case 'auth/too-many-requests':
+      return 'Çok fazla deneme yapıldı; biraz bekleyip tekrar deneyin.';
     case 'auth/network-request-failed':
       return 'Ağ hatası — bağlantınızı kontrol edin.';
     default:
-      return 'Giriş başarısız oldu. Lütfen tekrar deneyin.';
+      return `Giriş başarısız oldu${code ? ` (${code})` : ''}. Lütfen tekrar deneyin.`;
   }
 }

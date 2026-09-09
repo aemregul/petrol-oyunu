@@ -419,7 +419,13 @@
       "Bash(node /Users/emre/petrol-oyunu/_gl.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad nogl)",
       "Bash(node _admin.tmp.mjs)",
       "Bash(node _probe.tmp.mjs)",
-      "Bash(lsof -nP -iTCP:5199 -sTCP:LISTEN)"
+      "Bash(lsof -nP -iTCP:5199 -sTCP:LISTEN)",
+      "Bash(node _google.tmp.mjs)",
+      "Bash(ls ~/Library/Caches/ms-playwright 2>/dev/null; echo ---; grep -n \"headers\\\\|Cross-Origin\\\\|server:\" vite.config.ts; echo ---; grep -n \"z-\\\\[\" src/ui/NotificationToast.tsx src/ui/WelcomeGate.tsx | head; echo ---; sed -n 60,100p src/services/account.ts)",
+      "Read(//Users/emre/Library/Caches/ms-playwright/**)",
+      "Bash(node _google2.tmp.mjs chromium)",
+      "Bash(node _google2.tmp.mjs webkit)",
+      "Bash(node _google3.tmp.mjs)"
     ],
     "additionalDirectories": [
       "/private/tmp",
