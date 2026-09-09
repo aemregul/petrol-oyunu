@@ -42,6 +42,8 @@ export const PumpPanel: React.FC = () => {
   if (!pump || activeModal !== 'NONE' || buildMode.active) return null;
 
   const pumpNo = String(pumpNumber(gameState, pump));
+  const canopyPrice = GAME_CONFIG.buildings.canopy.price;
+  const canopyRefund = Math.round((canopyPrice * GAME_CONFIG.economy.refundRatio) / 10) * 10;
   const stateInfo = STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-ink' };
 
   // Check if an attendant is assigned to this specific pump
@@ -262,21 +264,30 @@ export const PumpPanel: React.FC = () => {
             )}
 
             {/* Canopy Toggle */}
+            {/* The price on the button, like the nozzles above it: a
+                button that names no price is a button nobody presses
+                (Emre, 2026-09-09). Taking it off names the refund. */}
             {pump.hasCanopy ? (
               <button
                 onClick={() => removeCanopy(pump.id)}
                 className="w-full py-2 text-mute hover:text-ink text-xs font-extrabold flex items-center justify-center gap-1 transition-colors"
               >
                 <Umbrella className="w-3.5 h-3.5" />
-                <span>Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle birlikte)' : ''}</span>
+                <span>
+                  Sundurmayı Sök{pump.hasSolarCanopy ? ' (panellerle birlikte)' : ''} — +₺{canopyRefund.toLocaleString('tr-TR')} iade
+                </span>
               </button>
             ) : (
               <button
                 onClick={() => fitCanopy(pump.id)}
-                className="w-full py-2 text-mute hover:text-ink text-xs font-extrabold flex items-center justify-center gap-1 transition-colors"
+                disabled={gameState.player.cash < canopyPrice}
+                title={gameState.player.cash < canopyPrice ? 'Yetersiz bakiye' : 'Pompanın üstüne sundurma kur'}
+                className={`w-full py-2 text-xs font-extrabold flex items-center justify-center gap-1 transition-colors ${
+                  gameState.player.cash < canopyPrice ? 'text-mute/60 cursor-not-allowed' : 'text-mute hover:text-ink'
+                }`}
               >
                 <Umbrella className="w-3.5 h-3.5" />
-                <span>+ Sundurma Ekle</span>
+                <span>+ Sundurma Ekle — ₺{canopyPrice.toLocaleString('tr-TR')}</span>
               </button>
             )}
           </div>
