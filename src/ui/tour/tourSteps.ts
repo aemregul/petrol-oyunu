@@ -32,9 +32,9 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'stats',
     target: 'stats',
-    title: 'Kasa, bugün, itibar, seviye',
+    title: 'Gün, kasa, itibar, seviye',
     body: [
-      'Kasa harcayabildiğin para. Bugün, bu günün yakıt cirosu.',
+      'Gün, kaçıncı günde olduğun; günün gelir gider dökümü Ofis → Muhasebe\'de. Kasa harcayabildiğin para.',
       'İtibar 1 ile 5 arasında; yoldan geçenlerin kaçının sana döneceğini belirler. Müşteri kaybetmek düşürür, iyi hizmet yükseltir.',
       'Seviye deneyimle artar ve yeni yapıları, personeli ve düzenleme modunu açar.'
     ]

@@ -178,13 +178,15 @@ export const HUD: React.FC = () => {
           </div>
 
           <div className="hud-tiles flex justify-center gap-2 min-w-0" data-tour="stats">
+            {/* Which day it is, first, in place of the day's takings: the
+                books are in Muhasebe, the calendar was nowhere (Emre, 2026-09-09). */}
+            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[5.5rem]" title="Kaçıncı gün">
+              <div className="k-label">Gün</div>
+              <div className="font-display text-xl leading-tight text-kblu tabular-nums">{dayState.currentDay}</div>
+            </div>
             <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[8.5rem]">
               <div className="k-label">Kasa</div>
               <div className="font-display text-xl leading-tight text-kgrn tabular-nums">₺{player.cash.toLocaleString('tr-TR')}</div>
-            </div>
-            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[7rem]">
-              <div className="k-label">Bugün</div>
-              <div className="font-display text-xl leading-tight text-kblu tabular-nums">+₺{dayState.todayStats.fuelRevenue.toLocaleString('tr-TR')}</div>
             </div>
             <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[6.5rem]">
               <div className="k-label">İtibar</div>
