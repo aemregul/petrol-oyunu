@@ -8,6 +8,7 @@
  */
 
 import {
+  GameEventEffects,
   GameState,
   VehicleEntity,
   PumpEntity,
@@ -3115,7 +3116,18 @@ function tickEvents(state: GameState, dtHours: number, dt: number, effects: SimE
     }
   }
 
-  // Roughly one in-day event every few game hours, never the same one twice.
+  // The road's events, paced (Emre, 2026-09-09): the old roll fired about
+  // one every two and a half days, so most of the catalogue was never seen.
+  // Now about one or two a day, never within an hour and a half of the
+  // last, never more than three, never the same one twice in a day, and
+  // never before the station has opened its first hour.
+  const day = state.dayState;
+  const hour = hourOfDay(day.gameTime);
+  if ((day.eventsToday ?? 0) >= MAX_EVENTS_PER_DAY) return;
+  if (day.gameTime < GAME_CONFIG.economy.dayStartHour + 1) return;
+  if (day.lastEventAtHour !== undefined && day.gameTime - day.lastEventAtHour < MIN_HOURS_BETWEEN_EVENTS) return;
+  if (isNightHour(hour) && Math.random() < 0.5) return;
+
   const candidates = GAME_EVENTS.filter(
     (e) =>
       !e.daily &&
@@ -3125,11 +3137,42 @@ function tickEvents(state: GameState, dtHours: number, dt: number, effects: SimE
   );
   if (candidates.length === 0) return;
 
-  const chancePerSecond = 0.0016;
-  if (Math.random() < chancePerSecond * dt) {
+  if (Math.random() < EVENT_CHANCE_PER_SECOND * dt) {
     const chosen = pickWeightedEvent(candidates);
-    if (chosen) triggerEvent(state, chosen, effects);
+    if (chosen) {
+      triggerEvent(state, chosen, effects);
+      day.lastEventAtHour = day.gameTime;
+      day.eventsToday = (day.eventsToday ?? 0) + 1;
+    }
   }
+}
+
+/** About 1.4 rolls a day at 240 seconds a day; the gap and the cap trim the tail. */
+const EVENT_CHANCE_PER_SECOND = 0.006;
+const MIN_HOURS_BETWEEN_EVENTS = 1.5;
+const MAX_EVENTS_PER_DAY = 3;
+
+/**
+ * What an event does, in a few words for its card: the numbers the player
+ * plans around rather than the story on the toast.
+ */
+export function eventEffectSummary(effects: GameEventEffects): string {
+  const parts: string[] = [];
+  if (effects.trafficMultiplier !== undefined) {
+    const pct = Math.round((effects.trafficMultiplier - 1) * 100);
+    parts.push(`trafik ${pct >= 0 ? '+' : ''}${pct}%`);
+  }
+  if (effects.wholesalePriceModifier !== undefined) {
+    const pct = Math.round(effects.wholesalePriceModifier * 100);
+    parts.push(`alış ${pct >= 0 ? '+' : ''}${pct}%`);
+  }
+  if (effects.tipMultiplier !== undefined) parts.push(`bahşiş ×${effects.tipMultiplier}`);
+  if (effects.pumpsDisabled) parts.push('pompalar ve şarj kapalı');
+  if (effects.reputationDelta) parts.push(`itibar ${effects.reputationDelta > 0 ? '+' : ''}${effects.reputationDelta.toFixed(2)}`);
+  if (effects.cashDelta) parts.push(`${effects.cashDelta > 0 ? '+' : '−'}₺${Math.abs(effects.cashDelta).toLocaleString('tr-TR')}`);
+  if (effects.cleanlinessDelta) parts.push(`temizlik ${effects.cleanlinessDelta}`);
+  if (effects.pumpHealthDelta) parts.push(`bir pompa ${effects.pumpHealthDelta} sağlık`);
+  return parts.join(' · ');
 }
 
 /* ------------------------------------------------------------------ */
@@ -4949,9 +4992,11 @@ function tickEnergy(state: GameState, dt: number): void {
       bill(liters * tank.averageCost);
     }
 
-    // The grid last, through the contract on the substation.
+    // The grid last, through the contract on the substation — and not at
+    // all during an outage: that is what an outage is.
     const substation = substationOn(state, side);
     if (!substation) continue;
+    if (getEventModifiers(state).pumpsDisabled) continue;
     if (dutyActive(state, 'nightGridFill') && !isNightTariff(hour)) {
       // The manager waits for the cheap window — unless the bank is about
       // to leave customers standing at a dead post.
@@ -5280,7 +5325,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const bare = !laidOut;
 
   // An electric customer is only servable where there is somewhere to plug in.
-  const canCharge = !bare && chargingPoints(state, side).length > 0;
+  const canCharge = !bare && !mods.pumpsDisabled && chargingPoints(state, side).length > 0;
 
   const servable = (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
     const conf = GAME_CONFIG.customerTypes[a];

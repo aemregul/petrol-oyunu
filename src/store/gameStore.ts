@@ -263,6 +263,8 @@ function beginNewDay(state: GameState, effects: ReturnType<typeof createEffects>
   // Yesterday's events are over; roll a fresh market shock for the new day.
   state.activeEvents = [];
   state.todayEventIds = [];
+  state.dayState.eventsToday = 0;
+  state.dayState.lastEventAtHour = undefined;
   rollDailyEvent(state, effects);
 
   // Roll tomorrow's wholesale prices and let the regional average drift with them.

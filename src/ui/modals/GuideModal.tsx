@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { GAME_EVENTS } from '../../config/eventConfig';
-import { FUEL_DEAL_DISCOUNT } from '../../domain/services/simulationEngine';
+import { FUEL_DEAL_DISCOUNT, eventEffectSummary } from '../../domain/services/simulationEngine';
 import { X, BookOpen, Play } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
@@ -175,7 +175,10 @@ function sections(): Section[] {
             </div>
             {GAME_EVENTS.map((e) => (
               <div key={e.id} className="bg-board border-2 border-ink rounded-md px-3 py-2">
-                <div className="font-display text-[14px] text-ink">{e.name}</div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-display text-[14px] text-ink">{e.name}</span>
+                  <span className="text-[11px] font-bold font-mono text-kblu whitespace-nowrap">{eventEffectSummary(e.effects) || 'temizliğe göre'}</span>
+                </div>
                 <div className="text-[12px] font-semibold text-mute">{e.description}</div>
               </div>
             ))}

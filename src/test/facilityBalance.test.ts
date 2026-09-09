@@ -68,6 +68,8 @@ function station(): GameState {
   s.player.level = 12;
   s.player.reputation = 4;
   attendant(s, 'e1', 'pump_1');
+  // A day without the road's events: this measures the buildings, not the luck.
+  s.dayState.eventsToday = 99;
   return s;
 }
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { ActiveGameEvent } from '../domain/types/gameState';
-import { FUEL_DEAL_DISCOUNT } from '../domain/services/simulationEngine';
+import { FUEL_DEAL_DISCOUNT, eventEffectSummary } from '../domain/services/simulationEngine';
 import { TONE_GLASS, TONE_TEXT, TONE_DOT, type Tone } from './gameStyle';
 import {
   TrendingUp,
@@ -175,7 +175,7 @@ export const ActiveEventsBar: React.FC = () => {
           <EventChip
             key={event.id}
             title={event.name}
-            hint={event.description}
+            hint={`${eventEffectSummary(event.effects)} — ${event.description}`}
             timeLabel={eventTimeLabel(event.remainingHours)}
             ratio={event.totalHours > 0 ? event.remainingHours / event.totalHours : 0}
             tone={CATEGORY_TONES[event.category]}

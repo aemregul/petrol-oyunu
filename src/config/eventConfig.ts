@@ -44,7 +44,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Tedarikçi kampanya başlattı. Bugün toptan alış %6 daha ucuz.',
     category: 'ECONOMY',
     icon: 'TrendingDown',
-    weight: 10,
+    weight: 8,
     minLevel: 1,
     durationHours: 16,
     daily: true,
@@ -56,8 +56,8 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Döviz kuru sıçradı; ithal yakıt maliyeti %12 arttı.',
     category: 'ECONOMY',
     icon: 'AlertTriangle',
-    weight: 5,
-    minLevel: 4,
+    weight: 6,
+    minLevel: 3,
     durationHours: 16,
     daily: true,
     effects: { wholesalePriceModifier: 0.12 }
@@ -70,7 +70,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Ana yolda trafik patladı. Gelen araç sayısı belirgin şekilde arttı.',
     category: 'TRAFFIC',
     icon: 'Car',
-    weight: 14,
+    weight: 9,
     minLevel: 1,
     durationHours: 2,
     effects: { trafficMultiplier: 1.6 }
@@ -81,8 +81,8 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Şehirde festival var; yoldan geçen araç trafiği ikiye katlandı.',
     category: 'TRAFFIC',
     icon: 'PartyPopper',
-    weight: 8,
-    minLevel: 3,
+    weight: 6,
+    minLevel: 2,
     durationHours: 4,
     effects: { trafficMultiplier: 1.9 }
   },
@@ -103,7 +103,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Yakındaki rakip istasyon indirim kampanyası açtı; trafiğin bir kısmı oraya kaydı.',
     category: 'TRAFFIC',
     icon: 'Users',
-    weight: 8,
+    weight: 9,
     minLevel: 3,
     durationHours: 4,
     effects: { trafficMultiplier: 0.65 }
@@ -116,7 +116,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Bir pompada yakıt döküldü. Saha kirlendi ve müşteriler rahatsız oldu.',
     category: 'INCIDENT',
     icon: 'Droplets',
-    weight: 9,
+    weight: 8,
     minLevel: 2,
     durationHours: 0,
     effects: { cleanlinessDelta: -25, reputationDelta: -0.06 }
@@ -139,7 +139,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
     category: 'INCIDENT',
     icon: 'ZapOff',
     weight: 5,
-    minLevel: 4,
+    minLevel: 3,
     durationHours: 1,
     effects: { pumpsDisabled: true }
   },
@@ -150,7 +150,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
     category: 'INCIDENT',
     icon: 'ClipboardCheck',
     weight: 7,
-    minLevel: 3,
+    minLevel: 2,
     durationHours: 0,
     effects: {} // resolved dynamically from station cleanliness
   },
@@ -162,8 +162,8 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Lüks araç konvoyu istasyona uğradı; bahşişler üç katına çıktı.',
     category: 'OPPORTUNITY',
     icon: 'Crown',
-    weight: 7,
-    minLevel: 5,
+    weight: 5,
+    minLevel: 4,
     durationHours: 2,
     effects: { tipMultiplier: 3, trafficMultiplier: 1.2 }
   },
@@ -173,8 +173,8 @@ export const GAME_EVENTS: GameEventConfig[] = [
     description: 'Bir kargo firması filosunu istasyonunuza yönlendirdi. Peşin avans yatırıldı.',
     category: 'OPPORTUNITY',
     icon: 'Truck',
-    weight: 6,
-    minLevel: 6,
+    weight: 4,
+    minLevel: 5,
     durationHours: 5,
     effects: { cashDelta: 6000, trafficMultiplier: 1.35 }
   },

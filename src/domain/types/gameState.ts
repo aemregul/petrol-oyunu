@@ -518,6 +518,13 @@ export interface DayState {
    * steady; what comes in waves is how many of those drivers decide to stop.
    */
   rushSecondsLeft?: number;
+  /**
+   * The road's events are paced (Emre, 2026-09-09): when the last one fired,
+   * in game hours, and how many have fired today, so they neither pile up
+   * nor vanish for days.
+   */
+  lastEventAtHour?: number;
+  eventsToday?: number;
   todayStats: {
     fuelRevenue: number;
     fuelCost: number;

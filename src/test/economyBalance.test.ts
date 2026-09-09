@@ -85,6 +85,8 @@ describe('a day at the starting station', () => {
     state.dayState.timeSpeed = 1;
     state.player.cash = 300000;
     attendant(state, 'e1', 'pump_1');
+    // A day without the road's events: this measures the station, not the luck.
+    state.dayState.eventsToday = 99;
     runDay(state);
 
     const net = dayNet(state);
