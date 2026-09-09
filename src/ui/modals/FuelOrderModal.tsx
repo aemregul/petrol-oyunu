@@ -6,7 +6,8 @@ import { X, Truck, Calendar } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { isFuelDealOn, FUEL_DEAL_DISCOUNT } from '../../domain/services/simulationEngine';
 
-const FUEL_ORDER_STEP = 200;
+// One button press is one order step (Emre, 2026-09-09: 600 L was unreachable at 200).
+const FUEL_ORDER_STEP = GAME_CONFIG.fuels.gasoline.orderStepLiters;
 
 /**
  * Karton: each fuel wears one of the sticker colours — green for petrol,
@@ -42,8 +43,8 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
   const pricing = gameState.pricing[fuelType];
 
   const unlocked    = tank && tank.capacity > 0;
-  const free        = unlocked ? Math.max(0, tank.capacity - tank.stock) : 0;
-  const full        = free < conf.orderMinLiters;
+  const free        = unlocked ? Math.floor(Math.max(0, tank.capacity - tank.stock)) : 0;
+  const full        = free < 1;
 
   const supplier    = GAME_CONFIG.suppliers.find((s) => s.id === supplierId)
     ?? GAME_CONFIG.suppliers[1];
@@ -53,23 +54,48 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
     : (pricing?.todayWholesaleCost ?? conf.baseWholesale);
   const unitCost = Number((baseUnitCost * supplier.priceMultiplier).toFixed(2));
 
-  const maxLiters   = Math.max(conf.orderMinLiters, Math.floor(free / FUEL_ORDER_STEP) * FUEL_ORDER_STEP);
+  // The ceiling is the tank or the till, whichever comes first: after the
+  // delivery fee, how many litres the cash covers (Emre, 2026-09-09: "param
+  // ne kadarına yetiyorsa"). MAX fills to that, never past it.
+  const affordable  = Math.floor((gameState.player.cash - conf.deliveryFee) / unitCost);
+  const maxLiters   = Math.max(1, Math.min(free, affordable));
+  const broke       = affordable < 1;
+  // What the box holds is text while it is being typed: clamping every
+  // keystroke made "600" impossible to enter, since "6" snapped to 500 and
+  // the rest was typed over it. And any whole litre goes — 218 if that is
+  // what the till allows (Emre, 2026-09-09); the minimum and the step are
+  // the manager's rules for tankers it calls, not the player's. The number
+  // is settled inside the tank when the box is left or the order is placed.
+  const settle = (raw: number) => Math.min(maxLiters, Math.max(1, Math.round(raw)));
   const [liters, setLiters]   = useState<number>(Math.min(conf.orderMinLiters, maxLiters));
-  const clampedLiters         = Math.min(maxLiters, Math.max(conf.orderMinLiters, liters));
+  const [typed, setTyped]     = useState<string | null>(null);
+  const clampedLiters         = settle(liters);
   const totalCost             = clampedLiters * unitCost + conf.deliveryFee;
   const canAfford             = gameState.player.cash >= totalCost;
 
   const step = (delta: number) => {
-    setLiters((prev) => Math.min(maxLiters, Math.max(conf.orderMinLiters, prev + delta)));
+    setTyped(null);
+    setLiters((prev) => settle(settle(prev) + delta));
   };
 
-  const handleMax = () => setLiters(maxLiters);
+  const handleMax = () => { setTyped(null); setLiters(maxLiters); };
+
+  const commitTyped = () => {
+    if (typed === null) return;
+    const raw = Number(typed);
+    if (Number.isFinite(raw) && raw > 0) setLiters(settle(raw));
+    setTyped(null);
+  };
 
   const handleOrder = () => {
-    if (full || !canAfford || !unlocked) return;
+    if (full || broke || !canAfford || !unlocked) return;
+    const raw = typed === null ? clampedLiters : Number(typed);
+    const amount = Number.isFinite(raw) && raw > 0 ? settle(raw) : clampedLiters;
+    setTyped(null);
+    setLiters(amount);
     sounds.playClick();
-    orderFuel(fuelType, clampedLiters, supplierId);
-    // Modal kapanmaz, satır stok değeri güncellenir.
+    orderFuel(fuelType, amount, supplierId);
+    // The card stays open: one tanker is rarely the last (Emre, 2026-09-09).
   };
 
   const tone = FUEL_TONE[fuelType];
@@ -105,6 +131,11 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
             <span className="ml-1.5 text-kgrn font-medium">
               +{diffLiters} L · alış {unitCost.toFixed(1)} TL/L
             </span>
+            {affordable < free && (
+              <span className={`ml-1.5 font-medium ${broke ? 'text-kred' : 'text-kyel-dark'}`}>
+                {broke ? '· nakliye için para yok' : `· kasan ${affordable} L\'ye yeter`}
+              </span>
+            )}
           </div>
         )}
         {/* Bar */}
@@ -125,18 +156,19 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => step(-FUEL_ORDER_STEP)}
-            disabled={clampedLiters <= conf.orderMinLiters}
+            disabled={clampedLiters <= 1}
             className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
           >
             −
           </button>
           <input
-            type="number"
-            min={conf.orderMinLiters}
-            max={maxLiters}
-            step={FUEL_ORDER_STEP}
-            value={clampedLiters}
-            onChange={(e) => setLiters(Number(e.target.value))}
+            type="text"
+            inputMode="numeric"
+            value={typed ?? String(clampedLiters)}
+            onChange={(e) => setTyped(e.target.value.replace(/[^0-9]/g, ''))}
+            onBlur={commitTyped}
+            onKeyDown={(e) => { if (e.key === 'Enter') { commitTyped(); handleOrder(); } }}
+            title={`1–${maxLiters} L, istediğin rakamı yaz`}
             className="w-20 text-center bg-paper border-2 border-ink rounded-md text-ink font-display text-sm px-2 py-1 focus:outline-none"
           />
           <button
@@ -254,7 +286,7 @@ export const FuelOrderModal: React.FC = () => {
               {supplier.description}
             </div>
             <div className="text-xs text-mute leading-relaxed border-t-2 border-dashed border-mute/60 pt-3">
-              Litreyi elle yazabilir, –/+ ile {FUEL_ORDER_STEP}L adımlayabilir ya da MAX ile depoyu fulleyebilirsin.
+              İstediğin litreyi yaz — 218 de olur — ya da –/+ ile {FUEL_ORDER_STEP}L adımla, MAX ile depoyu fulle. Kart sipariş sonrası açık kalır.
               Her yakıtın tankeri ayrı gelir ve boşaltır.
             </div>
           </div>

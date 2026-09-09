@@ -2660,7 +2660,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     flushEffects(state, effects);
 
     if (placed) SaveManager.saveGame(state);
-    set({ gameState: state, activeModal: placed ? 'NONE' : get().activeModal });
+    // The order card stays open after a tanker is called: one is rarely
+    // the last, and reopening it for each was a chore (Emre, 2026-09-09).
+    set({ gameState: state });
     return placed;
   },
 

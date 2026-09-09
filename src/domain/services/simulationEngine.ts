@@ -6982,6 +6982,10 @@ export function placeFuelOrder(
   }
 
   const freeCapacity = tank.capacity - tank.stock;
+  if (!Number.isFinite(liters) || liters < 1) {
+    notify(effects, 'WARNING', 'Geçersiz Miktar', 'En az 1 litre sipariş edilebilir.');
+    return false;
+  }
   if (liters > freeCapacity) {
     notify(
       effects,
