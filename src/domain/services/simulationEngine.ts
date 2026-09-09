@@ -1653,7 +1653,7 @@ function rerouteAroundSolid(
     ];
     for (const option of options) {
       const route = option();
-      if (route) return route; // BISECT-BODY
+      if (route && routeBodyClear(state, from, block.side, from.worldPosition, route)) return route;
     }
     return null;
   };
@@ -1693,9 +1693,15 @@ function rerouteAroundSolid(
 /**
  * Rotanın tamamı gövdeyle sürülebilir mi? Katı yapı kuralının (bodyInSolid)
  * adım adım soracağı soruyu peşinen sorar: rota boyunca örneklenen her
- * noktada araç gövdesi bir binanın ya da adanın içine girmemeli. Aracın zaten
- * durduğu ilk araç boyu muaf — dibine yapıştığı duvarın payı, oradan
- * UZAKLAŞAN rotayı geçersiz kılmasın.
+ * noktada araç gövdesi bir binanın ya da adanın içine girmemeli.
+ *
+ * İlk araç boyunun muafiyeti, sürücünün kendi kuralıyla AYNI koşula bağlıdır:
+ * yalnız gövdesi hâlihazırda bir katının içinde yakalanmış araç (eski kayıt,
+ * sonradan dikilen bina) oradan çıkabilsin diye. Muafiyet koşulsuz olduğunda,
+ * bay'de duran aracın olduğu yerde dönüp kuyruğunu adaya sokan rotası
+ * "sürülebilir" görünüyor, sürücü her adımı geri alıyor ve araç pompanın
+ * dibinde donup kalıyordu — üstelik pompa serbest bırakıldığı için bir sonraki
+ * müşteri aynı bay'e, duran aracın ÜSTÜNE yanaşıyordu (Emre, 2026-09-09).
  */
 function routeBodyClear(
   state: GameState,
@@ -1704,6 +1710,7 @@ function routeBodyClear(
   from: [number, number, number],
   route: Array<[number, number, number]>
 ): boolean {
+  const startsInside = bodyInSolid(state, vehicle, side, from[0], from[2], vehicle.heading);
   let px = from[0];
   let pz = from[2];
   let travelled = 0;
@@ -1717,7 +1724,7 @@ function routeBodyClear(
       const steps = Math.ceil(length / 0.3);
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
-        if (travelled + length * t < 1) continue;
+        if (startsInside && travelled + length * t < 1) continue;
         if (bodyInSolid(state, vehicle, side, px + dx * t, pz + dz * t, heading)) return false;
       }
     }
@@ -2742,18 +2749,25 @@ function exitRoute(
     }
   }
 
-  // Yan/arka bay'den ayrılan da önce burnu yönünde bir araç boyu çıkar;
-  // gerisini planlayıcı o noktadan devralır. (Gövde, yerinde dönüşte adaya
-  // değmesin diye.)
+  // Bay'den ayrılan HER araç önce burnu yönünde düz çıkar; gerisini planlayıcı
+  // o noktadan devralır. (Gövde, yerinde dönüşte adaya değmesin diye.)
   //
-  // A post's bay can sit a car's length from the next building — a tank
-  // farm, a bank — and a full roll into that building's margin gives the
-  // planner a start it refuses. So the roll is as long as fits: the longest
-  // of a few that ends outside the planner's clearance and runs clear of
-  // everything but the post itself; failing that, the shortest that merely
-  // runs clear, since turning on the spot puts the tail through the post.
+  // A bay can sit a car's length from the next building — a tank farm, a
+  // bank — and a full roll into that building's margin gives the planner a
+  // start it refuses. So the roll is as long as fits: the longest of a few
+  // that ends outside the planner's clearance and runs clear of everything
+  // but the post itself; failing that, the shortest that merely runs clear,
+  // since turning on the spot puts the tail through the island.
+  //
+  // Emre, 2026-09-09 ("iki araba üst üste kaldı"): bu, yalnız şarj direğinin
+  // ayrıcalığıydı. Ön yüzünden çıkılan bir pompa bay'i, düz çıkış yolu bir
+  // yapıyla kesildiği an bu bölüme "çıkış hamlesi yok" diye düşüyor,
+  // planlayıcı da aracı olduğu yerde döndüren bir çapraz çiziyordu: kuyruk
+  // adaya giriyor, katı kural her adımı geri alıyor ve müşteri bay'de
+  // taşlaşıyordu. Pompa bu arada serbest bırakıldığından bir sonraki müşteri
+  // aynı bay'e, duran aracın üstüne yanaşıyordu.
   let rollAhead: [number, number, number] | null = null;
-  if (bayKind === 'other' && bayDir) {
+  if (bayDir) {
     const rollTo = (reach: number): [number, number, number] =>
       clampLaneToApron(block, [
         from.worldPosition[0] + bayDir![0] * reach,
@@ -2763,18 +2777,17 @@ function exitRoute(
     const here: [number, number] = [from.worldPosition[0], from.worldPosition[2]];
     const tight = wallRects(state, block.side, 0, bayPostId);
     const roomy = wallRects(state, block.side, undefined, bayPostId);
-    const reaches = bayPostId ? [2.4, 1.8, 1.2] : [2.4];
+    const reaches = [2.4, 1.8, 1.2];
     rollAhead =
       reaches
         .map(rollTo)
         .find((p) => legIsClear(tight, here, [p[0], p[2]]) && !inRects(roomy, p[0], p[2])) ??
-      (bayPostId
-        ? reaches
-            .slice()
-            .reverse()
-            .map(rollTo)
-            .find((p) => legIsClear(tight, here, [p[0], p[2]])) ?? null
-        : null);
+      reaches
+        .slice()
+        .reverse()
+        .map(rollTo)
+        .find((p) => legIsClear(tight, here, [p[0], p[2]])) ??
+      null;
   }
   const rollAheadClear = rollAhead !== null;
   const start: [number, number, number] = rollAheadClear
@@ -5050,14 +5063,43 @@ export function chargerAttendant(state: GameState, chargerId: string): EmployeeE
 /** A charging point on this block with nobody plugged into it. */
 function findFreeCharger(
   state: GameState,
-  side: DrivewaySide
+  side: DrivewaySide,
+  driver?: VehicleEntity,
+  block?: BlockLayout
 ): { id: string; kind: 'ac' | 'dc'; position: [number, number] } | null {
   const taken = new Set(
     Object.values(state.vehicles)
       .map((v) => v.chargingBuildingId)
       .filter(Boolean) as string[]
   );
-  return chargingPoints(state, side).find((point) => !taken.has(point.id)) ?? null;
+  // Direğin fişi boşsa da alanı boş olmayabilir: şarjı biten araç direğin
+  // önünden çıkana kadar orası doludur. Pompadaki kuralın aynısı (bkz.
+  // bayStandsEmpty) — iki gövde bir duruş alanında durmaz.
+  return (
+    chargingPoints(state, side).find(
+      (point) =>
+        !taken.has(point.id) &&
+        (!driver || !block || postBayStandsEmpty(state, block, point, driver))
+    ) ?? null
+  );
+}
+
+/** Bir şarj direğinin duruş alanında başka bir araç duruyor mu? */
+function postBayStandsEmpty(
+  state: GameState,
+  block: BlockLayout,
+  point: { id: string; position: [number, number] },
+  driver: VehicleEntity
+): boolean {
+  const post = state.buildings[point.id];
+  const [ox, oz] = pumpBayOffset({ rotation: post?.rotation, type: post?.type });
+  const bay = clampBayToApron(block, [point.position[0] + ox, 0, point.position[1] + oz]);
+  return !Object.values(state.vehicles).some(
+    (other) =>
+      other.id !== driver.id &&
+      Math.hypot(other.worldPosition[0] - bay[0], other.worldPosition[2] - bay[2]) <
+        BAY_CLEAR_RADIUS
+  );
 }
 
 /**
@@ -5515,13 +5557,41 @@ function pickWeighted<T>(items: T[], weightOf: (item: T) => number): T {
   return items[items.length - 1];
 }
 
+/**
+ * Bir bay'de hâlâ gövdesiyle duran araç var mı?
+ *
+ * Emre, 2026-09-09: "iki araba üst üste kaldı". Pompa, müşteri servisi bitip
+ * yola çıktığı anda serbest bırakılır; ayrılan aracın bay'den GERÇEKTEN
+ * çıkması ise bir sonraki birkaç saniyeye yayılır ve kapalı bir düzende hiç
+ * gerçekleşmeyebilir. Serbest kalan pompa hemen sıradakine verildiğinde yeni
+ * müşteri, önalan içinde araçlar birbirine hayalet olduğu için duran aracın
+ * tam üstüne yanaşıyordu. Boş olan pompa yetmez: bay'in kendisi de boş olmalı.
+ */
+const BAY_CLEAR_RADIUS = 1.5;
+
+function bayStandsEmpty(
+  state: GameState,
+  block: BlockLayout,
+  pump: PumpEntity,
+  driver: VehicleEntity
+): boolean {
+  const bay = pumpBay(block, pump, driver);
+  return !Object.values(state.vehicles).some(
+    (other) =>
+      other.id !== driver.id &&
+      Math.hypot(other.worldPosition[0] - bay[0], other.worldPosition[2] - bay[2]) <
+        BAY_CLEAR_RADIUS
+  );
+}
+
 /** Finds a free pump that can serve this vehicle's fuel type. */
 function findAvailablePump(
   state: GameState,
   fuelType: FuelType,
   mods: EventModifiers,
   side: DrivewaySide = 'near',
-  driver?: VehicleEntity
+  driver?: VehicleEntity,
+  block?: BlockLayout
 ): PumpEntity | null {
   if (mods.pumpsDisabled) return null;
 
@@ -5542,7 +5612,14 @@ function findAvailablePump(
 
   // A bay with something built across the way to it is not an available bay.
   // Left in the list it would be claimed and then driven to through a wall.
-  return ordered.find((pump) => pumpRoute(state, driver, pump) !== null) ?? null;
+  // Nor is one that still has the last customer standing in it.
+  return (
+    ordered.find(
+      (pump) =>
+        (!block || bayStandsEmpty(state, block, pump, driver)) &&
+        pumpRoute(state, driver, pump) !== null
+    ) ?? null
+  );
 }
 
 /**
@@ -5937,7 +6014,7 @@ function tickVehicles(
 
         // An electric customer wants a socket, not a nozzle.
         if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
-          const point = findFreeCharger(state, side);
+          const point = findFreeCharger(state, side, vehicle, block);
           const toCharger = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           const toQueue =
             chargeLine && chargeQueued.length < chargeLine.slots.length
@@ -5963,7 +6040,7 @@ function tickVehicles(
           break;
         }
 
-        const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle);
+        const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle, block);
         const deadForecourt = !pump && blockHasPumps(state, side) && cannotServe(state, vehicle);
 
         if (pump && reservePumpFor(state, vehicle, pump)) {
@@ -6106,7 +6183,7 @@ function tickVehicles(
 
         // Only the head of the queue may claim a point that has come free.
         if (slot === 0 && wantsCharge) {
-          const point = findFreeCharger(state, side);
+          const point = findFreeCharger(state, side, vehicle, block);
           const toPost = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           if (point && toPost) {
             vehicle.chargingBuildingId = point.id;
@@ -6122,7 +6199,7 @@ function tickVehicles(
         }
 
         if (slot === 0) {
-          const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle);
+          const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle, block);
           if (pump && reservePumpFor(state, vehicle, pump)) {
             queued.shift();
           }

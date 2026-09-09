@@ -448,7 +448,16 @@
       "Bash(sed -i \"s/s.setGraphicsQuality\\('HIGH'\\)/s.setGraphicsQuality\\(process.env.TO || 'HIGH'\\)/; s/graphicsQuality: 'HIGH' } } }\\);/graphicsQuality: 'MEDIUM' } } }\\);/\" /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs)",
       "Bash(sed -i '' \"s/if \\(typeof s.setGraphicsQuality === 'function'\\) s.setGraphicsQuality\\('HIGH'\\);/const to = 'MEDIUM';/; s/graphicsQuality: 'HIGH' } } }\\);/graphicsQuality: to } } }\\);/\" /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs)",
       "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/shadow-switch.mjs HIGH)",
-      "Bash(pkill -f \"vite --port 5210\")"
+      "Bash(pkill -f \"vite --port 5210\")",
+      "Bash(curl -s -m 15 -H \"Accept: application/vnd.github+json\" https://api.github.com/orgs/Smart-Code-Studios)",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(d.get\\('login'\\),'| public repos:',d.get\\('public_repos'\\),'| message:',d.get\\('message'\\)\\)\")",
+      "Bash(curl -s -m 15 -H \"Accept: application/vnd.github+json\" \"https://api.github.com/orgs/Smart-Code-Studios/repos?per_page=20\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);[print\\(' -',r['name'],r['visibility']\\) for r in d] if isinstance\\(d,list\\) else print\\(d.get\\('message'\\)\\)\")",
+      "Bash(curl -s -m 15 -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/Smart-Code-Studios/petrol-tycoon-game)",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('ad:',d.get\\('full_name'\\)\\);print\\('gorunurluk:',d.get\\('visibility'\\)\\);print\\('bos mu:',d.get\\('size'\\)==0,'| size:',d.get\\('size'\\)\\);print\\('varsayilan dal:',d.get\\('default_branch'\\)\\);print\\('mesaj:',d.get\\('message'\\)\\)\")",
+      "Bash(grep -rniE \"#\\([0-9a-f]{0,2}\\)?\\(7f|8f|9f|a0|b0\\)?f[f0-9a-f]{0,4}|parkingBay|bayMarker|#7CFC00|#8f8|green\" --include=\"*.tsx\" --include=\"*.ts\" src/rendering)",
+      "Bash(perl -0pi -e 's/findAvailablePump\\\\\\(state, vehicle\\\\.fuelType, mods, side, vehicle\\\\\\)/findAvailablePump\\(state, vehicle.fuelType, mods, side, vehicle, block\\)/g' src/domain/services/simulationEngine.ts)",
+      "Bash(perl -0pi -e 's/const point = findFreeCharger\\\\\\(state, side\\\\\\);/const point = findFreeCharger\\(state, side, vehicle, block\\);/g' src/domain/services/simulationEngine.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp",
