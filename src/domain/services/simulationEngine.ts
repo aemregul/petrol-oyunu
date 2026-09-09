@@ -79,6 +79,7 @@ import {
 import { dutyActive, managerDailyWage, managerTier, MANAGER_CLEAN_BELOW } from './managerDuties';
 import { pumpName } from './pumpNames';
 import { FAR_SIDE_FRONT, farSideBounds, unpavedHoles } from './land';
+import { vehicleBodyHalfExtents } from './vehicleBody';
 import {
   dieselForGenerator,
   generatorWants,
@@ -1097,38 +1098,7 @@ const FOLLOW_CORRIDOR = 1.2;
  */
 const CAR_CLEARANCE = 1.4;
 
-/**
- * Half-extents in simulation grid units. Rendering doubles grid coordinates,
- * so a regular 0.9-long car becomes roughly 3.6 scene units nose to tail.
- */
-export function vehicleBodyHalfExtents(
-  vehicle: Pick<VehicleEntity, 'archetype' | 'modelVariant'>
-): { length: number; width: number } {
-  switch (vehicle.modelVariant) {
-    case 'truck-with-trailer':
-      return { length: 2.15, width: 0.55 };
-    case 'bus':
-      return { length: 2.05, width: 0.55 };
-    case 'firetruck':
-      return { length: 1.9, width: 0.62 };
-    case 'limousine':
-      return { length: 2.15, width: 0.58 };
-    case 'ambulance':
-      return { length: 1.38, width: 0.55 };
-    case 'van':
-      return { length: 1.12, width: 0.48 };
-    case 'truck':
-      return { length: 1.12, width: 0.52 };
-    case 'monster-truck':
-      return { length: 1.05, width: 0.68 };
-    default:
-      if (vehicle.archetype === 'truck') return { length: 1.12, width: 0.52 };
-      if (vehicle.archetype === 'bus') return { length: 2.05, width: 0.55 };
-      if (vehicle.archetype === 'ambulance') return { length: 1.38, width: 0.55 };
-      if (vehicle.archetype === 'firetruck') return { length: 1.9, width: 0.62 };
-      return { length: 0.9, width: 0.43 };
-  }
-}
+export { vehicleBodyHalfExtents } from './vehicleBody';
 
 /**
  * The gap in the traffic a driver waits for before joining a carriageway.
@@ -1453,7 +1423,7 @@ function solidRects(
   return rects;
 }
 
-function bodyInSolid(
+export function bodyInSolid(
   state: GameState,
   vehicle: VehicleEntity,
   side: DrivewaySide,
@@ -1646,11 +1616,21 @@ function rerouteAroundSolid(
     // ölçer ve hedef ufukta olunca boşluk denetimi hiç tutmaz — araç akan
     // trafiğin içine dalar. Ayrılan araç bu yüzden ham [goal] yerine, yola
     // düzgün katılım bacakları kuran exitRoute ile çıkar.
-    const options = [
-      () => driveable(state, from, block, remaining, ignorePump, ignoreBuilding),
-      () => driveable(state, from, block, [goal], ignorePump, ignoreBuilding),
-      ...(vehicle.state === 'EXIT' ? [() => exitRoute(state, from)] : []) // BISECT
-    ];
+    // Ayrılan araç için ham [goal] seçeneği YOK: hedef yolun ucudur, arsanın
+    // dışındadır, ve planlayıcı ona giden düz bacağı arsanın yan ya da arka
+    // kenarından çıkarabilir — araç tarladan yola iniyor, yoldakiler onu
+    // trafik sanıp bekliyor, o da yola bağlanamayıp 20 saniyede siliniyordu
+    // (Emre, 2026-09-09). Yoldan çıkış yalnız ağızdan olur: exitRoute.
+    const options =
+      vehicle.state === 'EXIT'
+        ? [
+            () => driveable(state, from, block, remaining, ignorePump, ignoreBuilding),
+            () => exitRoute(state, from)
+          ]
+        : [
+            () => driveable(state, from, block, remaining, ignorePump, ignoreBuilding),
+            () => driveable(state, from, block, [goal], ignorePump, ignoreBuilding)
+          ];
     for (const option of options) {
       const route = option();
       if (route && routeBodyClear(state, from, block.side, from.worldPosition, route)) return route;
@@ -1703,7 +1683,7 @@ function rerouteAroundSolid(
  * dibinde donup kalıyordu — üstelik pompa serbest bırakıldığı için bir sonraki
  * müşteri aynı bay'e, duran aracın ÜSTÜNE yanaşıyordu (Emre, 2026-09-09).
  */
-function routeBodyClear(
+export function routeBodyClear(
   state: GameState,
   vehicle: VehicleEntity,
   side: DrivewaySide,
@@ -2482,7 +2462,7 @@ function approachBay(
   return [...toRunUp, ...tail];
 }
 
-function pumpRoute(
+export function pumpRoute(
   state: GameState,
   vehicle: VehicleEntity,
   pump: PumpEntity
@@ -2722,10 +2702,13 @@ function exitRoute(
   // it leaves the same way; it used to be invisible here, so the leaver
   // planned from inside the post's shadow, found no way, and dissolved on
   // the spot (Emre, 2026-09-07).
-  const servicePoints: Array<{ id?: string; position: [number, number]; rotation?: number; bay: [number, number, number]; type?: string }> = [
+  // The island the car stands beside, when it is a pump's: excused from the
+  // roll-out checks below the way a post is, while every OTHER island counts.
+  let bayPumpId: string | undefined;
+  const servicePoints: Array<{ id?: string; pumpId?: string; position: [number, number]; rotation?: number; bay: [number, number, number]; type?: string }> = [
     ...Object.values(state.pumps)
       .filter((pump) => pumpSide(pump) === block.side)
-      .map((pump) => ({ position: pump.position, rotation: pump.rotation, bay: pumpBay(block, pump, from) })),
+      .map((pump) => ({ pumpId: pump.id, position: pump.position, rotation: pump.rotation, bay: pumpBay(block, pump, from) })),
     ...Object.values(state.buildings)
       .filter((b) => isChargerType(b.type) && drivewaySideAt(b.position[1]) === block.side)
       .map((post) => {
@@ -2744,12 +2727,21 @@ function exitRoute(
     bayKind = (point.position[1] - point.bay[2]) * inwardHere > 0 ? 'front' : 'other';
     bayDir = bayApproachDir({ rotation: point.rotation });
     bayPostId = point.id;
+    bayPumpId = point.pumpId;
     break;
   }
   // Bay'den ayrılış gerçek hayattaki gibi: önce burnun doğrultusunda İLERİ
   // çık, sonra dön. Olduğu yerde burnu başka yöne çevirmek, aracın kuyruğunu
   // pompa adasının içine sokar — katı yapı kuralı o dönüşü haklı olarak
   // durduruyor ve araç bay'de sonsuza dek asılı kalıyordu.
+  // Çıkış adayları sırayla denenir ve GÖVDEYLE sürülebilen ilki verilir;
+  // hiçbiri sürülemiyorsa yine de ilk bulunan verilir — kurtarma makinesi
+  // (rerouteAroundSolid) yoldan çalışır. Otobüs, tank sahasının payının bir
+  // parmak dışındaki bir dönüş noktasında kuyruğunu sahaya sokup dört saniye
+  // çakılı kalıyordu; öteki şeritten çizilen aday temizdi ama hiç sorulmamıştı
+  // (Emre, 2026-09-09).
+  const candidates: Array<Array<[number, number, number]>> = [];
+
   if (bayKind === 'front' && bayDir) {
     const rollOut = clampLaneToApron(block, [
       from.worldPosition[0] + bayDir[0] * 2.4,
@@ -2762,7 +2754,15 @@ function exitRoute(
     // ve planlayıcının kestirme çaprazları, dönen aracın köşesini komşu
     // pompaya sokup katı-yapı kuralına yakalatıyordu. Yalnızca araya
     // gerçekten bina girmişse (oyuncunun marifeti) olağan akışa düşülür.
-    const walls = wallRects(state, block.side, 0, bayPostId);
+    // Komşu adalar da sayılır, hem de dönüş payıyla: araç çıkış noktasında
+    // şeride doğru DÖNER ve kuyruğu yarım araç boyu (0.9) savrulur. Yan yana
+    // iki pompada tam boy çıkış öteki adanın dibine geliyor, dönüşte kuyruk
+    // adaya giriyor, araç orada kalıyordu (Emre, 2026-09-09). Sığmazsa
+    // aşağıdaki kademeli çıkış devralır.
+    const walls = [
+      ...wallRects(state, block.side, 0, bayPostId),
+      ...pumpRects(state, block.side, bayPumpId, 0.9)
+    ];
     const clear =
       legIsClear(walls, [from.worldPosition[0], from.worldPosition[2]], [rollOut[0], rollOut[2]]) &&
       legIsClear(walls, [rollOut[0], rollOut[2]], [ontoLane[0], ontoLane[2]]) &&
@@ -2772,13 +2772,15 @@ function exitRoute(
       // open too instead of assuming the kerb opening is empty.
       legIsClear(walls, [laneX, block.laneZ], [laneX, block.roadLaneZ]);
     if (clear) {
-      return [
+      const straight: Array<[number, number, number]> = [
         rollOut,
         ontoLane,
         [laneX, 0, block.laneZ],
         [laneX, 0, block.roadLaneZ],
         [block.roadEndX, 0, block.roadLaneZ]
       ];
+      if (routeBodyClear(state, from, block.side, from.worldPosition, straight)) return straight;
+      candidates.push(straight);
     }
   }
 
@@ -2808,25 +2810,40 @@ function exitRoute(
         from.worldPosition[2] + bayDir![1] * reach
       ]);
     const here: [number, number] = [from.worldPosition[0], from.worldPosition[2]];
-    const tight = wallRects(state, block.side, 0, bayPostId);
-    const roomy = wallRects(state, block.side, undefined, bayPostId);
-    const reaches = [2.4, 1.8, 1.2];
+    // Çıkış noktası, aracın ŞERİDE DÖNEBİLDİĞİ ilk noktadır — gövdeyle
+    // ölçülür, payla değil: yan yana iki pompada adalar bitişik bir duvar
+    // kurar, bay'ler o duvarın önündedir ve duvara paralel duran araç hiçbir
+    // noktada yerinde dönemez, kuyruğu her açıda adaya girer (Emre,
+    // 2026-09-09). Tek çıkış, duvarın bitimini geçecek kadar düz ilerlemek;
+    // o yüzden adaylar bir araç boyundan altı birime kadar uzar ve en kısa
+    // GÜVENLİ olanı seçilir. Hiçbiri güvenli değilse gövdenin geçtiği en uzunu
+    // — kurtarma makinesi gerisini getirir.
+    const toLane = (p: [number, number, number]) => Math.atan2(0, block.laneZ - p[2]);
+    const legFits = (p: [number, number, number]) =>
+      bodyClearAlong(state, from, block.side, here, [p[0], p[2]]);
+    const pivotFits = (p: [number, number, number]) =>
+      !bodyInSolid(state, from, block.side, p[0], p[2], toLane(p));
+    const points = [1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4, 6.0].map(rollTo);
     rollAhead =
-      reaches
-        .map(rollTo)
-        .find((p) => legIsClear(tight, here, [p[0], p[2]]) && !inRects(roomy, p[0], p[2])) ??
-      reaches
-        .slice()
-        .reverse()
-        .map(rollTo)
-        .find((p) => legIsClear(tight, here, [p[0], p[2]])) ??
+      points.find((p) => legFits(p) && pivotFits(p)) ??
+      points.slice().reverse().find(legFits) ??
       null;
   }
   const rollAheadClear = rollAhead !== null;
   const start: [number, number, number] = rollAheadClear
     ? rollAhead!
     : [from.worldPosition[0], 0, from.worldPosition[2]];
-  const head: Array<[number, number, number]> = rollAheadClear ? [rollAhead!] : [];
+  // The roll-out is driven as measured, never re-planned: the planner keeps a
+  // point's clearance from the islands and calls a leg that runs 0.43 from an
+  // island — a car's actual half-width, along a wall — blocked, then draws a
+  // detour whose first leg leaves the bay on the diagonal, which is the very
+  // pivot the roll-out exists to avoid. So the rest is planned FROM the
+  // roll-out point, and the roll is put back in front.
+  const planner: VehicleEntity = rollAheadClear ? { ...from, worldPosition: rollAhead! } : from;
+  const withRoll = (
+    route: Array<[number, number, number]> | null
+  ): Array<[number, number, number]> | null =>
+    route && rollAheadClear ? [rollAhead!, ...route] : route;
 
   const atFrontOfPlot =
     bayKind === 'front' ||
@@ -2866,12 +2883,11 @@ function exitRoute(
     );
   };
   if (!atFrontOfPlot && (laneX - start[0]) * flow > 1 && forwardOpen()) {
-    const forward = routeAroundOrNull(
+    const forward = withRoll(routeAroundOrNull(
       state,
-      from,
+      planner,
       block.side,
       [
-        ...head,
         offWalls(state, block, clampToApron(block, [start[0], 0, block.laneZ])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
         [laneX, 0, block.roadLaneZ],
@@ -2882,19 +2898,18 @@ function exitRoute(
       undefined,
       bayPostId,
       parkedTruckRects(state)
-    );
-    if (forward) return forward;
+    ));
+    if (forward) candidates.push(forward);
   }
 
   const throughLane = atFrontOfPlot ? block.laneZ : block.exitLaneZ;
 
   const via = (lane: number): Array<[number, number, number]> | null =>
-    routeAroundOrNull(
+    withRoll(routeAroundOrNull(
       state,
-      from,
+      planner,
       block.side,
       [
-        ...head,
         offWalls(state, block, clampToApron(block, [start[0], 0, lane])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, lane])),
         // Leaving the plot down the exit driveway and away along the highway.
@@ -2906,7 +2921,7 @@ function exitRoute(
       undefined,
       bayPostId,
       parkedTruckRects(state)
-    );
+    ));
 
   // Dönüş şeridi ölü doğmuş olabilir: yeterince dolu bir arsada clearLaneZ
   // en az kötü satırı seçer ve o satır bir yapının üstüne düşebilir. O zaman
@@ -2917,13 +2932,37 @@ function exitRoute(
   // back lane walled off by what stands there the planner drew that lap out
   // to the far corner of the plot and only then to the exit (Emre,
   // 2026-09-07: "arsanın en sol üst köşesine kadar gidiyor").
-  if (bayPostId) return via(block.laneZ) ?? via(throughLane);
+  const attempts: Array<() => Array<[number, number, number]> | null> = bayPostId
+    ? [() => via(block.laneZ), () => via(throughLane)]
+    : [() => via(throughLane), ...(throughLane !== block.laneZ ? [() => via(block.laneZ)] : [])];
+  return firstDrivable(state, from, block, candidates, attempts);
+}
 
-  // The return lane can be walled off by what the player built along the
-  // back. Then the front lane is the way out even when the mouth lies
-  // behind: a turn against the traffic beats a car that dissolves where it
-  // stands.
-  return via(throughLane) ?? (throughLane !== block.laneZ ? via(block.laneZ) : null);
+/**
+ * Sürülebilen ilk aday; hiçbiri sürülemiyorsa bulunan ilk rota (null yerine
+ * — bir rota, hiç rota olmamasından iyidir, kurtarma makinesi gerisini
+ * getirir). Tembel adaylar yalnız gerektiğinde çizilir: her biri bir A*.
+ */
+function firstDrivable(
+  state: GameState,
+  from: VehicleEntity,
+  block: BlockLayout,
+  ready: Array<Array<[number, number, number]>>,
+  lazy: Array<() => Array<[number, number, number]> | null>
+): Array<[number, number, number]> | null {
+  let fallback: Array<[number, number, number]> | null = null;
+  const consider = (route: Array<[number, number, number]> | null) => {
+    if (!route) return false;
+    if (routeBodyClear(state, from, block.side, from.worldPosition, route)) return true;
+    fallback ??= route;
+    return false;
+  };
+  for (const route of ready) if (consider(route)) return route;
+  for (const plan of lazy) {
+    const route = plan();
+    if (consider(route)) return route;
+  }
+  return fallback;
 }
 
 function setRoute(vehicle: VehicleEntity, waypoints: Array<[number, number, number]>): void {

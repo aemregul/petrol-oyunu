@@ -26,6 +26,7 @@
 import { GameState, VehicleEntity } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { unpavedHoles } from './land';
+import { vehicleBodyHalfExtents } from './vehicleBody';
 
 /**
  * Built but not solid: nothing here is a wall to steer round. A widened ramp
@@ -570,10 +571,19 @@ function plot(
     )
   ];
 
+  // Both figures were measured for a car. A bus is more than twice as long:
+  // held to a car's turning room it pivoted a hair outside the tank farm's
+  // margin and put its tail through the wall (Emre, 2026-09-09). The body
+  // decides: a long vehicle is held to its own length where it turns, and to
+  // its own width where it runs straight. A car gets exactly the old figures.
+  const body = vehicleBodyHalfExtents(vehicle);
+  const passing = Math.max(PASSING_CLEARANCE, body.width + PASSING_CLEARANCE - 0.43);
+  const turnRoom = Math.max(CLEARANCE, body.length + CLEARANCE - 0.9);
+
   const rects = [
     ...keep(
-      wallRects(state, side, PASSING_CLEARANCE, ignoreBuildingId),
-      pumpRects(state, side, ignorePumpId, PASSING_CLEARANCE)
+      wallRects(state, side, passing, ignoreBuildingId),
+      pumpRects(state, side, ignorePumpId, passing)
     ),
     ...(extraRects ?? [])
   ];
@@ -583,8 +593,8 @@ function plot(
   // between its nodes only need the narrower one.
   const turning = [
     ...keep(
-      wallRects(state, side, CLEARANCE, ignoreBuildingId),
-      pumpRects(state, side, ignorePumpId)
+      wallRects(state, side, turnRoom, ignoreBuildingId),
+      pumpRects(state, side, ignorePumpId, turnRoom)
     ),
     ...(extraRects ?? [])
   ];
