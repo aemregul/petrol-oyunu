@@ -132,6 +132,15 @@ function sections(): Section[] {
           ]} />
           <H>Fiyatlar</H>
           <P>Her ek birim bir öncekinden yüzde otuz pahalıdır; ikinci pompa {lira(Math.round(GAME_CONFIG.buildings.pump_standard.price * GAME_CONFIG.economy.priceGrowthPerUnit / 100) * 100)}, üçüncüsü daha fazla. Süs ve aydınlatma yüzde on artar. Sattığın yapı bedelin yüzde {Math.round(GAME_CONFIG.economy.refundRatio * 100)}'ını geri verir.</P>
+          <H>Ada sundurması</H>
+          <P>Katalogda değil, pompanın kendi panelinde: pompaya tıkla, "+ Sundurma Ekle" de. Bir çatı bir pompayı örter, {lira(GAME_CONFIG.buildings.canopy.price)} eder, günde {lira(GAME_CONFIG.buildings.canopy.dailyUpkeep)} bakım ister.</P>
+          <UL items={[
+            'O pompada dolum yüzde 5 hızlanır; kuyruk daha çabuk erir.',
+            'Çatı altında servis sahayı daha az kirletir: bütün pompalar örtülüyse kirlenme yüzde 30 yavaşlar.',
+            'Her çatı istasyonun çekiciliğine ve müşteri memnuniyetine küçük bir pay ekler.',
+            `Güneş panelleri yalnızca sundurmaya takılır (Seviye ${solar.unlockLevel}); çatısız pompaya panel yok.`,
+            `Sökersen bedelin yüzde ${Math.round(GAME_CONFIG.economy.refundRatio * 100)}'ı geri gelir, üstündeki paneller de onunla gider.`
+          ]} />
           <H>Düzenleme modu</H>
           <P>Sol taraftaki ok düğmesi. Seviye {EDIT_MODE_LEVEL}'te açılır; ona kadar sönük durur. Açıkken yapıya tıkla, yeni yerine koy. Taşıma ücreti yapı bedelinin yüzde {Math.round(GAME_CONFIG.economy.moveFeeRatio * 100)}'si.</P>
         </>

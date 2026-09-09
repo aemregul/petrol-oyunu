@@ -409,7 +409,13 @@
       "Bash(kill 8075 8355 8383)",
       "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
       "Bash(awk '{print $2, $9}')",
-      "WebFetch(domain:docs.web3forms.com)"
+      "WebFetch(domain:docs.web3forms.com)",
+      "Bash(gh repo *)",
+      "Bash(gh api *)",
+      "Bash(printenv)",
+      "Read(//Users/emre/.config/**)",
+      "Bash(git credential *)",
+      "Bash(awk '/^    canopy: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp",
