@@ -134,8 +134,8 @@ export function createInitialGameState(): GameState {
         id: 'office_1',
         type: 'office',
         level: 1,
-        // Saklanan boyut 4x4 (katalogdaki 5x5 değil) ve ayak izi saklanandan
-        // hesaplanır: çift kenar tam sayı merkez ister.
+        // 4x4, katalogla aynı (Emre, 2026-09-09: katalog 5x5 derken plot
+        // 4x4'tü); çift kenar tam sayı merkez ister.
         position: [4, 11],
         rotation: 0,
         size: [4, 4],

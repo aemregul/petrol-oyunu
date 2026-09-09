@@ -404,7 +404,8 @@
       "Bash(awk '/^  \\\\{/{print NR\": \"$0} /id:|weight|chance|probability|minLevel|minDay|duration|effect|traffic|price|reputation|cash|cleanliness|health|tip|power|outage|cooldown/{print NR\": \"$0}' src/config/eventConfig.ts)",
       "Bash(awk '/^  customerTypes: \\\\{/,/^  \\\\},$/' src/config/gameConfig.ts)",
       "Bash(sed 's/Olaylar sözlüğü/Araçlar/; s/guide-events.png/guide-vehicles.png/' /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad/events-shot.mjs)",
-      "Bash(node /Users/emre/petrol-oyunu/_gv.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)"
+      "Bash(node /Users/emre/petrol-oyunu/_gv.tmp.mjs /private/tmp/claude-501/-Users-emre-petrol-oyunu/ef8631d7-3c31-404e-9728-80fefd399120/scratchpad 3000)",
+      "Bash(awk '/^    office: \\\\{/,/^    \\\\},$/' src/config/gameConfig.ts)"
     ],
     "additionalDirectories": [
       "/private/tmp",

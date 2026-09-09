@@ -522,7 +522,7 @@ export const GAME_CONFIG: GameConfig = {
       category: 'structure',
       price: 39500,
       dailyUpkeep: 180,
-      size: [5, 5],
+      size: [4, 4],
       unlockLevel: 5,
       description: 'Gelişmiş finansal raporlama ve istasyon müdürü çalışma alanı.',
       icon: 'Building2',

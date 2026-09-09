@@ -148,6 +148,19 @@ export class SaveManager {
       transactionLog: rawState.transactionLog || []
     };
 
+    // The office is a fixed building and its footprint is the catalogue's
+    // (Emre, 2026-09-09). A save carrying another size takes the current one
+    // and sits on the centre that size wants: whole cells for an even side,
+    // half cells for an odd one.
+    for (const building of Object.values(state.buildings)) {
+      if (building.type !== 'office') continue;
+      const [w, d] = defaultState.buildings.office_1.size;
+      if (building.size[0] === w && building.size[1] === d) continue;
+      building.size = [w, d];
+      const centre = (v: number, side: number) => (side % 2 === 0 ? Math.round(v) : Math.floor(v) + 0.5);
+      building.position = [centre(building.position[0], w), centre(building.position[1], d)];
+    }
+
     return state;
   }
 

@@ -151,9 +151,9 @@ export const WELCOME_LAMPS: BuildingEntity[] = [0.5, 5.5, 10.5, 15.5].map((x, i)
 export const WELCOME_STRUCTURES: BuildingEntity[] = [
   // Arka sıra, cepheleri z=9'da tek çizgide: tank | ofis | kafe | market.
   welcomeBuilding('wb_tank', 'tank_farm', [14.5, 10.5]),
-  welcomeBuilding('wb_office', 'office', [10.5, 11.5], 0, 2),
-  welcomeBuilding('wb_cafe', 'cafe', [6.5, 10.5], 0, 2),
-  welcomeBuilding('wb_market', 'mini_market', [2.5, 11.5], 0, 2),
+  welcomeBuilding('wb_office', 'office', [11, 11], 0, 2),
+  welcomeBuilding('wb_cafe', 'cafe', [7.5, 10.5], 0, 2),
+  welcomeBuilding('wb_market', 'mini_market', [3.5, 11.5], 0, 2),
 
   // Sol kaldırım (yüksek x): çıkış koridorunun hemen ardında otopark,
   // 270° ile bay başları kaldırıma dönük; önünde çöp kutusu.

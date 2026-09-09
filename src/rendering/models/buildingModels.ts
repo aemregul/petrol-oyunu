@@ -78,11 +78,14 @@ export const BUILDING_MODELS: Record<string, BuildingModelConfig> = {
     // ortasına oturtup arkasında 2 birimlik hayalet bant bırakıyordu. Kutu
     // form esnemeyi taşıyor; ofis plotunu duvar duvara doldurur.
     fillFootprint: true,
-    maxHeight: 10,
+    // Between the tower it was and the squat block it became (Emre,
+    // 2026-09-09: first "çok büyük", then "çok basık"): the plot is 4x4, the
+    // block stands a storey lower than before without looking flattened.
+    maxHeight: 9,
     // The model is twice as wide as it is deep, so a square plot fits it on
-    // width and leaves it short: three storeys where the plot has room for
-    // five. The stretch buys back that height without widening the footprint.
-    heightScale: 1.5,
+    // width and leaves it short. The stretch buys back height without
+    // widening the footprint.
+    heightScale: 1.35,
     // The yellow awning band over the ground-floor glazing, on the glazed side.
     signAnchor: 0.275,
     signYaw: 180
