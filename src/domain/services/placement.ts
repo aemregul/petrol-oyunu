@@ -5,7 +5,7 @@
  * how BuildPreviewMesh and BuildingMesh draw them.
  */
 
-import { GameState } from '../types/gameState';
+import { FuelType, GameState } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { FAR_SIDE_FRONT, isFootprintOnOwnedLand, ownedBounds, pavedFrontage } from './land';
 import {
@@ -14,6 +14,8 @@ import {
   DrivewayRole,
   DrivewaySide,
   WIDE_DRIVEWAY_WIDTH,
+  BlockedWay,
+  blockedWays,
   drivewayMouths,
   drivewayReserveRects,
   drivewayRole,
@@ -376,6 +378,59 @@ function evaluateDriveway(
  * Checks a candidate placement. Plot expansions are exempt from the footprint
  * rules: they buy land rather than occupying it.
  */
+/** Ne söylenir, hangi yol kesildiğinde. */
+const SEVERED_WAY_REASON: Record<BlockedWay, string> = {
+  CUSTOMERS: 'Bu yapı girişi kapatıyor — müşteriler bekleme hattına ulaşamaz.',
+  TANKER: 'Bu yapı tankerin yolunu kapatıyor — tank sahasına yakıt gelmez.',
+  PUMP_BAYS: 'Bu yapı pompalara giden yolu kapatıyor — hiçbir bay’e araç yanaşamaz.',
+  CHARGER_BAYS: 'Bu yapı şarj direklerine giden yolu kapatıyor.'
+};
+
+/**
+ * Yerleşimden ÖNCE hangi yollar kesikti — ezberlenir. İnşaat modunda imleç
+ * her hücre değiştirdiğinde evaluatePlacement çağrılır; "önce" tarafı o
+ * sırada değişmez ve bir düzine A* taramasıdır.
+ *
+ * Anahtar yalnız nesne kimliği DEĞİL: motor ve testler durumu yerinde
+ * değiştirir, kimliğe güvenen ezber bir önceki arsanın cevabını verir ve her
+ * sonraki yapıyı "yolu kapatıyor" diye reddeder. Yolları değiştirebilen her
+ * şeyin parmak izi de tutulur; uymuyorsa yeniden hesaplanır.
+ */
+const WAYS_BEFORE = new WeakMap<
+  GameState,
+  Partial<Record<DrivewaySide, { fingerprint: string; ways: BlockedWay[] }>>
+>();
+
+function waysFingerprint(state: GameState): string {
+  const parts: string[] = [
+    String(state.station.open),
+    state.station.plots.pavedParcels.join(','),
+    state.station.plots.ownedParcels.length + ':' + state.station.roadLevel
+  ];
+  for (const b of Object.values(state.buildings)) {
+    parts.push(`${b.type}@${b.position[0]},${b.position[1]}r${b.rotation}`);
+  }
+  for (const p of Object.values(state.pumps)) {
+    parts.push(`P@${p.position[0]},${p.position[1]}r${p.rotation}:${p.supportedFuels.join('')}`);
+  }
+  for (const f of Object.keys(state.tanks)) parts.push(`${f}:${state.tanks[f as FuelType].capacity}`);
+  return parts.join('|');
+}
+
+function waysBlockedBefore(state: GameState, side: DrivewaySide): BlockedWay[] {
+  let bySide = WAYS_BEFORE.get(state);
+  if (!bySide) {
+    bySide = {};
+    WAYS_BEFORE.set(state, bySide);
+  }
+  const fingerprint = waysFingerprint(state);
+  const hit = bySide[side];
+  if (hit && hit.fingerprint === fingerprint) return hit.ways;
+  const ways = blockedWays(state, side);
+  bySide[side] = { fingerprint, ways };
+  return ways;
+}
+
 export function evaluatePlacement(
   state: GameState,
   buildingType: string,
@@ -558,6 +613,27 @@ export function evaluatePlacement(
         valid: false,
         reason: 'Bu yapı araç yolunu kapatıyor — girişten çıkışa geçit kalmıyor.'
       };
+    }
+
+    // Girişten çıkışa geçit kalması yetmez: motorun sürdüğü her rota açık
+    // kalmalı — müşteri bekleme hattına, tanker tank sahasına, araç bir bay'e.
+    // Bunlardan biri kesildiğinde ilgili araç hiç gelmez ve istasyon "AÇIK"
+    // yazarken sessizce ölür: hava-su ünitesi girişin dibine kurulunca iki gün
+    // tek müşteri girmedi, tank sahasının yanına dikilen direk tankeri kapıda
+    // bıraktı (Emre, 2026-09-09).
+    //
+    // Suç bu yapının olmalı: zaten kesik bir yol adayın günahı değildir —
+    // dinlenme tesisi, üstüne kurulduğu paradı yüzünden "girişi kapatıyor"
+    // diye geri çevriliyordu. Yalnız bu yapıyla KESİLEN yollar sayılır.
+    //
+    // Pompa, müşteri yolundan muaf: bekleme hattı pompayla birlikte doğar,
+    // hattın nereye düştüğü yerleşim hesabının işidir, oyuncunun değil.
+    const before = new Set(waysBlockedBefore(state, side));
+    const severed = blockedWays(ghost, side).filter(
+      (way) => !before.has(way) && !(buildingType === 'pump_standard' && way === 'CUSTOMERS')
+    );
+    if (severed.length > 0) {
+      return { valid: false, reason: SEVERED_WAY_REASON[severed[0]] };
     }
 
     // Girişten çıkışa yol kalması yetmez: yapı, o an sahada duran bir aracın

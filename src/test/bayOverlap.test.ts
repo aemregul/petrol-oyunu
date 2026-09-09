@@ -164,6 +164,47 @@ describe('two cars at one bay', () => {
     }
   }, 60_000);
 
+  it('does not send a car through a neighbouring island on the way to its own bay', () => {
+    // Dealt by the fuzz below (seed 23, layout 6): three turned pumps, two of
+    // them side by side. The car bound for the back one lined up a car's
+    // length short of its bay — straight through the front one's island —
+    // and stood inside that island's customer until the twenty-second valve.
+    const { restore } = seeded(5);
+    try {
+      const state = createInitialGameState();
+      busyStation(state);
+      ownWholePlot(state, 2, 2);
+      const proto = Object.values(state.pumps)[0];
+      state.pumps = {};
+      for (const [id, position] of [
+        ['p0', [17.5, 10]],
+        ['p1', [15.5, 7]],
+        ['p2', [11.5, 8]]
+      ] as Array<[string, [number, number]]>) {
+        state.pumps[id] = { ...proto, id, position, rotation: 90, currentVehicleId: null, employeeId: null };
+      }
+      for (const [type, position] of [
+        ['car_wash', [12, 11.5]],
+        ['tyre_service', [20.5, 5.5]]
+      ] as Array<[string, [number, number]]>) {
+        state.buildings[`r_${type}`] = {
+          id: `r_${type}`,
+          type,
+          level: 1,
+          position,
+          rotation: 0,
+          size: GAME_CONFIG.buildings[type].size,
+          health: 100,
+          constructionState: 'ACTIVE',
+          builtAtTimestamp: 0
+        } as GameState['buildings'][string];
+      }
+      expect(stackedAtBay(state, 150)).toEqual([]);
+    } finally {
+      restore();
+    }
+  }, 60_000);
+
   it('holds the same rule on forecourts nobody designed', () => {
     const { rnd, restore } = seeded(23);
     try {

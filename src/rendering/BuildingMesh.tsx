@@ -257,8 +257,11 @@ const SIGNAGE: Record<
   car_wash: { text: 'OTO YIKAMA', height: 3.5, color: '#0284c7', textColor: '#ffffff' },
   oil_change: { text: 'YAĞ DEĞİŞİMİ', height: 5.4, color: '#d97706', textColor: '#ffffff' },
   tyre_service: { text: 'LASTİK SERVİSİ', height: 5.4, color: '#0369a1', textColor: '#ffffff' },
-  air_water: { text: 'HAVA & SU', height: 3.4, color: '#0f172a', textColor: '#ffffff' },
   hotel: { text: 'OTEL', color: '#4f46e5', textColor: '#ffffff' },
+  // The air & water unit carries its own header on the column head, the way
+  // the charging post does. A 2.2-wide board hung 3.4 up over a 0.6-wide
+  // column floated half a unit above it and read as askew from the game's
+  // camera (Emre, 2026-09-09: "tabela yamuk").
   // A charging post carries its own header board, on the post itself: a
   // board hung over the footprint would float off a post that stands at the
   // slab's edge (Emre, 2026-09-07: "tabelalar yamuk").

@@ -277,6 +277,17 @@ export const AirWater: React.FC<FacilityProps> = ({ building }) => {
         <boxGeometry args={[0.62, 0.5, 0.5]} />
         <meshStandardMaterial color="#0ea5e9" roughness={0.45} metalness={0.3} />
       </mesh>
+
+      {/* Header board resting on the head — part of the unit, like the
+          charger's, not a plate floating over the footprint. */}
+      <FasciaSign
+        text="HAVA & SU"
+        color="#0f172a"
+        textColor="#ffffff"
+        width={1.3}
+        y={2.57}
+        anchor="bottom"
+      />
       <mesh position={[0, 2.32, 0.26]}>
         <circleGeometry args={[0.16, 16]} />
         <meshStandardMaterial

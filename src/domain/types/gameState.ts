@@ -531,6 +531,13 @@ export interface DayState {
    */
   lastEventAtHour?: number;
   eventsToday?: number;
+  /**
+   * Girişin tıkalı olup olmadığına en son bakılan saat ve o gün oyuncunun
+   * uyarılıp uyarılmadığı. Bir istasyonun sessizce ölmesi (tek müşteri bile
+   * girmemesi) oyuncunun kendi başına çözemeyeceği tek şeydi.
+   */
+  entryCheckedAtHour?: number;
+  entryWarnedDay?: number;
   todayStats: {
     fuelRevenue: number;
     fuelCost: number;

@@ -64,6 +64,20 @@ const CLEARANCE = 1.1;
  */
 const PASSING_CLEARANCE = 0.7;
 
+/**
+ * Küçük eşya: direk, çöp kutusu, çalı, hava-su. Bir binanın dönüş payını
+ * (1.1) hak etmezler — 1x1'lik bir direk aracın merkezi için 3.2x3.2'lik
+ * yasak alana dönüşüyor ve girişin dibinde bekleme hattına giden yolu
+ * kesiyordu; Emre'nin 8. günde iki gün müşteri görmemesinin sebebi hava-su
+ * ünitesiydi (2026-09-09). Bunların yanından geçmek için yarım araç eni
+ * artı biraz yeter; gövde kuralı (bodyInSolid) yine de içlerine sokmaz.
+ */
+const SMALL_PROPS = ['light_pole', 'trash_can', 'decoration', 'air_water'];
+
+function clearanceFor(type: string, clearance: number): number {
+  return SMALL_PROPS.includes(type) ? Math.min(clearance, PASSING_CLEARANCE) : clearance;
+}
+
 /** How finely the plot is divided when a way round has to be found. */
 const CELL = 0.5;
 
@@ -99,7 +113,7 @@ export function wallRects(
     const turned = building.rotation === 90 || building.rotation === 270;
     const w = (turned ? building.size[1] : building.size[0]) / 2;
     const d = (turned ? building.size[0] : building.size[1]) / 2;
-    out.push(grow(building.position, w, d, clearance));
+    out.push(grow(building.position, w, d, clearanceFor(building.type, clearance)));
   }
 
   // Bare ground inside the plot's bounding box is as solid as a wall to a car:
@@ -452,7 +466,7 @@ export function routeAroundOrNull(
   bounds: Rect,
   keepOut: Rect[],
   ignorePumpId?: string,
-  ignoreBuildingId?: string,
+  ignoreBuildingId?: string | string[],
   extraRects?: Rect[]
 ): Array<[number, number, number]> | null {
   return plot(
@@ -476,7 +490,7 @@ export function routeAround(
   bounds: Rect,
   keepOut: Rect[],
   ignorePumpId?: string,
-  ignoreBuildingId?: string
+  ignoreBuildingId?: string | string[]
 ): Array<[number, number, number]> {
   return (
     plot(state, vehicle, side, waypoints, bounds, keepOut, ignorePumpId, ignoreBuildingId) ??
@@ -496,7 +510,7 @@ export function canReach(
   bounds: Rect,
   keepOut: Rect[],
   ignorePumpId?: string,
-  ignoreBuildingId?: string
+  ignoreBuildingId?: string | string[]
 ): boolean {
   return (
     plot(state, vehicle, side, waypoints, bounds, keepOut, ignorePumpId, ignoreBuildingId) !== null
@@ -512,7 +526,7 @@ function plot(
   bounds: Rect,
   keepOut: Rect[],
   ignorePumpId?: string,
-  ignoreBuildingId?: string,
+  ignoreBuildingId?: string | string[],
   // Obstacles beyond the buildings — parked cars, other lorries — already
   // grown to the margin the caller wants kept. Never excused for start or
   // goal: a route is asked for exactly because these are in the way.

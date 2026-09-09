@@ -109,14 +109,14 @@ describe('the electric line', () => {
     state.player.level = 12;
     const spot: [number, number] = [9.5, 12.5];
     expect(evaluatePlacement(state, 'ev_storage', spot, 0).reason).toMatch(/Elektrik Altyapısı/);
-    expect(evaluatePlacement(state, 'ev_charger_ac', [13, 8], 0).reason).toMatch(/Enerji Depolama/);
+    expect(evaluatePlacement(state, 'ev_charger_ac', [12, 7], 0).reason).toMatch(/Enerji Depolama/);
 
     state.buildings.sub = building('sub', 'ev_substation', [13, 12]);
     expect(evaluatePlacement(state, 'ev_storage', spot, 0).valid).toBe(true);
-    expect(evaluatePlacement(state, 'ev_charger_ac', [13, 8], 0).reason).toMatch(/Enerji Depolama/);
+    expect(evaluatePlacement(state, 'ev_charger_ac', [12, 7], 0).reason).toMatch(/Enerji Depolama/);
 
     state.buildings.bank = building('bank', 'ev_storage', spot);
-    expect(evaluatePlacement(state, 'ev_charger_ac', [13, 8], 0).valid).toBe(true);
+    expect(evaluatePlacement(state, 'ev_charger_ac', [12, 7], 0).valid).toBe(true);
   });
 
   it('holds 200 kWh at first and more at each level', () => {

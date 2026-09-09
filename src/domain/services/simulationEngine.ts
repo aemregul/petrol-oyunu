@@ -2335,7 +2335,7 @@ function driveable(
   block: BlockLayout,
   waypoints: Array<[number, number, number]>,
   ignorePumpId?: string,
-  ignoreBuildingId?: string,
+  ignoreBuildingId?: string | string[],
   // Cars steer around an unloading tanker; a tanker's own routes must not —
   // the berth rectangle covers the lorry itself and its neighbours, and a
   // route asked for from inside a "wall" is refused before it starts. That
@@ -2416,7 +2416,16 @@ function approachBay(
   ignorePumpId?: string,
   ignoreBuildingId?: string
 ): Array<[number, number, number]> | null {
-  const walls = wallRects(state, block.side, 0, ignoreBuildingId);
+  // Düz bacaklar yalnız binalara değil, KOMŞU adalara karşı da sınanır. Yan
+  // yana iki dönük pompada arkadakinin hazırlık bacağı (bay'in bir araç boyu
+  // gerisi, şeritten aşağı) öndekinin adasının tam içinden geçiyordu: katı
+  // kural her adımı geri alıyor, araç öndeki pompanın müşterisinin dibinde
+  // donuyordu — "iki araba üst üste"nin bir başka yolu (fuzz, 2026-09-09).
+  // Kendi adası muaf: bay onun yanındadır.
+  const walls = [
+    ...wallRects(state, block.side, 0, ignoreBuildingId),
+    ...pumpRects(state, block.side, ignorePumpId, 0.3)
+  ];
 
   const dx = bay[0] - vehicle.worldPosition[0];
   const dz = bay[2] - vehicle.worldPosition[2];
@@ -2481,7 +2490,6 @@ function pumpRoute(
   const block = blockFor(state, vehicle);
   const bay = pumpBay(block, pump, vehicle);
   const approach = approachBay(state, vehicle, block, bay, bayApproachDir(pump), pump.id);
-  if (approach) return approach;
 
   const legs: Array<[number, number, number]> = pumpFacesAcrossZ(pump)
     ? [
@@ -2492,7 +2500,27 @@ function pumpRoute(
       ]
     : [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay];
 
-  return driveable(state, vehicle, block, legs, pump.id);
+  return drivableOrNull(state, vehicle, block, approach ?? driveable(state, vehicle, block, legs, pump.id));
+}
+
+/**
+ * Bir bay rotası ancak GÖVDEYLE sürülebiliyorsa rotadır.
+ *
+ * Planlayıcı, ucu bir adanın payına düşen bacakta o adayı bütünüyle affeder —
+ * bay'e yanaşmak için doğru, komşu ada için yalan: yan yana iki dönük pompada
+ * arkadakinin hazırlık bacağı öndekinin adasının tam içinden çizildi, katı
+ * kural her adımı geri aldı ve araç öndeki müşterinin dibinde yirmi saniye
+ * dondu (fuzz, 2026-09-09). Sürülemeyen rota verilmez; findAvailablePump o
+ * bay'i bu sürücü için yok sayar, araç başka pompaya ya da kuyruğa gider.
+ */
+function drivableOrNull(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  route: Array<[number, number, number]> | null
+): Array<[number, number, number]> | null {
+  if (!route) return null;
+  return routeBodyClear(state, vehicle, block.side, vehicle.worldPosition, route) ? route : null;
 }
 
 /**
@@ -2520,15 +2548,20 @@ function chargerRoute(
     undefined,
     postId
   );
-  if (approach) return approach;
 
-  return driveable(
+  return drivableOrNull(
     state,
     vehicle,
     block,
-    [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
-    undefined,
-    postId
+    approach ??
+      driveable(
+        state,
+        vehicle,
+        block,
+        [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
+        undefined,
+        postId
+      )
   );
 }
 
@@ -4362,9 +4395,23 @@ const TRUCK_ROAD_SPEED = BASE_DRIVE_SPEED * 0.95;
  * lie, and a lorry materialising at the gate on zero read as a glitch — the
  * spawn point is fixed, so honesty is only a matter of when to start driving.
  */
-function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
-  const tank = tankBuildingFor(state, order.fuelType);
-  if (!tank) return;
+/**
+ * Where a lorry for this fuel starts, turns in and berths — the cheap
+ * geometry, no route search. Null when there is no tank for the fuel or no
+ * berth stands clear of the buildings.
+ */
+function tankerApproach(
+  state: GameState,
+  fuelType: FuelType
+): {
+  tank: BuildingEntity;
+  block: BlockLayout;
+  bay: [number, number, number];
+  start: [number, number, number];
+  laneX: number;
+} | null {
+  const tank = tankBuildingFor(state, fuelType);
+  if (!tank) return null;
 
   const side = drivewaySideAt(tank.position[1]);
   const block = blockLayout(state, side) ?? blockLayout(state, 'near')!;
@@ -4372,36 +4419,55 @@ function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
   // Turn off the highway at the entry mouth, then straight up to the back
   // service lane and along it to the bay. The front lane belongs to the
   // customers — a forty-tonner idling on it corks the whole forecourt.
-  const bay = tankerBay(state, block, tank, order.fuelType);
-  if (!bay) return;
+  const bay = tankerBay(state, block, tank, fuelType);
+  if (!bay) return null;
 
   const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
-  const start: [number, number, number] = [
-    block.roadStartX - flow * 8,
-    0,
-    block.roadLaneZ
-  ];
-  const laneX = drivewayLaneX(block.entry, 0);
+  const start: [number, number, number] = [block.roadStartX - flow * 8, 0, block.roadLaneZ];
+  return { tank, block, bay, start, laneX: drivewayLaneX(block.entry, 0) };
+}
 
-  // Too early: it would stand at the mouth with the counter still running.
-  const secondsToGate = 1 + Math.abs(laneX - start[0]) / TRUCK_ROAD_SPEED;
-  if (order.remainingSeconds > secondsToGate) return;
-
+/**
+ * The lorry's way in for this fuel, or null when the plot leaves it none.
+ *
+ * The back lane is still where a lorry belongs — but "up from the mouth,
+ * then along the back" was written as fixed waypoints, and on the starting
+ * plot the first of them runs straight through the office. The planner
+ * could only answer "no", and the code took a raw straight line instead:
+ * that is the lorry the player watched drive over the field and unload
+ * inside a building.
+ *
+ * So the back lane is a preference now, not an instruction. If it cannot
+ * be reached, the planner is asked for a way in past the front lane
+ * instead, and if there is no way at all the lorry holds at the gate —
+ * where the corner widget already says it is waiting, and where moving
+ * whatever blocks it is the player's to do. Every branch goes through the
+ * planner; none of them may ignore the plot.
+ *
+ * Yerleşim kuralı ve giriş bekçisi de aynı soruyu buradan sorar (Emre,
+ * 2026-09-09: tank sahasının yanına dikilen direk tankeri kapıda bıraktı,
+ * "yolda gözükmüyor" — tek bir kaynak, üç yer).
+ */
+export function tankerRoute(
+  state: GameState,
+  fuelType: FuelType
+): Array<[number, number, number]> | null {
+  const approach = tankerApproach(state, fuelType);
+  if (!approach) return null;
+  const { tank, block, bay, start, laneX } = approach;
   const carrier = { worldPosition: start } as VehicleEntity;
 
-  // The back lane is still where a lorry belongs — but "up from the mouth,
-  // then along the back" was written as fixed waypoints, and on the starting
-  // plot the first of them runs straight through the office. The planner
-  // could only answer "no", and the code took a raw straight line instead:
-  // that is the lorry the player watched drive over the field and unload
-  // inside a building.
-  //
-  // So the back lane is a preference now, not an instruction. If it cannot
-  // be reached, the planner is asked for a way in past the front lane
-  // instead, and if there is no way at all the lorry holds at the gate —
-  // where the corner widget already says it is waiting, and where moving
-  // whatever blocks it is the player's to do. Every branch goes through the
-  // planner; none of them may ignore the plot.
+  // The tank package is the one thing the lorry may hug: the farm it berths
+  // against, and the expansion built beside it — more tank, not a wall. Left
+  // in as a wall, an expansion on the berth side put the berth inside its
+  // turning margin and the lorry had no way to the very tanks it was filling.
+  const hug = [
+    tank.id,
+    ...Object.values(state.buildings)
+      .filter((b) => b.type === 'tank_expansion' && drivewaySideAt(b.position[1]) === block.side)
+      .map((b) => b.id)
+  ];
+
   const viaBackLane = driveable(
     state,
     carrier,
@@ -4413,10 +4479,10 @@ function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
       bay
     ],
     undefined,
-    tank.id,
+    hug,
     true
   );
-  const route =
+  return (
     viaBackLane ??
     driveable(
       state,
@@ -4424,9 +4490,22 @@ function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
       block,
       [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], bay],
       undefined,
-      tank.id,
+      hug,
       true
-    );
+    )
+  );
+}
+
+function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
+  const approach = tankerApproach(state, order.fuelType);
+  if (!approach) return;
+  const { tank, block, start, laneX } = approach;
+
+  // Too early: it would stand at the mouth with the counter still running.
+  const secondsToGate = 1 + Math.abs(laneX - start[0]) / TRUCK_ROAD_SPEED;
+  if (order.remainingSeconds > secondsToGate) return;
+
+  const route = tankerRoute(state, order.fuelType);
   if (!route) return;
 
   order.truck = {
@@ -5365,7 +5444,6 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   // would arrive years before the diesel-capable pump and bleed reputation
   // for it — the exact trap the farm was built to remove.
   const sellableFuels = fuelsOnSale(state);
-  const anyPumps = Object.keys(state.pumps).length > 0;
 
   const side = pickSpawnSide(state);
   // Karşıda kurulu bir arsa yoksa araç yine de gelir — yalnız duramaz:
@@ -5377,16 +5455,10 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const bare = !laidOut;
 
   // An electric customer is only servable where there is somewhere to plug in.
-  const canCharge = !bare && !mods.pumpsDisabled && chargingPoints(state, side).length > 0;
-
-  const servable = (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
-    const conf = GAME_CONFIG.customerTypes[a];
-    if (conf.requiresCharger) return canCharge;
-    // No pumps anywhere: whoever stops here stops for the shop, and what the
-    // pumps cannot dispense is no bar to a coffee.
-    if (!anyPumps) return true;
-    return conf.preferredFuel === 'any' || sellableFuels.includes(conf.preferredFuel as FuelType);
-  });
+  // Karşıda beton yoksa (bare) kimse duramaz, dolayısıyla fişe de takılamaz.
+  const servable = bare
+    ? []
+    : servableArchetypes(state, side, mods);
 
   // A car cannot materialise where one already is. When the road is backed up
   // to the edge of the map, the next driver simply has not arrived yet.
@@ -5401,19 +5473,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   // only one who could get in. A forecourt walled off by what the player has
   // built has no way through to the bays, and a driver reads that from the
   // road rather than pulling in and finding out.
-  const wayIn =
-    !bare &&
-    canReach(
-      state,
-      { worldPosition: [block.roadStartX, 0, block.roadLaneZ] } as VehicleEntity,
-      side,
-      [
-        [drivewayLaneX(block.entry, 0), 0, block.laneZ],
-        queueSlotPosition(state, 0, side)
-      ],
-      { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
-      frontageKeepOut(block)
-    );
+  const wayIn = !bare && hasWayIn(state, block, side);
   const stops = wayIn && servable.length > 0 && Math.random() < stopChance(state, side);
   const archetypes = stops
     ? servable
@@ -5582,6 +5642,189 @@ function bayStandsEmpty(
       Math.hypot(other.worldPosition[0] - bay[0], other.worldPosition[2] - bay[2]) <
         BAY_CLEAR_RADIUS
   );
+}
+
+/**
+ * Yoldan gelen bir sürücü bu bloğa GİREBİLİR mi: karayolundan giriş ağzına,
+ * oradan da bekleme hattının başına sürülebilir bir yol var mı?
+ *
+ * Kararın kendisi eski; ayrı bir işleve alınmasının sebebi teşhis (bkz.
+ * entryProblem): bu "hayır" derse tek bir müşteri bile sapmaz ve oyun bunu
+ * oyuncuya söylemediği sürece istasyon sessizce ölür — Emre'nin 8. günde
+ * yaşadığı tam olarak buydu (2026-09-09).
+ */
+export function hasWayIn(state: GameState, block: BlockLayout, side: DrivewaySide): boolean {
+  // Pompasız bir blokta bekleme hattı yoktur: sürücü dükkân için gelir ve
+  // ağızdan içeri girebilmesi yeter. Orada da "kuyruk başı" istemek, hattın
+  // düştüğü yerdeki bir binayı girişi kapatıyor saymak olur.
+  const targets: Array<[number, number, number]> = [
+    [drivewayLaneX(block.entry, 0), 0, block.laneZ]
+  ];
+  if (blockHasPumps(state, side)) targets.push(queueSlotPosition(state, 0, side));
+
+  return canReach(
+    state,
+    { worldPosition: [block.roadStartX, 0, block.roadLaneZ] } as VehicleEntity,
+    side,
+    targets,
+    { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+    frontageKeepOut(block)
+  );
+}
+
+/**
+ * Bir bloğun araç almasını topyekûn kesen yollar. Her biri, oyunun bir aracı
+ * gerçekten sürdüğü bir rotadır; kesildiğinde o araç hiç gelmez ve oyunda
+ * bunu söyleyen hiçbir şey yoktur — istasyon "AÇIK" yazarken sessizce ölür.
+ *
+ *   CUSTOMERS    yoldan giriş ağzına ve bekleme hattının başına (spawn kararı)
+ *   TANKER       yoldan tank sahasının berthine (dispatchTruck) — direk tank
+ *                sahasının yanına dikilince tanker kapıda kaldı, "yolda
+ *                gözükmüyor" (Emre, 2026-09-09)
+ *   PUMP_BAYS    giriş şeridinden en az bir pompa bay'ine (findAvailablePump)
+ *   CHARGER_BAYS giriş şeridinden en az bir şarj direğine (chargerRoute)
+ */
+export type BlockedWay = 'CUSTOMERS' | 'TANKER' | 'PUMP_BAYS' | 'CHARGER_BAYS';
+
+/**
+ * Bu blokta hangi yollar kesik. Yerleşim kuralı (aday yapı hayaletken önce
+ * ve sonra sorar) ve giriş bekçisi (kayıtta bakar, oyuncuya söyler) aynı
+ * listeyi okur; motorun sürdüğü rotalarla aynı işlevlerden hesaplandığından
+ * uyarı ile gerçek ayrışamaz.
+ */
+export function blockedWays(state: GameState, side: DrivewaySide): BlockedWay[] {
+  const block = blockLayout(state, side);
+  if (!block) return [];
+  const out: BlockedWay[] = [];
+
+  if (blockAppeal(state, side) > 0 && !hasWayIn(state, block, side)) out.push('CUSTOMERS');
+
+  // Satıştaki her yakıtın tankeri berthine ulaşabilmeli. Üç berth sahanın
+  // önünde yan yana durur; pompası olmayan bir yakıtın berthi için yer
+  // tutmak, kimsenin sipariş etmeyeceği bir tanker adına arsayı kilitlemek
+  // olur. Henüz hiçbir yakıt satışta değilse başlangıç yakıtı ölçüttür.
+  const farm = tankBuildingFor(state, 'gasoline');
+  if (farm && drivewaySideAt(farm.position[1]) === side) {
+    const sold = fuelsOnSale(state);
+    const fuels: FuelType[] = sold.length > 0 ? sold : ['gasoline'];
+    if (fuels.some((f) => tankerRoute(state, f) === null)) out.push('TANKER');
+  }
+
+  // Bir sürücünün ağızdan içeri girdiği yerden bakıldığında, yanaşılabilecek
+  // en az bir bay: hepsi kapalıysa kuyruk hiç ilerlemez.
+  const probe = probeCar(block);
+  const pumps = Object.values(state.pumps).filter((p) => pumpSide(p) === side);
+  if (pumps.length > 0 && !pumps.some((p) => pumpRoute(state, probe, p) !== null)) {
+    out.push('PUMP_BAYS');
+  }
+  const posts = chargingPoints(state, side);
+  if (posts.length > 0 && !posts.some((p) => chargerRoute(state, probe, p.position, p.id) !== null)) {
+    out.push('CHARGER_BAYS');
+  }
+
+  return out;
+}
+
+/** Sıradan bir binek: bay rotalarını sormak için giriş şeridinde duran hayalet. */
+function probeCar(block: BlockLayout): VehicleEntity {
+  return {
+    id: '__probe',
+    archetype: 'commuter',
+    modelVariant: 'sedan',
+    worldPosition: [drivewayLaneX(block.entry, 0), 0, block.laneZ],
+    targetWaypoint: null,
+    route: [],
+    heading: 0,
+    speed: 1
+  } as unknown as VehicleEntity;
+}
+
+/** Ne kadar sık bakılır (oyun saati). */
+const WAY_CHECK_HOURS = 0.25;
+
+const WAY_WARNINGS: Record<BlockedWay, string> = {
+  CUSTOMERS:
+    'Müşteri giremiyor: yoldan bekleme hattına sürülebilir yol kalmadı — fiyat ne olursa olsun ' +
+    'tek bir araç sapmaz.',
+  TANKER: 'Tanker giremiyor: tank sahasına giden yol kalmadı — tanker kapıda bekler, yakıt gelmez.',
+  PUMP_BAYS: 'Hiçbir pompaya araç yanaşamıyor: bay’lere giden yol kapalı.',
+  CHARGER_BAYS: 'Hiçbir şarj direğine araç yanaşamıyor: direklere giden yol kapalı.'
+};
+
+const WAY_REMEDY =
+  'Giriş ile hedef arasındaki bir yapıyı (aydınlatma direği, çalı, çöp kutusu, tabela) ' +
+  'taşıyın ya da satın.';
+
+/**
+ * İstasyon sessizce ölmesin: bir yol topyekûn kapandığında oyuncu günde bir
+ * kez uyarılır, açıldığında da haber verilir. Emre, 2026-09-09: 8. günde iki
+ * gün boyunca tek araç girmedi ve oyunda bunu söyleyen hiçbir şey yoktu —
+ * pompa "Boşta" yazıyor, tabela "AÇIK" yanıyor, herkes geçip gidiyordu.
+ * Oyuncunun bilerek kapattığı istasyon için susar.
+ */
+function tickWayWatch(state: GameState, effects: SimEffects): void {
+  const hour = state.dayState.gameTime;
+  const last = state.dayState.entryCheckedAtHour;
+  if (last !== undefined && hour - last < WAY_CHECK_HOURS && hour >= last) return;
+  state.dayState.entryCheckedAtHour = hour;
+
+  const lines: string[] = [];
+  if (state.station.open) {
+    for (const side of ['near', 'far'] as DrivewaySide[]) {
+      for (const way of blockedWays(state, side)) lines.push(WAY_WARNINGS[way]);
+    }
+    if (nothingOnSale(state)) {
+      lines.push(
+        'Satışta yakıt yok: pompaların verebildiği hiçbir yakıtın tankı yok, sürücülerin ' +
+          'duracak sebebi kalmıyor.'
+      );
+    }
+  }
+
+  if (lines.length === 0) {
+    if (state.dayState.entryWarnedDay !== undefined) {
+      state.dayState.entryWarnedDay = undefined;
+      notify(effects, 'INFO', 'Yol Açıldı', 'Kapalı yol yeniden açık — araçlar gelmeye başlıyor.');
+    }
+    return;
+  }
+
+  if (state.dayState.entryWarnedDay === state.dayState.currentDay) return;
+  state.dayState.entryWarnedDay = state.dayState.currentDay;
+  // Sıradan dört saniyelik hap değil: okunması gereken bir açıklama.
+  notify(
+    effects,
+    'WARNING',
+    'Yol Kapalı',
+    [...new Set(lines), WAY_REMEDY].join(' '),
+    EVENT_TOAST_HOLD_MS
+  );
+}
+
+/** Pompaların verebildiği hiçbir yakıtın tankı yok — kimsenin duracak sebebi yok. */
+function nothingOnSale(state: GameState): boolean {
+  if (blockAppeal(state, 'near') === 0 && blockAppeal(state, 'far') === 0) return false;
+  return servableArchetypes(state, 'near', getEventModifiers(state)).length === 0;
+}
+
+/** Bu blokta durmaya değer bulacak müşteri tipleri. */
+function servableArchetypes(
+  state: GameState,
+  side: DrivewaySide,
+  mods: EventModifiers
+): VehicleArchetype[] {
+  const sellable = fuelsOnSale(state);
+  const anyPumps = Object.keys(state.pumps).length > 0;
+  const canCharge = !mods.pumpsDisabled && chargingPoints(state, side).length > 0;
+
+  return (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]).filter((a) => {
+    const conf = GAME_CONFIG.customerTypes[a];
+    if (conf.requiresCharger) return canCharge;
+    // No pumps anywhere: whoever stops here stops for the shop, and what the
+    // pumps cannot dispense is no bar to a coffee.
+    if (!anyPumps) return true;
+    return conf.preferredFuel === 'any' || sellable.includes(conf.preferredFuel as FuelType);
+  });
 }
 
 /** Finds a free pump that can serve this vehicle's fuel type. */
@@ -7159,6 +7402,7 @@ export function runSimulationTick(
   const mods = getEventModifiers(state);
 
   syncPriceSign(state);
+  tickWayWatch(state, effects);
   tickFuelOrders(state, dt, effects);
   tickRush(state, dt, effects);
   tickFuelDeal(state, dt, effects);

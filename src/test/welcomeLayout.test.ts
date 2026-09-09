@@ -49,9 +49,15 @@ describe('the welcome-screen station', () => {
   it('is buildable piece by piece under the game’s own placement rules', () => {
     const state = emptyPlot();
 
+    // Emre, 2026-09-09: vitrin senaryolu bir sahnedir. Otopark tank sahasının
+    // önünde, tankerin tek berthinin üstünde durur — oyunun kuralı bunu
+    // reddeder (bu düzende yakıt teslimatı olmaz) ve vitrin bundan muaftır.
+    // Başka her ret hâlâ bir hatadır.
+    const SHOWCASE_EXEMPT = 'Bu yapı tankerin yolunu kapatıyor';
     for (const b of [...WELCOME_STRUCTURES, ...WELCOME_LAMPS]) {
       const verdict = evaluatePlacement(state, b.type, b.position, b.rotation);
-      expect(verdict.valid, `${b.id} (${b.type}): ${verdict.reason ?? ''}`).toBe(true);
+      const exempt = b.id === 'wb_park' && (verdict.reason ?? '').startsWith(SHOWCASE_EXEMPT);
+      expect(verdict.valid || exempt, `${b.id} (${b.type}): ${verdict.reason ?? ''}`).toBe(true);
       state.buildings[b.id] = b;
     }
     for (const p of WELCOME_PUMPS) {

@@ -3,6 +3,7 @@ import { createInitialGameState } from '../domain/types/initialState';
 import { createEffects, runSimulationTick } from '../domain/services/simulationEngine';
 import { evaluatePlacement } from '../domain/services/placement';
 import { GAME_CONFIG } from '../config/gameConfig';
+import { stationBounds } from '../domain/services/land';
 import { GameState, BuildingEntity } from '../domain/types/gameState';
 
 /**
@@ -37,10 +38,29 @@ function attendant(state: GameState, id: string, pumpId: string): void {
   } as never;
 }
 
-/** Puts the thing down at the back of the plot, where it blocks nobody. */
+/**
+ * Puts the thing down at the back of the plot, where it blocks nobody.
+ *
+ * Meant literally now: the placement rules refuse a spot that would take the
+ * tanker's berth or the customers' way in (Emre, 2026-09-09). A building the
+ * starting plot cannot hold without doing one of those gets a third column of
+ * land and goes at the back of that.
+ */
 function place(state: GameState, id: string, type: string): boolean {
+  if (placeScanning(state, id, type, 15)) return true;
+  for (const key of ['2,0', '2,1']) {
+    state.station.plots.ownedParcels.push(key);
+    state.station.plots.pavedParcels.push(key);
+  }
+  const bounds = stationBounds(state.station.plots.ownedParcels);
+  state.station.plots.width = bounds.width;
+  state.station.plots.height = bounds.height;
+  return placeScanning(state, id, type, state.station.plots.width - 1);
+}
+
+function placeScanning(state: GameState, id: string, type: string, fromX: number): boolean {
   for (let z = 13; z >= 2; z -= 0.5) {
-    for (let x = 15; x >= 2; x -= 0.5) {
+    for (let x = fromX; x >= 2; x -= 0.5) {
       if (!evaluatePlacement(state, type, [x, z], 0).valid) continue;
       const b: BuildingEntity = {
         id, type, level: 1, position: [x, z], rotation: 0, size: GAME_CONFIG.buildings[type].size,
@@ -73,19 +93,44 @@ function station(): GameState {
   return s;
 }
 
-/** The facility's own day: what it took less what that cost, less its keep. */
+/**
+ * The facility's own day: what it took less what that cost, less its keep.
+ *
+ * Averaged over three days. One day is a dozen customers, and a dozen coin
+ * flips put the same market anywhere between forty and a hundred days of
+ * payback — whichever way the road's dice fell. Three days is still a small
+ * sample, but it measures the building rather than the morning.
+ */
+const SAMPLE_DAYS = 3;
+
 function facilityDayNet(type: string): { net: number; price: number; served: number } {
   const s = station();
   // No park: this is the floor. Every visit is booked through the window
   // at the facility's no-park share; a park the cars can reach lifts it.
   if (!place(s, 'x', type)) throw new Error(`no room for ${type}`);
-  runDay(s);
-  const t = s.dayState.todayStats;
+
+  let revenue = 0;
+  let cost = 0;
+  let served = 0;
+  for (let day = 0; day < SAMPLE_DAYS; day++) {
+    runDay(s);
+    const t = s.dayState.todayStats;
+    revenue += t.marketRevenue;
+    cost += t.marketCost;
+    served += t.customersServed;
+    Object.assign(t, { marketRevenue: 0, marketCost: 0, customersServed: 0 });
+    // Overnight: the tanks are refilled, or the sample measures a station
+    // running dry rather than the building beside its pumps.
+    for (const tank of Object.values(s.tanks)) tank.stock = tank.capacity;
+    s.dayState.gameTime = 6;
+    s.dayState.isDayEnding = false;
+    s.dayState.isDayActive = true;
+  }
   const upkeep = GAME_CONFIG.buildings[type].dailyUpkeep;
   return {
-    net: t.marketRevenue - t.marketCost - upkeep,
+    net: (revenue - cost) / SAMPLE_DAYS - upkeep,
     price: GAME_CONFIG.buildings[type].price,
-    served: t.customersServed
+    served: served / SAMPLE_DAYS
   };
 }
 

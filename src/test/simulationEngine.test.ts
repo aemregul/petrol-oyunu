@@ -972,10 +972,15 @@ describe('simulationEngine - highway lanes and driveways', () => {
     state.station.plots.ownedParcels.push(...far);
     state.station.plots.pavedParcels.push(...far);
 
-    // Every pump is across the road, so every customer has to go there.
+    // Every pump is across the road, so every customer has to go there. It
+    // faces ITS road: the starting pump's 90° puts the bay toward the near
+    // carriageway, and across the median that same bay lies on the far side
+    // is 270°. At 90° over there the bay pointed at the back fence and the
+    // island lay across the front lane — a route the planner would hand out
+    // and no car could drive, which the engine now refuses to hand out.
     const proto = Object.values(state.pumps)[0];
     state.pumps = {
-      pf: { ...proto, id: 'pf', position: [8, -19], currentVehicleId: null, employeeId: null }
+      pf: { ...proto, id: 'pf', position: [8, -19], rotation: 270, currentVehicleId: null, employeeId: null }
     };
 
     const farBlock = blockLayout(state, 'far')!;
