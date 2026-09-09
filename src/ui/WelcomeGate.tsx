@@ -82,21 +82,43 @@ export function gateSettled(state: { accountReady: boolean; accountResolved: boo
 }
 
 /**
- * Karar gelene kadar gösterilen perde: kapının gecesiyle aynı zemin, tek
- * satır marka. Bir saniyeden az sürer; sahne değil, bekleme odasıdır.
+ * Açılış ekranı en az bu kadar kalır. Firebase yüz milisaniyede karar
+ * verince perde göz yakalayamadan kayboluyordu (Emre, 2026-09-09); artık
+ * sayfanın ilk karesinden itibaren sayılan bir asgari süre var.
  */
-export const GateCurtain: React.FC = () => (
-  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950 select-none">
-    <div
-      className="flex flex-col items-center gap-2"
-      style={{ animation: 'gate-in 400ms ease-out both' }}
-    >
-      <style>{`
-        @keyframes gate-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
-      `}</style>
+export const SPLASH_MIN_MS = 1200;
+/** Perdenin kapıya ya da oyuna solma süresi. */
+export const SPLASH_FADE_MS = 350;
+
+/**
+ * Sayfa açılalı `elapsedMs` geçmişken perdenin daha ne kadar kalacağı.
+ * Saf: index.html'deki statik açılışın süresi de sayılır, React'in ne zaman
+ * yetiştiği değil.
+ */
+export function splashHoldMs(elapsedMs: number, minMs: number = SPLASH_MIN_MS): number {
+  return Math.max(0, minMs - Math.max(0, elapsedMs));
+}
+
+/**
+ * Karar gelene ve asgari süre dolana kadar gösterilen perde: index.html'deki
+ * statik açılışın birebir aynısı, o yüzden devralırken hiçbir şey kıpırdamaz.
+ * `leaving` verildiğinde solarak çekilir; altındaki kapı ya da oyun o sırada
+ * çoktan çizilmiştir.
+ */
+export const GateCurtain: React.FC<{ leaving?: boolean }> = ({ leaving = false }) => (
+  <div
+    className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950 select-none"
+    style={{
+      opacity: leaving ? 0 : 1,
+      transition: `opacity ${SPLASH_FADE_MS}ms ease-out`,
+      pointerEvents: leaving ? 'none' : 'auto'
+    }}
+    aria-hidden={leaving}
+  >
+    <div className="flex flex-col items-center gap-2">
       <div className="flex items-center gap-2.5">
         <Fuel className="h-6 w-6 text-emerald-400" />
-        <h1 className="text-2xl sm:text-3xl font-black tracking-[0.12em] text-white">PROJECT HIGHWAY</h1>
+        <h1 className="text-[30px] leading-none font-black tracking-[0.12em] text-white">PROJECT HIGHWAY</h1>
       </div>
       <p className="text-[12px] font-bold text-sky-300/80 tracking-wide">Ruhsat kontrol ediliyor…</p>
     </div>

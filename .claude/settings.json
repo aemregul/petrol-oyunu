@@ -425,7 +425,20 @@
       "Read(//Users/emre/Library/Caches/ms-playwright/**)",
       "Bash(node _google2.tmp.mjs chromium)",
       "Bash(node _google2.tmp.mjs webkit)",
-      "Bash(node _google3.tmp.mjs)"
+      "Bash(node _google3.tmp.mjs)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:4173/)",
+      "Bash(NODE_PATH=/Users/emre/petrol-oyunu/node_modules node gate-probe.mjs)",
+      "Bash(sed -i '' \"s#from 'playwright'#from '/Users/emre/petrol-oyunu/node_modules/playwright/index.mjs'#\" /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/gate-probe.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/gate-probe.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/gate-probe.mjs https://petrol-oyunu.vercel.app/)",
+      "Bash(curl -s https://petrol-oyunu.vercel.app/)",
+      "Bash(curl -s https://petrol-oyunu.vercel.app/assets/index-CxO8GhdE.js)",
+      "Bash(curl -sI https://petrol-oyunu.vercel.app/)",
+      "Bash(grep \"^index-.*\\\\.js$\")",
+      "Bash(curl -s \"https://petrol-oyunu.vercel.app/?nocache=$\\(date +%s\\)\" -H \"Cache-Control: no-cache\")",
+      "Bash(rm -f /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/p2-*.png)",
+      "Bash(node /private/tmp/claude-501/-Users-emre-petrol-oyunu/c2000804-b7e7-40e0-842f-df9177217d70/scratchpad/gate-probe2.mjs)",
+      "Bash(pkill -f \"vite preview --port 4173\")"
     ],
     "additionalDirectories": [
       "/private/tmp",

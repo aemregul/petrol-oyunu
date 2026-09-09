@@ -8,8 +8,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700;800&family=Baloo+2:wght@700;800&family=Nunito:wght@500;600;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      /* Açılış ekranı: paket gelmeden önce de çizilsin diye burada, CSS
+         paketinde değil. GateCurtain (WelcomeGate.tsx) ile birebir aynı. */
+      #splash { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: #020617; font-family: Nunito, Rubik, ui-sans-serif, system-ui, sans-serif; }
+      #splash .splash-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+      #splash .splash-brand { display: flex; align-items: center; gap: 10px; }
+      #splash h1 { margin: 0; font-size: 30px; line-height: 1; font-weight: 900; letter-spacing: 0.12em; color: #fff; }
+      #splash p { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.025em; color: rgba(125, 211, 252, 0.8); }
+    </style>
   </head>
   <body class="h-full bg-slate-950 text-slate-100 overflow-hidden select-none font-sans antialiased">
+    <!-- Açılış: paket yüklenene kadar tarayıcının çizdiği tek şey. React
+         gelince aynı görünümü GateCurtain devralır ve bu blok kaldırılır
+         (Emre, 2026-09-09: "ufak bir splash çıkıyor ama hiçbir şey gözükmüyor"). -->
+    <div id="splash">
+      <div class="splash-stack">
+        <div class="splash-brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>
+          <h1>PROJECT HIGHWAY</h1>
+        </div>
+        <p>Ruhsat kontrol ediliyor…</p>
+      </div>
+    </div>
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

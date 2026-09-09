@@ -12,7 +12,14 @@ import { SimulationLoop } from './simulation/SimulationLoop';
 import { useGameStore } from './store/gameStore';
 import { watchAccount, finishRedirectSignIn, describeAuthError } from './services/account';
 import { sounds } from './audio/soundEffects';
-import { WelcomeGate, GateCurtain, gateIsOpen, gateSettled } from './ui/WelcomeGate';
+import {
+  WelcomeGate,
+  GateCurtain,
+  SPLASH_FADE_MS,
+  gateIsOpen,
+  gateSettled,
+  splashHoldMs
+} from './ui/WelcomeGate';
 import {
   ElectricVehicleShowcase,
   ModelShowcase,
@@ -40,7 +47,31 @@ export const App: React.FC = () => {
   const settled = useGameStore((s) =>
     gateSettled({ accountReady: s.accountReady, accountResolved: s.accountResolved })
   );
-  const gameVisible = settled && !gateOpen;
+
+  // The splash (Emre, 2026-09-09: "o kadar hızlı ki hiçbir şey gözükmüyor").
+  // index.html paints it before any script runs; on mount React takes it
+  // over pixel for pixel and drops the static copy. It then stays until
+  // Firebase has decided AND a minimum time since the first paint has
+  // passed, and fades out over whatever is underneath — gate or game.
+  const [splashHeld, setSplashHeld] = useState(true);
+  const [curtain, setCurtain] = useState<'on' | 'leaving' | 'off'>('on');
+  useEffect(() => {
+    document.getElementById('splash')?.remove();
+    const id = window.setTimeout(() => setSplashHeld(false), splashHoldMs(performance.now()));
+    return () => window.clearTimeout(id);
+  }, []);
+  useEffect(() => {
+    if (curtain === 'on' && !splashHeld && settled) setCurtain('leaving');
+  }, [curtain, splashHeld, settled]);
+  // Ayrı efekt: aynı efekte koyunca 'leaving'e geçiş kendi temizleyicisini
+  // tetikleyip zamanlayıcıyı iptal ediyordu, perde görünmez ama asılı kalıyordu.
+  useEffect(() => {
+    if (curtain !== 'leaving') return;
+    const id = window.setTimeout(() => setCurtain('off'), SPLASH_FADE_MS);
+    return () => window.clearTimeout(id);
+  }, [curtain]);
+
+  const gameVisible = curtain !== 'on' && !gateOpen;
 
   // Oturum, oyunun değil tarayıcının ömrünü yaşar: Firebase kim olduğumuzu
   // söyledikçe store'a işlenir. Yapılandırma yoksa watchAccount tek seferlik
@@ -225,8 +256,8 @@ export const App: React.FC = () => {
           <TourOverlay />
         </>
       )}
-      {!settled && <GateCurtain />}
-      <WelcomeGate />
+      {curtain !== 'on' && <WelcomeGate />}
+      {curtain !== 'off' && <GateCurtain leaving={curtain === 'leaving'} />}
       <NotificationToast />
       <PerformanceOverlay />
     </div>
