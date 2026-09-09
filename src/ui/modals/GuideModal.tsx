@@ -75,6 +75,49 @@ function sections(): Section[] {
       )
     },
     {
+      id: 'vehicles',
+      title: 'Araçlar',
+      render: () => {
+        const fuelName = (c: (typeof GAME_CONFIG.customerTypes)[keyof typeof GAME_CONFIG.customerTypes]) =>
+          c.requiresCharger ? 'Şarj (kWh)' : c.preferredFuel === 'any' ? 'Herhangi' : GAME_CONFIG.fuels[c.preferredFuel].shortName;
+        const sensitivity = { LOW: 'Bakmaz', MEDIUM: 'Orta', HIGH: 'Her kuruşa' } as const;
+        const stops = (w: number | undefined) => (w === undefined || w >= 0.9 ? 'Sık' : w >= 0.5 ? 'Orta' : w >= 0.2 ? 'Seyrek' : 'Nadir');
+        return (
+          <>
+            <P>Yoldaki her araç aynı müşteri değil. Kimi ne yakıt aldığını, ne kadar aldığını, ne kadar beklediğini ve fiyata ne kadar baktığını bilirsen hangi tabancayı açacağını ve fiyatı nereye koyacağını bilirsin.</P>
+            <P>Kırmızı ışıklı araçlar, yani polis, ambulans ve itfaiye, trafikte sık görünür ama görevde oldukları için istasyona nadiren döner; döndüklerinde büyük depo doldururlar ve fiyata bakmazlar. Ambulansın sabrı en kısa olanıdır.</P>
+            <div className="overflow-x-auto pt-1 shrink-0">
+              <table className="w-full text-[12px] font-semibold text-ink border-collapse">
+                <thead>
+                  <tr className="text-left">
+                    {['Araç', 'Yakıt', 'Dolum', 'Sabır', 'Fiyata', 'Bahşiş', 'Uğrama'].map((h) => (
+                      <th key={h} className="k-label text-[10px] pb-1 pr-2 border-b-2 border-ink whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.values(GAME_CONFIG.customerTypes).map((c) => (
+                    <tr key={c.type} className="border-b-2 border-dotted border-mute/60 align-top">
+                      <td className="py-1.5 pr-2 font-display whitespace-nowrap">{c.name}</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap">{fuelName(c)}</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap tabular-nums">{c.minDemand}–{c.maxDemand}{c.requiresCharger ? ' kWh' : ' L'}</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap tabular-nums">{c.basePatienceSeconds} s</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap">{sensitivity[c.priceSensitivity]}</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap tabular-nums">×{c.tipChanceModifier}</td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap">{stops(c.stationStopWeight)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <H>Huyları</H>
+            <UL items={Object.values(GAME_CONFIG.customerTypes).map((c) => <><b>{c.name}</b>: {c.specialBehavior}</>)} />
+            <P>Sabır sütunu pompada ve kuyrukta bekleyebildiği saniyedir; kuyrukta yarı hızda, dolum sırasında tam hızda erir. Bahşiş sütunu bahşiş ihtimalinin katıdır; temiz saha ve cam temizliği hepsinde artırır. Elektrikli araç pompaya değil şarj direğine gelir ve şarj süresi uzun olduğundan bu arada tesisleri kullanır.</P>
+          </>
+        );
+      }
+    },
+    {
       id: 'build',
       title: 'İnşaat ve sınırlar',
       render: () => (
