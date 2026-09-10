@@ -7,15 +7,27 @@ import { stationBounds } from '../domain/services/land';
 import { GameState, BuildingEntity } from '../domain/types/gameState';
 
 /**
- * What the facilities earn, pinned (Emre, 2026-09-08). Measured at the
- * starting station — one pump, one attendant, no park — every facility
- * used to lose money against its own upkeep: three visits a day at 2024
- * prices. Spends are now 2026 prices, more drivers go in, and a driver who
- * cannot park still buys most of what they came for through the window. So
- * this is the floor: each building covers its keep on day one and pays for
- * itself in a season; a park the cars can reach, and the traffic a grown
- * station pulls, shorten that several times over. The toilet is the one
- * kept for goodwill rather than the till — it need only not lose money.
+ * What the facilities earn, pinned (Emre, 2026-09-08; re-measured 2026-09-10).
+ *
+ * Measured at the starting station: one pump, one attendant, level 12, a day
+ * with no road events, averaged over three days. There are two kinds of
+ * building here and they earn in two different ways.
+ *
+ *  - The forecourt services — wash, tyres, oil — sell to the car at the pump,
+ *    on the way out. They need no car park and never did.
+ *  - The buildings people WALK INTO — shop, café, restaurant, toilet, hotel —
+ *    are paid at their own door, one visitor at a time. Two things bring that
+ *    visitor: a driver who leaves the car at the pump and walks over (one in
+ *    five, PUMP_WALK_SHARE), and a driver who came for the building alone and
+ *    parks. The second needs a car park.
+ *
+ * Money for a visit that never happened is gone (Emre, 2026-09-10): a driver
+ * who finds no bay drives out and spends nothing, the way anyone does at a
+ * full car park. So a walk-in building without a park still covers its keep
+ * off pump trade, but slowly — and a park is the upgrade that pays it off in
+ * a season or two. The hotel is the one that cannot live on pump trade at
+ * all, and that is the point of it: nobody checks in leaving the car at a
+ * pump. The toilet is kept for goodwill rather than the till.
  */
 
 let seed = 5;
@@ -103,22 +115,31 @@ function station(): GameState {
  */
 const SAMPLE_DAYS = 3;
 
-function facilityDayNet(type: string): { net: number; price: number; served: number } {
+function facilityDayNet(
+  type: string,
+  options: { park?: boolean } = {}
+): { net: number; price: number; served: number; fromPump: number; fromPark: number } {
   const s = station();
-  // No park: this is the floor. Every visit is booked through the window
-  // at the facility's no-park share; a park the cars can reach lifts it.
+  // The park goes down first, at the very back, so the facility gets the spot
+  // it would have had anyway and the two measurements stay comparable.
+  if (options.park && !place(s, 'park', 'car_park')) throw new Error('no room for a park');
   if (!place(s, 'x', type)) throw new Error(`no room for ${type}`);
 
   let revenue = 0;
   let cost = 0;
   let served = 0;
+  let fromPump = 0;
+  let fromPark = 0;
   for (let day = 0; day < SAMPLE_DAYS; day++) {
     runDay(s);
     const t = s.dayState.todayStats;
     revenue += t.marketRevenue;
     cost += t.marketCost;
     served += t.customersServed;
+    fromPump += s.buildings.x.todayVisitsFromPump ?? 0;
+    fromPark += s.buildings.x.todayVisitsFromPark ?? 0;
     Object.assign(t, { marketRevenue: 0, marketCost: 0, customersServed: 0 });
+    Object.assign(s.buildings.x, { todayVisitsFromPump: 0, todayVisitsFromPark: 0 });
     // Overnight: the tanks are refilled, or the sample measures a station
     // running dry rather than the building beside its pumps.
     for (const tank of Object.values(s.tanks)) tank.stock = tank.capacity;
@@ -130,7 +151,9 @@ function facilityDayNet(type: string): { net: number; price: number; served: num
   return {
     net: (revenue - cost) / SAMPLE_DAYS - upkeep,
     price: GAME_CONFIG.buildings[type].price,
-    served: served / SAMPLE_DAYS
+    served: served / SAMPLE_DAYS,
+    fromPump: fromPump / SAMPLE_DAYS,
+    fromPark: fromPark / SAMPLE_DAYS
   };
 }
 
@@ -148,19 +171,62 @@ describe('facilities at 2026 prices', () => {
     expect(GAME_CONFIG.buildingEffects.car_wash.service?.avgSpend).toBe(600);
   });
 
+  // The wash, the tyre bay and the oil bay sell at the pump. A car park adds
+  // nothing to them, so they are the buildings a station can put up first.
   it.each([
-    ['toilet', 3000],
-    ['mini_market', 90],
-    ['cafe', 180],
-    ['restaurant', 180],
-    ['hotel', 400],
-    ['car_wash', 60],
-    ['tyre_service', 60],
-    ['oil_change', 40]
-  ])('%s pays its keep and, without a park, pays for itself within %i days', (type, maxDays) => {
+    ['car_wash', 90],
+    ['tyre_service', 55],
+    ['oil_change', 60]
+  ])('%s sells at the pump and pays for itself within %i days, park or no park', (type, maxDays) => {
     const { net, price, served } = facilityDayNet(type);
     expect(served).toBeGreaterThan(8);
     expect(net).toBeGreaterThan(0);
     expect(price / net).toBeLessThan(maxDays);
+  });
+
+  // A shop with no park lives on the one-in-five drivers who leave the car at
+  // the pump and walk in. There is no ceiling on the payback here on purpose:
+  // at the starting station that is a couple of visits a day and the answer
+  // runs into the hundreds of days, which is exactly why a park is worth
+  // buying. What must hold is that the trade is real — money over the upkeep,
+  // and visitors who walked in from the pump rather than a figure credited
+  // for a visit nobody made.
+  it.each(['mini_market', 'cafe', 'restaurant'])(
+    '%s covers its keep on pump trade alone, with no park at all',
+    (type) => {
+      const { net, served, fromPump, fromPark } = facilityDayNet(type);
+      expect(served).toBeGreaterThan(8);
+      expect(net).toBeGreaterThan(0);
+      expect(fromPump).toBeGreaterThanOrEqual(1);
+      expect(fromPark).toBe(0);
+    }
+  );
+
+  it('keeps the toilet out of the red without asking it to pay for itself', () => {
+    // Bought for the goodwill, not the till: it need only not lose money.
+    expect(facilityDayNet('toilet').net).toBeGreaterThan(0);
+  });
+
+  it('leaves the hotel needing a car park, because nobody checks in from a pump', () => {
+    // The one building the walk-from-the-pump trade cannot feed. Its keep is
+    // real and its rooms stay empty until there is somewhere to leave the car.
+    expect(facilityDayNet('hotel').net).toBeLessThan(0);
+    expect(facilityDayNet('hotel', { park: true }).net).toBeGreaterThan(0);
+  });
+
+  // And this is what the park is for: the drivers who came for the building
+  // and nothing else can finally get to its door.
+  it.each([
+    ['mini_market', 80],
+    ['cafe', 130],
+    ['restaurant', 90],
+    ['hotel', 260],
+    ['toilet', 400]
+  ])('%s pays for itself within %i days once cars can park', (type, maxDays) => {
+    const bare = facilityDayNet(type);
+    const parked = facilityDayNet(type, { park: true });
+    expect(parked.net).toBeGreaterThan(bare.net);
+    expect(parked.fromPark).toBeGreaterThanOrEqual(1);
+    expect(parked.price / parked.net).toBeLessThan(maxDays);
   });
 });

@@ -376,24 +376,21 @@ describe('facilities - the visit', () => {
     expect(state.pumps.pump_1.state).toBe('IDLE');
   });
 
-  it('books a fraction of a facility-only visit when there is nowhere to park', () => {
+  it('turns a facility-only driver away, unpaid, when there is nowhere to park', () => {
+    // Emre, 2026-09-10: a driver who cannot park cannot shop, the same as
+    // pulling into a full car park in life and driving out again. Booking a
+    // fraction "through the window" was money for a visit that never took
+    // place, and money the player could not trace to anything on screen.
     const state = forecourt({ tariff: 2 });
     state.buildings.cafe = building('cafe', 'cafe', [13, 8], { till: 0 });
     const car = facilityCustomer(state);
 
-    expect(car.state).toBe('OPTIONAL_SHOP');
-    expect(car.visitMode).toBe('VIRTUAL');
-    expect(car.visitor).toBeUndefined();
-    const visited = state.buildings[car.visitBuildingId!];
-    const conf = GAME_CONFIG.facilities[visited.type];
-    // Booked on the spot, at the virtual share of a full visit.
-    expect(visited.till).toBeGreaterThan(0);
-    expect(visited.till!).toBeLessThanOrEqual(Math.round(facilitySpend(visited, 'ev') * 1.2 * conf.virtualShare) + 1);
-    expect(visited.todayVisits).toBe(1);
-
-    // A few seconds' pause, then gone.
-    advance(state, 7);
     expect(['EXIT', 'DESPAWN']).toContain(car.state);
+    expect(car.visitMode).toBeFalsy();
+    expect(car.visitBuildingId).toBeFalsy();
+    expect(car.visitor).toBeUndefined();
+    expect(state.buildings.cafe.till ?? 0).toBe(0);
+    expect(state.buildings.cafe.todayVisits ?? 0).toBe(0);
   });
 
   it('charges nothing at a free toilet but still counts the visit', () => {
@@ -418,8 +415,12 @@ describe('facilities - the visit', () => {
     const parked = cars.filter((c) => c.state === 'TO_PARK');
     expect(parked).toHaveLength(4);
     expect(new Set(parked.map((c) => c.parkingSlot)).size).toBe(4);
-    // The fifth found the park full and had the visit booked from the road.
-    expect(cars.filter((c) => c.state === 'OPTIONAL_SHOP')).toHaveLength(1);
+    // The fifth found the park full and drove on, unserved and unpaid: no
+    // bay, no visit (Emre, 2026-09-10).
+    const turnedAway = cars.filter((c) => !parked.includes(c));
+    expect(turnedAway).toHaveLength(1);
+    expect(['EXIT', 'DESPAWN']).toContain(turnedAway[0].state);
+    expect(turnedAway[0].visitBuildingId).toBeFalsy();
   });
 
   it('lets a car finish the neighbouring bay instead of stopping short', () => {

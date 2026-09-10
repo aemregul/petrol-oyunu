@@ -320,6 +320,14 @@ export interface BuildingEntity {
   todayRevenue?: number;
   /** Visitors through the door today. */
   todayVisits?: number;
+  /**
+   * Where today's visits came from: a driver who walked over from the pump,
+   * or one who came off the road for the building and parked. The panel shows
+   * the two apart so the player can see what a car park is actually adding
+   * before deciding to build one (Emre, 2026-09-10).
+   */
+  todayVisitsFromPump?: number;
+  todayVisitsFromPark?: number;
   /** Which price on the facility's tariff card is up: an index into its config. */
   tariff?: number;
   /** A battery bank's charge, in kWh. Absent on saves from before banks held any. */

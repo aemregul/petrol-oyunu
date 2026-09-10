@@ -3798,22 +3798,7 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
  * without it a shop could not pay for itself at all.
  */
 function rollSideServices(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
-  const side = vehicleSide(vehicle);
-
-  // The shop, the café, the toilet: a driver paying at the pump nips in while
-  // the tank fills, so the visit is booked where it happens rather than by
-  // sending the car across the apron afterwards — which is the trip that
-  // gridlocked the forecourt. Booked at the same fraction the game already
-  // uses for a driver who could not park (virtualShare): they were never in
-  // there long. Without it a shop earns only from the few who came for it and
-  // nothing else, and no walk-in building can pay for itself.
-  const walkIn = pickFacility(state, side, vehicle.archetype);
-  if (walkIn) {
-    const conf = facilityConfig(walkIn.type);
-    bookVisit(state, walkIn, vehicle, conf?.virtualShare ?? 0.5, effects);
-  }
-
-  const facilities = blockFacilities(state, side);
+  const facilities = blockFacilities(state, vehicleSide(vehicle));
 
   for (const service of facilities.services) {
     if (Math.random() >= service.chance) continue;
@@ -3828,6 +3813,45 @@ function rollSideServices(state: GameState, vehicle: VehicleEntity, effects: Sim
     state.dayState.todayStats.marketCost += Math.round(spend * 0.45);
     playCue(effects, 'cash');
   }
+}
+
+/**
+ * A driver at the pump who fancies the shop: they get out and walk, and the
+ * car — with the pump's claim on it — stays exactly where it is. Returns true
+ * when the visit has begun, so the caller leaves the departure alone.
+ *
+ * This is the one way a fuel customer reaches a building, and it needs no car
+ * park at all: a station can run a shop on pump trade alone. A park is what
+ * frees the bay and brings in the drivers who came for the building and
+ * nothing else — an upgrade, not a toll.
+ */
+function walkFromPump(
+  state: GameState,
+  vehicle: VehicleEntity,
+  pump: PumpEntity | null,
+  effects: SimEffects
+): boolean {
+  void effects;
+  if (!pump || Math.random() >= PUMP_WALK_SHARE) return false;
+
+  // The share above is the whole gate, so the pick is only about WHICH
+  // building — its own dice would make the real rate a fraction of the one
+  // the figure names.
+  const building = pickFacility(state, vehicleSide(vehicle), vehicle.archetype, true);
+  if (!building) return false;
+
+  const conf = facilityConfig(building.type);
+  // Some buildings are not a thing you walk into leaving a car at a pump: you
+  // do not check into a hotel that way. The catalogue says which.
+  if (!conf?.walkFromPump) return false;
+
+  vehicle.visitBuildingId = building.id;
+  vehicle.waitingTimeSeconds = 0;
+  vehicle.shoppingIntent = true;
+  vehicle.visitMode = 'PUMP';
+  setVehicleState(vehicle, 'VISITING');
+  spawnVisitor(state, vehicle, building);
+  return true;
 }
 
 export function finalizeSale(
@@ -3918,12 +3942,14 @@ export function finalizeSale(
   const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
   vehicle.assignedActor = null;
 
-  // Fuel and facility visits are separate trips. Paid customers release the
-  // bay and leave directly; only a driver who chose a facility on the road
-  // ever heads for a park.
-  if (pump) releasePump(pump);
-  vehicle.targetPumpId = null;
-  sendAway(state, vehicle);
+  // Paid up. A driver may nip into the shop on foot before going — the car
+  // stays where it is, so nothing new crosses the apron. Driving to a park
+  // afterwards is not on the menu; that was the trip that jammed the plot.
+  if (!walkFromPump(state, vehicle, pump, effects)) {
+    if (pump) releasePump(pump);
+    vehicle.targetPumpId = null;
+    sendAway(state, vehicle);
+  }
 
   trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
   trackMissionMetric(state, 'FUEL_LITERS_SOLD', dispensed, effects);
@@ -3935,6 +3961,18 @@ export function finalizeSale(
 /* ------------------------------------------------------------------ */
 /* Facilities: the buildings people walk into                          */
 /* ------------------------------------------------------------------ */
+
+/**
+ * How often a driver who has just bought fuel leaves the car standing at the
+ * pump and walks over to a building. Rare on purpose: it holds the bay for the
+ * length of the visit, which is the nudge toward a second pump or a car park —
+ * a nuisance rather than a nudge if it were common (Emre, 2026-09-10: %20).
+ *
+ * Walking is the only way a fuel customer visits. DRIVING to a park afterwards
+ * is gone: that second trip across the apron, crossing the cars arriving and
+ * the cars leaving, is what gridlocked the forecourt.
+ */
+export const PUMP_WALK_SHARE = 0.2;
 
 /** How fast a driver walks, in grid units per game second. */
 const WALK_SPEED = 1.15;
@@ -4068,6 +4106,11 @@ function bookVisit(
   share: number,
   effects: SimEffects
 ): number {
+  if (vehicle.visitMode === 'PUMP') {
+    building.todayVisitsFromPump = (building.todayVisitsFromPump ?? 0) + 1;
+  } else if (vehicle.visitMode === 'PARK') {
+    building.todayVisitsFromPark = (building.todayVisitsFromPark ?? 0) + 1;
+  }
   if (building.type === 'mini_market' || building.type === 'rest_complex') {
     if (state.market.stock > 0) state.market.stock -= 1;
     trackMissionMetric(state, 'MARKET_SALES', 1, effects);
@@ -4419,24 +4462,25 @@ function startFacilityVisit(
     return;
   }
 
-  vehicle.visitMode = 'VIRTUAL';
-  bookVisit(state, building, vehicle, conf.virtualShare, effects);
-  setVehicleState(vehicle, 'OPTIONAL_SHOP');
+  // No bay free: nothing happens and nothing is earned. A driver who cannot
+  // park cannot shop — the same as pulling into a full car park in life and
+  // driving out again (Emre, 2026-09-10). Booking a fraction "through the
+  // window" was money for a visit that never took place, and money the player
+  // could not trace to anything on screen.
+  vehicle.visitBuildingId = null;
+  vehicle.visitMode = null;
+  vehicle.shoppingIntent = false;
+  sendAway(state, vehicle);
 }
 
 /** The visit is over, one way or another: the driver is back in and the car goes. */
 /**
- * A driver who could not get to the bay still wanted the shop. On a cramped
- * plot the trip to the park failed often enough that a facility earned a
- * fraction of its odds and nobody could tell why (Emre, 2026-09-08); now
- * the visit is booked the way a no-park visit is — a fraction, through the
- * window — and the car goes. The player still has every reason to lay the
- * park out so the cars actually reach it.
+ * A driver who set off for the park and could not get there gives up and
+ * leaves — with nothing spent, because nothing happened. The player's reason
+ * to lay the park out where cars can actually reach it is exactly that.
  */
 function giveUpParking(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
-  const building = vehicle.visitBuildingId ? state.buildings[vehicle.visitBuildingId] : null;
-  const conf = building ? facilityConfig(building.type) : null;
-  if (building && conf) bookVisit(state, building, vehicle, conf.virtualShare, effects);
+  void effects;
   endVisit(state, vehicle);
 }
 
@@ -5957,7 +6001,7 @@ export function hasWayIn(state: GameState, block: BlockLayout, side: DrivewaySid
  *   PUMP_BAYS    giriş şeridinden en az bir pompa bay'ine (findAvailablePump)
  *   CHARGER_BAYS giriş şeridinden en az bir şarj direğine (chargerRoute)
  */
-export type BlockedWay = 'CUSTOMERS' | 'TANKER' | 'PUMP_BAYS' | 'CHARGER_BAYS';
+export type BlockedWay = 'CUSTOMERS' | 'TANKER' | 'PUMP_BAYS' | 'CHARGER_BAYS' | 'PARK_BAYS';
 
 /**
  * Bu blokta hangi yollar kesik. Yerleşim kuralı (aday yapı hayaletken önce
@@ -5995,6 +6039,19 @@ export function blockedWays(state: GameState, side: DrivewaySide): BlockedWay[] 
     out.push('CHARGER_BAYS');
   }
 
+  // A car park nobody can drive into is the quietest failure on the plot: the
+  // bays sit empty, the shop beside it takes nothing, and the reason is a
+  // building standing across the approach where nothing marks it (Emre,
+  // 2026-09-10). It is only worth saying when there is something to visit —
+  // an empty park earns nothing whether or not cars can reach it.
+  const parks = Object.values(state.buildings).filter(
+    (b) => (b.type === 'car_park' || b.type === 'truck_park') && drivewaySideAt(b.position[1]) === side
+  );
+  const draws = facilitiesOn(state, side).length > 0;
+  if (parks.length > 0 && draws && findParkingBay(state, probe, block) === null) {
+    out.push('PARK_BAYS');
+  }
+
   return out;
 }
 
@@ -6021,7 +6078,9 @@ const WAY_WARNINGS: Record<BlockedWay, string> = {
     'tek bir araç sapmaz.',
   TANKER: 'Tanker giremiyor: tank sahasına giden yol kalmadı — tanker kapıda bekler, yakıt gelmez.',
   PUMP_BAYS: 'Hiçbir pompaya araç yanaşamıyor: bay’lere giden yol kapalı.',
-  CHARGER_BAYS: 'Hiçbir şarj direğine araç yanaşamıyor: direklere giden yol kapalı.'
+  CHARGER_BAYS: 'Hiçbir şarj direğine araç yanaşamıyor: direklere giden yol kapalı.',
+  PARK_BAYS:
+    'Otoparka ulaşılamıyor: hiçbir araç park yerine giremiyor, tesislerine yoldan müşteri gelmiyor.'
 };
 
 const WAY_REMEDY =

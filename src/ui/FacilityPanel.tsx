@@ -51,6 +51,11 @@ export const FacilityPanel: React.FC = () => {
   const till = Math.round(building.till ?? 0);
   const todayRevenue = Math.round(building.todayRevenue ?? 0);
   const todayVisits = building.todayVisits ?? 0;
+  const fromPump = building.todayVisitsFromPump ?? 0;
+  const fromPark = building.todayVisitsFromPark ?? 0;
+  const hasPark = Object.values(gameState.buildings).some(
+    (b) => b.type === 'car_park' || b.type === 'truck_park'
+  );
   const moral = facilityMoralPoints(building);
   const tariff = facilityTariff(building);
   const nextIndex = nextTariffIndex(building);
@@ -145,6 +150,28 @@ export const FacilityPanel: React.FC = () => {
                 )}
               </span>
             </div>
+
+            {/* Where the custom comes from, so a park reads as a choice the
+                player can price rather than a toll they must pay. */}
+            <div className="k-row">
+              <span>Ziyaret</span>
+              <span>
+                <span className="text-ink">pompadan {fromPump}</span>
+                <span className="text-mute font-sans font-bold text-xs"> · </span>
+                <span className={fromPark > 0 ? 'text-kgrn' : 'text-mute'}>
+                  otoparktan {fromPark}
+                </span>
+              </span>
+            </div>
+
+            {!hasPark && (
+              <div className="k-row">
+                <span>Otopark</span>
+                <span className="text-mute font-sans font-bold text-[11px] normal-case">
+                  yok — yoldan gelen müşteri park edemediği için uğramıyor
+                </span>
+              </div>
+            )}
 
             <div className="k-row">
               <span>İçeride</span>

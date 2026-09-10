@@ -1254,29 +1254,61 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(stopChance(state)).toBeLessThan(1);
   });
 
-  it('sends drivers to a block that has only a shop', () => {
-    const state = createInitialGameState();
-    state.dayState.timeSpeed = 1;
-    state.pumps = {};
-    state.market.active = true;
-    state.market.stock = 999;
-    state.buildings.mk = {
-      id: 'mk',
-      type: 'mini_market',
-      level: 1,
-      position: [8, 8],
-      rotation: 0,
-      size: [4, 4],
-      health: 100,
-      constructionState: 'ACTIVE',
-      builtAtTimestamp: 0
+  it('sends drivers to a block that has only a shop, and pays it once they can park', () => {
+    const shopOnly = (park: boolean): GameState => {
+      const state = createInitialGameState();
+      state.dayState.timeSpeed = 1;
+      state.player.level = 12;
+      state.pumps = {};
+      state.market.active = true;
+      state.market.stock = 999;
+      state.buildings.mk = {
+        id: 'mk',
+        type: 'mini_market',
+        level: 1,
+        position: [4, 8],
+        rotation: 0,
+        size: [5, 4],
+        health: 100,
+        constructionState: 'ACTIVE',
+        builtAtTimestamp: 0,
+        till: 0,
+        todayRevenue: 0,
+        todayVisits: 0
+      };
+      if (park) {
+        state.buildings.park = {
+          id: 'park',
+          type: 'car_park',
+          level: 1,
+          position: [9.5, 10.5],
+          rotation: 0,
+          size: [5, 3],
+          health: 100,
+          constructionState: 'ACTIVE',
+          builtAtTimestamp: 0
+        };
+      }
+      return state;
     };
 
-    // A forecourt with no pumps is still worth pulling into for the shop, and
-    // the visit has to earn something rather than stranding the driver.
-    expect(stopChance(state)).toBeGreaterThan(0);
-    advanceUntil(state, (s) => s.dayState.todayStats.marketRevenue > 0, 4000);
-    expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
+    // A forecourt with no pumps is still worth pulling into for the shop.
+    expect(stopChance(shopOnly(false))).toBeGreaterThan(0);
+
+    // But there is nowhere to leave the car. The drivers turn in, find no
+    // bay, and go — exactly as they would at a full car park in life, and
+    // the till stays shut (Emre, 2026-09-10). The old code paid the shop a
+    // fraction "through the window" for a visit that never happened.
+    const bare = shopOnly(false);
+    advanceUntil(bare, (s) => s.dayState.todayStats.marketRevenue > 0, 4000);
+    expect(bare.dayState.todayStats.marketRevenue).toBe(0);
+    expect(bare.buildings.mk.todayVisits ?? 0).toBe(0);
+
+    // A park is what turns those same drivers into customers.
+    const parked = shopOnly(true);
+    advanceUntil(parked, (s) => s.dayState.todayStats.marketRevenue > 0, 4000);
+    expect(parked.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
+    expect(parked.buildings.mk.todayVisitsFromPark ?? 0).toBeGreaterThan(0);
   });
 
   it('keeps traffic bodies apart on the road and forecourt without gridlock', () => {
@@ -1770,12 +1802,21 @@ describe('price, demand and reputation', () => {
     expect(dailyPriceReputationDelta(dear)).toBeLessThan(0);
   });
 
-  it('gives the forecourt its chance at a charging customer, then lets it go', () => {
+  it('sells a charging customer a forecourt service, but never a walk-in visit', () => {
     const state = createInitialGameState();
     state.player.level = 12;
+    // Two kinds of building, and the difference between them is the point.
+    // The wash sells to the car, at the pump, on the way out. The café sells
+    // to a person who walks through its door — and a driver whose battery is
+    // full is finished here, so nobody walks anywhere.
+    state.buildings.wash = {
+      id: 'wash', type: 'car_wash', level: 1, position: [4, 11], rotation: 0,
+      size: [4, 4], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
     state.buildings.cafe = {
       id: 'cafe', type: 'cafe', level: 1, position: [12, 11], rotation: 0,
-      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+      size: [3, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0,
+      till: 0, todayRevenue: 0, todayVisits: 0
     };
 
     const effects = createEffects();
@@ -1796,11 +1837,19 @@ describe('price, demand and reputation', () => {
       finalizeCharge(state, state.vehicles[id], effects);
     }
 
-    // Fifty customers past a café with a 26% catch rate: the till has rung.
+    // Fifty customers past a wash with a 25% catch rate: the till has rung.
     // "Uses the facilities while waiting" was flavour text before that.
     expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
     expect(state.dayState.todayStats.customersServed).toBe(50);
-    // But the money is a till roll, not a second trip: a charged car leaves
+
+    // The café takes nothing, and that is correct rather than a shortfall.
+    // Money it had not earned used to be credited here on the grounds that
+    // the driver "might" have popped in; the player could see the figure and
+    // never the customer (Emre, 2026-09-10). A café is paid at its own door.
+    expect(state.buildings.cafe.till ?? 0).toBe(0);
+    expect(state.buildings.cafe.todayVisits ?? 0).toBe(0);
+
+    // And the money is a till roll, not a second trip: a charged car leaves
     // rather than setting off across the apron for a park.
     expect(
       Object.values(state.vehicles).every((v) => v.state === 'EXIT' || v.state === 'DESPAWN')
@@ -1813,6 +1862,30 @@ describe('withdrawing a service mid-visit', () => {
   // player's own way of losing a customer. The car must leave at once — not
   // wait out a patience timer at a post that no longer exists — and it must
   // cost the station its name the way any lost customer does.
+
+  /**
+   * A shop-only forecourt with somewhere to leave the car: no pumps, one
+   * shop, one four-bay park behind it. The drivers who stop are there for the
+   * shop and nothing else, and the park is what lets them get to its door —
+   * without it they find no bay and drive straight out again.
+   */
+  function shopWithPark(): GameState {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 12;
+    state.pumps = {};
+    state.market.active = true;
+    state.market.stock = 999;
+    state.buildings.mk = {
+      id: 'mk', type: 'mini_market', level: 1, position: [4, 8], rotation: 0,
+      size: [5, 4], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    state.buildings.park = {
+      id: 'park', type: 'car_park', level: 1, position: [9.5, 10.5], rotation: 0,
+      size: [5, 3], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
+    };
+    return state;
+  }
 
   it('sends a charging customer away, at a price, when their post is removed', () => {
     const state = createInitialGameState();
@@ -1931,24 +2004,14 @@ describe('withdrawing a service mid-visit', () => {
   });
 
   it('loses the visitor inside a facility that is sold, unless an upgrade absorbed it', () => {
-    // A shop-only forecourt: no pumps, one shop. The drivers who stop are
-    // there for the shop and nothing else.
-    const state = createInitialGameState();
-    state.dayState.timeSpeed = 1;
-    state.player.level = 12;
-    state.pumps = {};
-    state.market.active = true;
-    state.buildings.mk = {
-      id: 'mk', type: 'mini_market', level: 1, position: [10, 8], rotation: 0,
-      size: [5, 5], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
-    };
+    const state = shopWithPark();
 
     advanceUntil(
       state,
-      (s) => Object.values(s.vehicles).some((v) => v.state === 'OPTIONAL_SHOP'),
+      (s) => Object.values(s.vehicles).some((v) => v.state === 'VISITING'),
       6000
     );
-    const shopper = Object.values(state.vehicles).find((v) => v.state === 'OPTIONAL_SHOP')!;
+    const shopper = Object.values(state.vehicles).find((v) => v.state === 'VISITING')!;
     expect(shopper.visitBuildingId).toBe('mk');
 
     const lost = state.dayState.todayStats.customersLost;
@@ -1962,27 +2025,19 @@ describe('withdrawing a service mid-visit', () => {
   });
 
   it('moves a visit into the rest complex that absorbed its shop', () => {
-    const state = createInitialGameState();
-    state.dayState.timeSpeed = 1;
-    state.player.level = 12;
-    state.pumps = {};
-    state.market.active = true;
-    state.buildings.mk = {
-      id: 'mk', type: 'mini_market', level: 1, position: [10, 8], rotation: 0,
-      size: [5, 5], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
-    };
+    const state = shopWithPark();
 
     advanceUntil(
       state,
-      (s) => Object.values(s.vehicles).some((v) => v.state === 'OPTIONAL_SHOP'),
+      (s) => Object.values(s.vehicles).some((v) => v.state === 'VISITING'),
       6000
     );
-    const shopper = Object.values(state.vehicles).find((v) => v.state === 'OPTIONAL_SHOP')!;
+    const shopper = Object.values(state.vehicles).find((v) => v.state === 'VISITING')!;
 
     // The shop is built over, not torn down: its customer keeps shopping.
     delete state.buildings.mk;
     state.buildings.rc = {
-      id: 'rc', type: 'rest_complex', level: 1, position: [10, 8], rotation: 0,
+      id: 'rc', type: 'rest_complex', level: 1, position: [4, 8], rotation: 0,
       size: [12, 6], health: 100, constructionState: 'ACTIVE', builtAtTimestamp: 0
     };
     const lost = state.dayState.todayStats.customersLost;

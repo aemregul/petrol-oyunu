@@ -314,6 +314,8 @@ function beginNewDay(state: GameState, effects: ReturnType<typeof createEffects>
   for (const building of Object.values(state.buildings)) {
     if (building.todayRevenue !== undefined) building.todayRevenue = 0;
     if (building.todayVisits !== undefined) building.todayVisits = 0;
+    if (building.todayVisitsFromPump !== undefined) building.todayVisitsFromPump = 0;
+    if (building.todayVisitsFromPark !== undefined) building.todayVisitsFromPark = 0;
   }
 }
 
