@@ -5,6 +5,7 @@
 
 import { GameState, GameNotification } from '../types/gameState';
 import { createInitialGameState } from '../types/initialState';
+import { reconcileFuelReservations } from './TransactionService';
 
 const PRIMARY_SAVE_KEY = 'project_highway_v1_save';
 const BACKUP_SAVE_KEYS = [
@@ -160,6 +161,11 @@ export class SaveManager {
       const centre = (v: number, side: number) => (side % 2 === 0 ? Math.round(v) : Math.floor(v) + 0.5);
       building.position = [centre(building.position[0], w), centre(building.position[1], d)];
     }
+
+    // A reservation belongs to a live sale, never to the save by itself.
+    // Reconstruct it on load so historic interrupted cars cannot make a tank
+    // with visible fuel behave as though it were empty.
+    reconcileFuelReservations(state);
 
     return state;
   }

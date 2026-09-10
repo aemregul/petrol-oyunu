@@ -4,8 +4,42 @@
  * Sourced directly from GDD Section 26.6, 27.2
  */
 
-import { GameState, TransactionRecord, FuelType } from '../types/gameState';
+import { FuelTankEntity, GameState, TransactionRecord, FuelType } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
+
+/** Fuel that has not already been promised to an active customer. */
+export function availableFuelLiters(
+  tank: Pick<FuelTankEntity, 'stock' | 'reservedStock'>
+): number {
+  return Math.max(0, tank.stock - tank.reservedStock);
+}
+
+/**
+ * Repairs reservation drift from interrupted or older saves. The tank's
+ * aggregate hold is derived from the live manual/employee sales that own it;
+ * a number with no such customer behind it must not make a stocked tank look
+ * empty forever.
+ */
+export function reconcileFuelReservations(state: GameState): void {
+  const held: Record<FuelType, number> = { gasoline: 0, diesel: 0, lpg: 0 };
+
+  for (const vehicle of Object.values(state.vehicles)) {
+    // Runtime traffic is normally a complete VehicleEntity, but old saves and
+    // defensive traffic fixtures can contain road-only cars without a request.
+    const liters = Number(vehicle.request?.reservedLiters ?? 0);
+    const ownsLiveHold =
+      !vehicle.chargingBuildingId &&
+      (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT') &&
+      Number.isFinite(liters) &&
+      liters > 0;
+    if (ownsLiveHold) held[vehicle.fuelType] += liters;
+  }
+
+  for (const fuelType of Object.keys(state.tanks) as FuelType[]) {
+    const tank = state.tanks[fuelType];
+    tank.reservedStock = Math.min(tank.stock, Math.max(0, held[fuelType]));
+  }
+}
 
 export interface TransactionResult {
   success: boolean;
@@ -99,7 +133,7 @@ export class TransactionService {
       return { success: false, error: `${fuelType} yakıt tankı henüz inşa edilmedi!`, reservedLiters: 0 };
     }
 
-    const availableStock = Math.max(0, tank.stock - tank.reservedStock);
+    const availableStock = availableFuelLiters(tank);
     if (availableStock < 0.1) {
       return { success: false, error: `${tank.fuelType} tankında yeterli yakıt yok!`, reservedLiters: 0 };
     }

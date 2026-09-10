@@ -61,7 +61,11 @@ import {
   GameEventConfig,
   DAILY_MISSION_TEMPLATES
 } from '../../config/eventConfig';
-import { TransactionService } from './TransactionService';
+import {
+  availableFuelLiters,
+  reconcileFuelReservations,
+  TransactionService
+} from './TransactionService';
 import { VehicleStateMachine } from '../stateMachines/vehicleStateMachine';
 import { PumpStateMachine } from '../stateMachines/pumpStateMachine';
 import { OrderStateMachine } from '../stateMachines/orderStateMachine';
@@ -5257,7 +5261,7 @@ function cannotServe(state: GameState, vehicle: VehicleEntity): boolean {
   }
 
   const tank = state.tanks[vehicle.fuelType];
-  if (!tank || tank.stock - tank.reservedStock < 1) return true;
+  if (!tank || availableFuelLiters(tank) < 0.1) return true;
   return !blockHasWorkingPump(state, side);
 }
 
@@ -5294,7 +5298,7 @@ function serviceFailureReason(
   if (!blockHasWorkingPump(state, side)) {
     return 'Çalışır pompa yok — müşteri bekledi ve ayrıldı. Pompayı onarın.';
   }
-  if (tank && tank.stock - tank.reservedStock < 1) {
+  if (tank && availableFuelLiters(tank) < 0.1) {
     return `${fuel} deposu boş — müşteri yakıt alamadan ayrıldı.`;
   }
   return fallback;
@@ -7501,6 +7505,12 @@ export function runSimulationTick(
   if (speed === 0 || !state.dayState.isDayActive) return;
 
   const dt = deltaSeconds * speed;
+
+  // Old/interrupted saves could keep a tank-wide hold after the customer that
+  // owned it had vanished. Rebuild it once per simulation turn, before a new
+  // arrival decides the forecourt is dry. Doing this outside the vehicle
+  // substeps avoids multiplying the work on long/catch-up ticks.
+  reconcileFuelReservations(state);
 
   const hoursPerSecond = 1 / GAME_CONFIG.economy.realSecondsPerGameHour;
   state.dayState.gameTime += dt * hoursPerSecond;

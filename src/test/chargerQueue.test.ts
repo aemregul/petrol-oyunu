@@ -51,7 +51,11 @@ describe('the line behind the post', () => {
     state.dayState.timeSpeed = 1;
     state.dayState.gameTime = 12;
     state.player.level = 12;
-    state.station.open = false;
+    // These are real arrivals exercising the station queue, so the forecourt
+    // must be open. A closed station now correctly keeps ROAD_APPROACH cars on
+    // the highway; using it merely as a spawn suppressor contradicted that
+    // regression rule.
+    state.station.open = true;
     state.buildings.sub = building('sub', 'ev_substation', [13, 13]);
     state.buildings.bank = building('bank', 'ev_storage', [9.5, 12.5], 0, { energyKwh: 200 });
     // Deep enough in the plot for two to wait behind it, off the front lane.

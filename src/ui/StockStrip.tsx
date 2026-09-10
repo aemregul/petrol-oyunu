@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { energyAvailable, energyCapacityOn } from '../domain/services/simulationEngine';
 import { FuelType } from '../domain/types/gameState';
+import { availableFuelLiters } from '../domain/services/TransactionService';
 
 /**
  * What the station has in the ground and in the battery, in one glance
@@ -16,8 +17,9 @@ const Card: React.FC<{
   color: string;
   share: number;
   value: string;
-}> = ({ label, color, share, value }) => (
-  <div className="game-glass px-2.5 py-1.5 flex items-center gap-2 pointer-events-auto">
+  hint?: string;
+}> = ({ label, color, share, value, hint }) => (
+  <div className="game-glass px-2.5 py-1.5 flex items-center gap-2 pointer-events-auto" title={hint}>
     <span className="k-label leading-none">{label}</span>
     <span className="k-bar w-14 h-2.5">
       <i style={{ width: `${Math.round(Math.max(0, Math.min(1, share)) * 100)}%`, background: color }} />
@@ -40,13 +42,20 @@ export const StockStrip: React.FC = () => {
         const tank = tanks[fuel];
         const conf = GAME_CONFIG.fuels[fuel];
         if (!tank || !conf) return null;
+        const available = availableFuelLiters(tank);
+        const reserved = Math.max(0, tank.stock - available);
         return (
           <Card
             key={fuel}
             label={conf.shortName}
             color={conf.color}
-            share={tank.capacity > 0 ? tank.stock / tank.capacity : 0}
-            value={`${Math.round(tank.stock).toLocaleString('tr-TR')}L`}
+            share={tank.capacity > 0 ? available / tank.capacity : 0}
+            value={`${Math.round(available).toLocaleString('tr-TR')}L`}
+            hint={
+              reserved > 0
+                ? `${Math.round(tank.stock).toLocaleString('tr-TR')} L depoda · ${Math.round(reserved).toLocaleString('tr-TR')} L devam eden doluma ayrıldı · ${Math.round(available).toLocaleString('tr-TR')} L satılabilir`
+                : `${Math.round(available).toLocaleString('tr-TR')} L satılabilir`
+            }
           />
         );
       })}
