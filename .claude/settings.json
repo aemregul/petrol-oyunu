@@ -466,7 +466,12 @@
       "Bash(awk '/^export function defaultMouthX\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
       "Bash(awk '/^export function drivewayMouths\\\\\\(/,/^}/' src/domain/services/simulationEngine.ts)",
       "Bash(grep -i \"^jsdom$\\\\|^happy-dom$\")",
-      "Bash(awk '{print $2, $3\"%\", $11, $12, $13}')"
+      "Bash(awk '{print $2, $3\"%\", $11, $12, $13}')",
+      "Bash(sed -i '' \"s#from 'playwright'#from '/Users/emre/petrol-oyunu/node_modules/playwright/index.mjs'#\" staff_shot.mjs)",
+      "Bash(node staff_shot.mjs)",
+      "Bash(sed -i '' 's/schemaVersion: 1,/schemaVersion: 6,/' staff_shot.mjs)",
+      "Bash(sed -i '' \"s/console.log\\('ise al', await domClick\\('İşe Al'\\)\\);/console.log\\('no hire needed'\\);/\" staff_shot.mjs)",
+      "Bash(curl -s -o /dev/null --max-time 2 http://127.0.0.1:5199/)"
     ],
     "additionalDirectories": [
       "/private/tmp",

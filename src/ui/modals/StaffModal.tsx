@@ -156,131 +156,153 @@ export const StaffModal: React.FC = () => {
                   const hasEnoughServices = nextTier ? emp.serviceCount >= (nextTier.requiredServices || 0) : false;
                   const hasEnoughCash = nextTier ? gameState.player.cash >= nextTier.hireCost : false;
 
+                  // Every card is the same four rows in the same order, whatever the
+                  // level — name, figures, post, next step — so two attendants read
+                  // as two lines of one table, not two different forms (Emre,
+                  // 2026-09-10: "kutular eşit şekilde alt alta değil").
+                  const speedNow = Math.round(currentTier.speedMultiplier * 100);
+                  const progress = nextTier
+                    ? Math.min(100, Math.round((emp.serviceCount / Math.max(1, nextTier.requiredServices || 1)) * 100))
+                    : 100;
+
                   return (
                     <div
                       key={emp.id}
                       className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3"
                     >
-                      {/* Top Row: Info + Assignment + Actions */}
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-display text-base text-ink">{emp.name}</span>
-                            <span className="bg-kblu text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink">
-                              Seviye {emp.level}
+                      {/* 1 — Name, level, and the one destructive action, right. */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-display text-base text-ink truncate">{emp.name}</span>
+                          <span className="bg-kblu text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink whitespace-nowrap">
+                            Seviye {emp.level}
+                          </span>
+                          {emp.level === 3 && (
+                            <span className="bg-kyel text-ink text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink whitespace-nowrap">
+                              ⭐ USTA
                             </span>
-                            {emp.level === 3 && (
-                              <span className="bg-kyel text-ink text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink">
-                                ⭐ USTA
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] font-mono text-mute mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <span>Maaş: ₺{emp.wage}/gün</span>
-                            <span>•</span>
-                            <span>Hizmet: {emp.serviceCount}</span>
-                            <span>•</span>
-                            <span className="text-kgrn font-semibold">
-                              Dolum Hızı: %{Math.round(currentTier.speedMultiplier * 100)}
-                            </span>
-                            <span>•</span>
-                            <span className="text-kblu font-semibold">
-                              Tepki: {currentTier.actionDelaySeconds}s
-                            </span>
-                          </div>
+                          )}
                         </div>
+                        <button
+                          onClick={() => fireAttendant(emp.id)}
+                          title="İşten Çıkar"
+                          className="game-btn p-2 rounded-md bg-kred hover:bg-kred-dark text-white flex items-center justify-center shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
 
-                        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
-                          {/* Where they stand: one chip per bay, the one they are on
-                              lit, plus "Boşta". A native select looked like a form on
-                              a card (Emre, 2026-09-09). */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <button
-                              onClick={() => assignAttendantToPump(emp.id, null)}
-                              className={`game-btn px-2.5 py-1.5 rounded-md font-display text-xs tracking-wide ${
-                                emp.assignedPumpId ? 'bg-board text-ink hover:bg-card' : 'bg-kyel text-ink'
-                              }`}
-                              title="Pompadan al, boşta beklesin"
-                            >
-                              Boşta
-                            </button>
-                            {Object.values(gameState.pumps).map((p) => {
-                              const mine = emp.assignedPumpId === p.id;
-                              const taken = !mine && attendants.some((other) => other.assignedPumpId === p.id);
-                              return (
-                                <button
-                                  key={p.id}
-                                  onClick={() => assignAttendantToPump(emp.id, p.id)}
-                                  disabled={taken}
-                                  title={taken ? 'Bu pompada başka pompacı var' : `Sv.${p.level} pompa`}
-                                  className={`game-btn px-2.5 py-1.5 rounded-md font-display text-xs tracking-wide ${
-                                    mine
-                                      ? 'bg-kgrn text-white'
-                                      : taken
-                                        ? 'bg-board text-mute opacity-60 cursor-not-allowed'
-                                        : 'bg-board text-ink hover:bg-card'
-                                  }`}
-                                >
-                                  {pumpName(gameState, p)}
-                                </button>
-                              );
-                            })}
+                      {/* 2 — Four equal figures. */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { label: 'Maaş', value: `₺${emp.wage.toLocaleString('tr-TR')}/gün`, tone: 'text-ink' },
+                          { label: 'Hizmet', value: String(emp.serviceCount), tone: 'text-ink' },
+                          { label: 'Dolum hızı', value: `%${speedNow}`, tone: 'text-kgrn' },
+                          { label: 'Tepki', value: `${currentTier.actionDelaySeconds}s`, tone: 'text-kblu' }
+                        ].map((cell) => (
+                          <div key={cell.label} className="bg-paper border-2 border-ink rounded-md px-3 py-2">
+                            <div className="k-label">{cell.label}</div>
+                            <div className={`font-display font-extrabold text-[15px] tabular-nums ${cell.tone}`}>
+                              {cell.value}
+                            </div>
                           </div>
+                        ))}
+                      </div>
 
-                          {/* Upgrade Attendant */}
-                          {nextTier && (
+                      {/* 3 — Where they stand: one chip per bay, the one they are on
+                          lit, plus "Boşta". A native select looked like a form on a
+                          card (Emre, 2026-09-09). */}
+                      <div className="flex items-center gap-3">
+                        <span className="k-label w-20 shrink-0">Görev yeri</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            onClick={() => assignAttendantToPump(emp.id, null)}
+                            className={`game-btn px-2.5 py-1.5 rounded-md font-display text-xs tracking-wide ${
+                              emp.assignedPumpId ? 'bg-paper text-ink hover:bg-card' : 'bg-kyel text-ink'
+                            }`}
+                            title="Pompadan al, boşta beklesin"
+                          >
+                            Boşta
+                          </button>
+                          {Object.values(gameState.pumps).map((p) => {
+                            const mine = emp.assignedPumpId === p.id;
+                            const taken = !mine && attendants.some((other) => other.assignedPumpId === p.id);
+                            return (
+                              <button
+                                key={p.id}
+                                onClick={() => assignAttendantToPump(emp.id, p.id)}
+                                disabled={taken}
+                                title={taken ? 'Bu pompada başka pompacı var' : `Sv.${p.level} pompa`}
+                                className={`game-btn px-2.5 py-1.5 rounded-md font-display text-xs tracking-wide ${
+                                  mine
+                                    ? 'bg-kgrn text-white'
+                                    : taken
+                                      ? 'bg-paper text-mute opacity-60 cursor-not-allowed'
+                                      : 'bg-paper text-ink hover:bg-card'
+                                }`}
+                              >
+                                {pumpName(gameState, p)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 4 — The next step, in the same slot on every card: what the
+                          next grade brings, how far along the attendant is, and the
+                          one button that buys it. At the top grade the slot says so
+                          instead of vanishing, so the cards keep one shape. */}
+                      <div className="flex items-center gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
+                        <span className="k-label w-20 shrink-0">
+                          {nextTier ? `Seviye ${nextTier.level}` : 'Usta'}
+                        </span>
+                        {nextTier ? (
+                          <>
+                            <div className="flex-1 min-w-0 flex flex-col gap-1">
+                              <div className="text-xs font-mono text-ink flex flex-wrap gap-x-3">
+                                <span>
+                                  Dolum <span className="text-kgrn font-bold">%{speedNow} → %{Math.round(nextTier.speedMultiplier * 100)}</span>
+                                </span>
+                                <span>
+                                  Tepki <span className="text-kblu font-bold">{currentTier.actionDelaySeconds}s → {nextTier.actionDelaySeconds}s</span>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="k-bar flex-1">
+                                  <i className={hasEnoughServices ? 'bg-kgrn' : 'bg-kyel'} style={{ width: `${progress}%` }} />
+                                </div>
+                                <span className={`text-[11px] font-mono tabular-nums whitespace-nowrap ${hasEnoughServices ? 'text-kgrn font-bold' : 'text-mute'}`}>
+                                  {emp.serviceCount}/{nextTier.requiredServices} hizmet
+                                </span>
+                              </div>
+                            </div>
                             <button
                               onClick={() => upgradeAttendant(emp.id)}
                               disabled={!hasEnoughServices || !hasEnoughCash}
-                              className={`game-btn text-xs font-display tracking-wide px-3 py-2 rounded-md flex items-center gap-1.5 whitespace-nowrap ${
+                              title={
+                                !hasEnoughServices
+                                  ? 'Önce yeterli hizmet sayısına ulaşmalı'
+                                  : !hasEnoughCash
+                                    ? 'Kasa yetmiyor'
+                                    : 'Bir üst seviyeye eğit'
+                              }
+                              className={`game-btn text-xs font-display tracking-wide px-3 py-2 rounded-md flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                                 hasEnoughServices && hasEnoughCash
                                   ? 'bg-kblu hover:bg-kblu-dark text-white'
                                   : 'bg-card text-mute cursor-not-allowed'
                               }`}
                             >
                               <ArrowUpCircle className="w-3.5 h-3.5" />
-                              <span>Eğit (₺{nextTier.hireCost.toLocaleString('tr-TR')})</span>
+                              <span>Eğit — ₺{nextTier.hireCost.toLocaleString('tr-TR')}</span>
                             </button>
-                          )}
-
-                          {/* Fire / Dismiss Attendant */}
-                          <button
-                            onClick={() => fireAttendant(emp.id)}
-                            title="İşten Çıkar"
-                            className="game-btn p-2 rounded-md bg-kred hover:bg-kred-dark text-white flex items-center justify-center"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-ink">
+                            En yüksek seviye — dolum <span className="text-kgrn font-bold">%{speedNow}</span>, tepki{' '}
+                            <span className="text-kblu font-bold">{currentTier.actionDelaySeconds}s</span>.
+                          </span>
+                        )}
                       </div>
-
-                      {/* Bottom Row: Next Level Perks Preview */}
-                      {nextTier ? (
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-paper border-2 border-ink px-3 py-2 rounded-md">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-kyel-dark font-bold flex items-center gap-1">
-                              <span>⚡</span> Seviye {nextTier.level} Kazanımları:
-                            </span>
-                            <span className="text-kgrn font-mono font-bold bg-board px-2 py-0.5 rounded-md border-2 border-kgrn">
-                              Dolum Hızı: %{Math.round(currentTier.speedMultiplier * 100)} ➔ %{Math.round(nextTier.speedMultiplier * 100)} (+%{Math.round((nextTier.speedMultiplier - currentTier.speedMultiplier) * 100)})
-                            </span>
-                            <span className="text-kblu font-mono font-bold bg-board px-2 py-0.5 rounded-md border-2 border-kblu">
-                              Tepki: {currentTier.actionDelaySeconds}s ➔ {nextTier.actionDelaySeconds}s (-{(currentTier.actionDelaySeconds - nextTier.actionDelaySeconds).toFixed(1)}s)
-                            </span>
-                          </div>
-                          <div className="text-[11px] font-mono text-mute">
-                            {hasEnoughServices ? (
-                              <span className="text-kgrn font-bold">✓ Deneyim Yeterli ({emp.serviceCount}/{nextTier.requiredServices})</span>
-                            ) : (
-                              <span>Şart: {emp.serviceCount}/{nextTier.requiredServices} Hizmet</span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="pt-2 border-t-2 border-dotted border-mute/60 flex items-center gap-1.5 text-xs text-kyel-dark font-semibold">
-                          <span>🏆</span> Maksimum Usta Seviyesi: En yüksek dolum hızı (%110) ve anında reaksiyon (0.6s).
-                        </div>
-                      )}
                     </div>
                   );
                 })
