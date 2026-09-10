@@ -7239,18 +7239,34 @@ function tickEmployees(state: GameState, dt: number, effects: SimEffects): void 
  */
 const PUMP_AGEING_PER_SECOND = 0.022;
 
+/**
+ * What that rate becomes while the station is shut.
+ *
+ * Wear goes on — a closed forecourt is still hardware standing in the weather,
+ * and shutting up shop must never be the cheap way to keep a bay pristine. But
+ * most of what wears a pump is the pumping, and at the full rate a station left
+ * closed for a few days came back to bays that needed servicing without having
+ * served anybody (Emre, 2026-09-10). A quarter: the fortnight a trading pump
+ * lasts becomes a couple of months of standing idle.
+ */
+const PUMP_AGEING_CLOSED_SHARE = 0.25;
+
 function tickStationCondition(state: GameState, dt: number, effects: SimEffects): void {
   // Idle grime accumulates slowly across the whole forecourt.
   state.station.cleanliness = clamp(state.station.cleanliness - 0.035 * dt, 0, 100);
   tickSolarGrime(state, dt);
 
+  const wear = state.station.open ? 1 : PUMP_AGEING_CLOSED_SHARE;
+
   for (const pump of Object.values(state.pumps)) {
     if (pump.state === 'BROKEN' || pump.state === 'MAINTENANCE') continue;
 
-    pump.health = Math.max(0, pump.health - PUMP_AGEING_PER_SECOND * dt);
+    pump.health = Math.max(0, pump.health - PUMP_AGEING_PER_SECOND * wear * dt);
 
-    // Level 3 hardware is markedly more reliable (GDD: -%25 arıza riski).
-    const reliability = pump.level >= 3 ? 0.75 : 1;
+    // Level 3 hardware is markedly more reliable (GDD: -%25 arıza riski). A
+    // shut bay is no more likely to fail on a given day than it is to wear:
+    // nothing is running through it, so the same share applies.
+    const reliability = (pump.level >= 3 ? 0.75 : 1) * wear;
     if (pump.health <= 0) {
       breakPump(
         state,

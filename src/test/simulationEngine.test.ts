@@ -777,6 +777,32 @@ describe('simulationEngine - day boundary', () => {
     expect(100 - busy.pumps.pump_1.health).toBeLessThan(8);
   });
 
+  it('slows a pump\u2019s wear while the station is shut, without stopping it', () => {
+    // Emre, 2026-09-10: a station left closed for days came back to bays that
+    // needed servicing without having served anybody. Shutting up shop must
+    // still cost something — otherwise it is the cheap way to keep hardware
+    // pristine — but most of what wears a pump is the pumping.
+    const open = createInitialGameState();
+    open.dayState.timeSpeed = 1;
+    const shut = createInitialGameState();
+    shut.dayState.timeSpeed = 1;
+    shut.station.open = false;
+
+    // A full trading day: 24 game hours at ten real seconds each.
+    const day = 24 * GAME_CONFIG.economy.realSecondsPerGameHour;
+    advance(open, day);
+    advance(shut, day);
+
+    const openWear = 100 - open.pumps.pump_1.health;
+    const shutWear = 100 - shut.pumps.pump_1.health;
+
+    // Still wearing: closing is not a way to freeze the hardware.
+    expect(shutWear).toBeGreaterThan(0);
+    // But markedly slower — a quarter of the rate a trading day charges.
+    expect(shutWear).toBeLessThan(openWear / 2);
+    expect(shutWear / openWear).toBeCloseTo(0.25, 2);
+  });
+
   it('flags the end of the day at closing time', () => {
     const state = createInitialGameState();
     state.dayState.gameTime = GAME_CONFIG.economy.dayEndHour - 0.01;
