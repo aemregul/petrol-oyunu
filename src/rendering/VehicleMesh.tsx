@@ -20,6 +20,25 @@ interface VehicleMeshProps {
   vehicle: VehicleEntity;
 }
 
+/**
+ * A manually served customer remains the player's job after another panel
+ * covers the dispenser. The fuelling modal owns the timer, so closing it
+ * pauses the pour; the car itself must therefore stay clickable until the
+ * player reopens the meter and either finishes pouring or hands the sale over.
+ */
+export function canPlayerOpenVehicleService(
+  vehicle: VehicleEntity,
+  attendantServing: boolean
+): boolean {
+  const waitingForService = vehicle.state === 'AT_PUMP' || vehicle.state === 'REQUEST';
+  const playerFuelSession =
+    !vehicle.chargingBuildingId &&
+    vehicle.assignedActor === 'PLAYER' &&
+    (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT');
+
+  return playerFuelSession || (waitingForService && !attendantServing);
+}
+
 function getRequestHeight(modelVariant: VehicleEntity['modelVariant']): number {
   switch (modelVariant) {
     case 'firetruck':
@@ -103,6 +122,9 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
     vehicle.state === 'TO_PARK' ||
     vehicle.state === 'EXIT';
   const isFueling = vehicle.state === 'FUELING';
+  const awaitingHandover =
+    !atCharger && vehicle.assignedActor === 'PLAYER' && vehicle.state === 'PAYMENT';
+  const canPlayerInteract = canPlayerOpenVehicleService(vehicle, isAttendantServing);
 
   // A card over a car whose driver has gone in — and it is a warning when
   // the car is standing at a pump, because that pump is out of action until
@@ -161,7 +183,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
       position={[posX, 0, posZ]}
       onClick={(e) => {
         e.stopPropagation();
-        if (needsService && !isAttendantServing) serve();
+        if (canPlayerInteract) serve();
       }}
     >
       {/* Vehicle body: RgsDev CC0 model, primitives kept as a fallback. */}
@@ -188,8 +210,8 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         </Html>
       )}
 
-      {/* Request bubble, only while the customer is waiting to be served */}
-      {(needsService || isFueling) && (
+      {/* The request becomes a resume/hand-over button during manual service. */}
+      {(needsService || isFueling || awaitingHandover) && (
         <Html
           position={[0, requestHeight, 0]}
           center
@@ -198,18 +220,21 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         >
           <div
             className={`flex flex-col items-center transition-transform transform ${
-              needsService && !isAttendantServing ? 'cursor-pointer' : 'cursor-default'
+              canPlayerInteract ? 'cursor-pointer' : 'cursor-default'
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              if (needsService && !isAttendantServing) serve();
+              if (canPlayerInteract) serve();
             }}
           >
             {/* Meter Badge (like beneloil.com: 18.9L • ₺170) */}
             <div className="game-glass bg-paper border-2 border-ink text-ink text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 font-display tabular-nums whitespace-nowrap">
-              {isFueling ? (
+              {isFueling || awaitingHandover ? (
                 <span className="tracking-wide text-ink">
                   {vehicle.request.dispensedLiters.toFixed(1)}{serviceUnit} <span className="text-mute">•</span> ₺{Math.round(vehicle.request.dispensedLiters * unitPrice)}
+                  {canPlayerInteract && (
+                    <span className="text-kgrn"> · {awaitingHandover ? 'Teslim et' : 'Doluma devam et'}</span>
+                  )}
                 </span>
               ) : (
                 <span className="tracking-wide text-ink">
