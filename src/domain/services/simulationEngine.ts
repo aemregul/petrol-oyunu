@@ -184,6 +184,31 @@ export function releasePump(pump: PumpEntity): void {
   setPumpState(pump, 'IDLE');
 }
 
+/** Returns an attendant to a clean idle state without leaving a claimed car. */
+function resetAttendantJob(employee: EmployeeEntity): void {
+  employee.currentVehicleId = null;
+  employee.actionTimerSeconds = 0;
+  if (employee.state === 'PAYMENT') setEmployeeState(employee, 'RETURN_IDLE');
+  if (employee.state === 'RETURN_IDLE') setEmployeeState(employee, 'IDLE');
+  else if (employee.state !== 'IDLE' && employee.state !== 'UNASSIGNED') {
+    setEmployeeState(employee, 'IDLE');
+  }
+}
+
+/**
+ * Releases a live job before an attendant is fired or moved. A pour already
+ * under way becomes the player's job and keeps its reservation; a customer
+ * who has not started yet becomes available to the player or another worker.
+ */
+export function releaseAttendantJob(state: GameState, employee: EmployeeEntity): void {
+  const vehicle = employee.currentVehicleId ? state.vehicles[employee.currentVehicleId] : null;
+  if (vehicle?.assignedActor === 'EMPLOYEE') {
+    vehicle.assignedActor =
+      vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT' ? 'PLAYER' : null;
+  }
+  resetAttendantJob(employee);
+}
+
 /* ------------------------------------------------------------------ */
 /* World layout                                                        */
 /* ------------------------------------------------------------------ */
@@ -6189,9 +6214,12 @@ function releaseOrphanedHolds(state: GameState): void {
   }
 
   for (const employee of Object.values(state.employees)) {
+    // Saves from before the preparation timer was introduced have no value
+    // here. `undefined - dt` becomes NaN and can never reach zero, leaving the
+    // employee in PREPARE forever while the EMPLOYEE claim blocks the player.
+    if (!Number.isFinite(employee.actionTimerSeconds)) employee.actionTimerSeconds = 0;
     if (employee.currentVehicleId && !state.vehicles[employee.currentVehicleId]) {
-      employee.currentVehicleId = null;
-      employee.actionTimerSeconds = 0;
+      resetAttendantJob(employee);
     }
     if (
       employee.assignedPumpId &&
@@ -6199,6 +6227,49 @@ function releaseOrphanedHolds(state: GameState): void {
       !state.buildings[employee.assignedPumpId]
     ) {
       employee.assignedPumpId = null;
+    }
+  }
+
+  // Repair half-written or old-save employee claims. Without this, a car can
+  // remain marked EMPLOYEE after its worker moved, vanished, or got stuck in
+  // the wrong state; staff then ignore it and the player is locked out too.
+  for (const employee of Object.values(state.employees)) {
+    if (!employee.currentVehicleId) continue;
+    const vehicle = state.vehicles[employee.currentVehicleId];
+    const servicePointId = vehicle?.chargingBuildingId ?? vehicle?.targetPumpId ?? null;
+    const stageMatches =
+      !!vehicle &&
+      ((employee.state === 'PREPARE' && vehicle.state === 'AT_PUMP') ||
+        (employee.state === 'FUELING' && vehicle.state === 'FUELING') ||
+        (employee.state === 'PAYMENT' && vehicle.state === 'PAYMENT'));
+    if (
+      !vehicle ||
+      vehicle.assignedActor !== 'EMPLOYEE' ||
+      employee.assignedPumpId !== servicePointId ||
+      !stageMatches
+    ) {
+      resetAttendantJob(employee);
+    }
+  }
+
+  for (const vehicle of Object.values(state.vehicles)) {
+    if (vehicle.assignedActor !== 'EMPLOYEE') continue;
+    const servicePointId = vehicle.chargingBuildingId ?? vehicle.targetPumpId ?? null;
+    const hasOwner = Object.values(state.employees).some((employee) => {
+      if (
+        employee.role !== 'PUMP_ATTENDANT' ||
+        employee.currentVehicleId !== vehicle.id ||
+        employee.assignedPumpId !== servicePointId
+      ) return false;
+      return (
+        (employee.state === 'PREPARE' && vehicle.state === 'AT_PUMP') ||
+        (employee.state === 'FUELING' && vehicle.state === 'FUELING') ||
+        (employee.state === 'PAYMENT' && vehicle.state === 'PAYMENT')
+      );
+    });
+    if (!hasOwner) {
+      vehicle.assignedActor =
+        vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT' ? 'PLAYER' : null;
     }
   }
 }
@@ -7251,6 +7322,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       const pump = idlePumps.shift();
       if (!pump) break;
       employee.assignedPumpId = pump.id;
+      pump.employeeId = employee.id;
       logAction('STAFF', `${employee.name} boştaki ${pumpName(state, pump)} pompasına atandı.`, 'SUCCESS');
     }
   }

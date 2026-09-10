@@ -34,6 +34,7 @@ import {
   defaultMouthX,
   getLayout,
   closeForecourt,
+  releaseAttendantJob,
   evictFromPump,
   servicePump,
   triggerEvent,
@@ -2999,6 +3000,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     const emp = state.employees[employeeId];
     if (!emp) return;
 
+    // An active customer must not keep an EMPLOYEE claim after the employee
+    // disappears. An in-progress pour becomes a resumable player session.
+    releaseAttendantJob(state, emp);
+
     // Pompanın employeeId'sini temizle.
     if (emp.assignedPumpId && state.pumps[emp.assignedPumpId]) {
       state.pumps[emp.assignedPumpId].employeeId = null;
@@ -3021,7 +3026,24 @@ export const useGameStore = create<GameStore>((set, get) => {
     const emp = state.employees[employeeId];
     if (!emp) return;
 
+    if (
+      pumpId &&
+      Object.values(state.employees).some(
+        (other) => other.id !== employeeId && other.role === 'PUMP_ATTENDANT' && other.assignedPumpId === pumpId
+      )
+    ) return;
+
+    const previousPumpId = emp.assignedPumpId;
+    releaseAttendantJob(state, emp);
+    if (
+      previousPumpId &&
+      state.pumps[previousPumpId]?.employeeId === employeeId
+    ) {
+      state.pumps[previousPumpId].employeeId = null;
+    }
+
     emp.assignedPumpId = pumpId;
+    if (pumpId && state.pumps[pumpId]) state.pumps[pumpId].employeeId = employeeId;
     sounds.playClick();
     SaveManager.saveGame(state);
     set({ gameState: state });

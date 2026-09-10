@@ -3,6 +3,41 @@ import { useGameStore } from '../store/gameStore';
 import { createInitialGameState } from '../domain/types/initialState';
 import { runSimulationTick, createEffects } from '../domain/services/simulationEngine';
 import { VehicleEntity } from '../domain/types/gameState';
+import { canPlayerOpenVehicleService } from '../rendering/VehicleMesh';
+
+function customerAtPump(id: string, state: ReturnType<typeof createInitialGameState>): VehicleEntity {
+  const pump = state.pumps.pump_1;
+  return {
+    id,
+    archetype: 'family',
+    modelVariant: 'sedan',
+    fuelType: 'gasoline',
+    tankCapacity: 50,
+    currentFuel: 10,
+    request: {
+      mode: 'MONEY',
+      targetValue: 500,
+      calculatedLiters: 500 / state.pricing.gasoline.playerPrice,
+      calculatedPrice: 500,
+      dispensedLiters: 0,
+      isFinished: false
+    },
+    patience: 100,
+    maxPatience: 100,
+    satisfaction: 100,
+    state: 'AT_PUMP',
+    targetPumpId: pump.id,
+    assignedActor: null,
+    worldPosition: [pump.position[0] * 2, 0, pump.position[1] * 2],
+    targetWaypoint: null,
+    route: [],
+    routeProgress: 0,
+    speed: 0,
+    heading: 0,
+    waitingTimeSeconds: 0,
+    shoppingIntent: false
+  };
+}
 
 describe('Pump Attendant (Pompacı) System', () => {
   beforeEach(() => {
@@ -203,5 +238,120 @@ describe('Pump Attendant (Pompacı) System', () => {
     // Kasaya ₺250 girer (üstüne bahşiş gelebilir); depo parası girmez.
     expect(state.player.cash - initialCash).toBeGreaterThanOrEqual(250);
     expect(state.player.cash - initialCash).toBeLessThan(250 + 100);
+  });
+
+  it('hands an orphaned employee claim back to the player', () => {
+    const state = useGameStore.getState().gameState;
+    const vehicle = customerAtPump('veh_orphaned_claim', state);
+    vehicle.assignedActor = 'EMPLOYEE';
+    state.pumps.pump_1.currentVehicleId = vehicle.id;
+    state.pumps.pump_1.state = 'REQUEST_READY';
+    state.vehicles[vehicle.id] = vehicle;
+
+    runSimulationTick(state, 0.1, createEffects());
+
+    expect(vehicle.assignedActor).toBeNull();
+    expect(canPlayerOpenVehicleService(vehicle, false)).toBe(true);
+  });
+
+  it('keeps a live reservation and makes the car player-serviceable if its attendant is fired', () => {
+    useGameStore.getState().hirePumpAttendant('pump_1');
+    const state = useGameStore.getState().gameState;
+    const employee = Object.values(state.employees).find((e) => e.assignedPumpId === 'pump_1')!;
+    const vehicle = customerAtPump('veh_fired_attendant', state);
+    vehicle.state = 'FUELING';
+    vehicle.assignedActor = 'EMPLOYEE';
+    vehicle.request.reservedLiters = vehicle.request.calculatedLiters;
+    state.tanks.gasoline.reservedStock = vehicle.request.calculatedLiters;
+    state.pumps.pump_1.currentVehicleId = vehicle.id;
+    state.pumps.pump_1.state = 'FUELING';
+    state.vehicles[vehicle.id] = vehicle;
+    employee.currentVehicleId = vehicle.id;
+    employee.state = 'FUELING';
+    useGameStore.setState({ gameState: state });
+
+    useGameStore.getState().fireAttendant(employee.id);
+    const after = useGameStore.getState().gameState;
+    const rescued = after.vehicles[vehicle.id];
+
+    expect(after.employees[employee.id]).toBeUndefined();
+    expect(rescued.assignedActor).toBe('PLAYER');
+    expect(rescued.request.reservedLiters).toBe(vehicle.request.calculatedLiters);
+    expect(after.tanks.gasoline.reservedStock).toBe(vehicle.request.calculatedLiters);
+    expect(canPlayerOpenVehicleService(rescued, false)).toBe(true);
+
+    useGameStore.getState().simulationTick(0.5);
+    expect(useGameStore.getState().gameState.vehicles[vehicle.id].request.dispensedLiters).toBeGreaterThan(0);
+  });
+
+  it('releases the current customer immediately when an attendant is moved off the pump', () => {
+    useGameStore.getState().hirePumpAttendant('pump_1');
+    const state = useGameStore.getState().gameState;
+    const employee = Object.values(state.employees).find((e) => e.assignedPumpId === 'pump_1')!;
+    const vehicle = customerAtPump('veh_moved_attendant', state);
+    vehicle.state = 'FUELING';
+    vehicle.assignedActor = 'EMPLOYEE';
+    vehicle.request.reservedLiters = vehicle.request.calculatedLiters;
+    state.tanks.gasoline.reservedStock = vehicle.request.calculatedLiters;
+    state.pumps.pump_1.currentVehicleId = vehicle.id;
+    state.pumps.pump_1.state = 'FUELING';
+    state.vehicles[vehicle.id] = vehicle;
+    employee.currentVehicleId = vehicle.id;
+    employee.state = 'FUELING';
+    useGameStore.setState({ gameState: state });
+
+    useGameStore.getState().assignAttendantToPump(employee.id, null);
+    const after = useGameStore.getState().gameState;
+
+    expect(after.employees[employee.id].assignedPumpId).toBeNull();
+    expect(after.employees[employee.id].currentVehicleId).toBeNull();
+    expect(after.pumps.pump_1.employeeId).toBeNull();
+    expect(after.vehicles[vehicle.id].assignedActor).toBe('PLAYER');
+    expect(after.tanks.gasoline.reservedStock).toBe(vehicle.request.calculatedLiters);
+    expect(canPlayerOpenVehicleService(after.vehicles[vehicle.id], false)).toBe(true);
+  });
+
+  it('repairs a mismatched attendant state and lets the attendant reclaim the customer', () => {
+    useGameStore.getState().hirePumpAttendant('pump_1');
+    const state = useGameStore.getState().gameState;
+    const employee = Object.values(state.employees).find((e) => e.assignedPumpId === 'pump_1')!;
+    const vehicle = customerAtPump('veh_bad_employee_state', state);
+    vehicle.assignedActor = 'EMPLOYEE';
+    state.pumps.pump_1.currentVehicleId = vehicle.id;
+    state.pumps.pump_1.state = 'REQUEST_READY';
+    state.vehicles[vehicle.id] = vehicle;
+    employee.currentVehicleId = vehicle.id;
+    employee.state = 'FUELING';
+
+    runSimulationTick(state, 0.1, createEffects());
+
+    expect(employee.state).toBe('PREPARE');
+    expect(employee.currentVehicleId).toBe(vehicle.id);
+    expect(vehicle.assignedActor).toBe('EMPLOYEE');
+
+    for (let i = 0; i < 20 && vehicle.state !== 'FUELING'; i++) {
+      runSimulationTick(state, 0.25, createEffects());
+    }
+    expect(vehicle.state).toBe('FUELING');
+  });
+
+  it('starts service when an older save has no attendant preparation timer', () => {
+    useGameStore.getState().hirePumpAttendant('pump_1');
+    const state = useGameStore.getState().gameState;
+    const employee = Object.values(state.employees).find((e) => e.assignedPumpId === 'pump_1')!;
+    const vehicle = customerAtPump('veh_missing_timer', state);
+    vehicle.assignedActor = 'EMPLOYEE';
+    state.pumps.pump_1.currentVehicleId = vehicle.id;
+    state.pumps.pump_1.state = 'REQUEST_READY';
+    state.vehicles[vehicle.id] = vehicle;
+    employee.currentVehicleId = vehicle.id;
+    employee.state = 'PREPARE';
+    (employee as { actionTimerSeconds?: number }).actionTimerSeconds = undefined;
+
+    runSimulationTick(state, 0.1, createEffects());
+
+    expect(Number.isFinite(employee.actionTimerSeconds)).toBe(true);
+    expect(employee.state).toBe('FUELING');
+    expect(vehicle.state).toBe('FUELING');
   });
 });
