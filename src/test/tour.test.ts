@@ -65,5 +65,21 @@ describe('the tour', () => {
       expect(useGameStore.getState().tour.active).toBe(false);
       expect(useGameStore.getState().gameState.settings.tourSeen).toBe(true);
     });
+
+    it('restores the exact player speed after the tour, including pause and relaxed speed', () => {
+      for (const speed of [0, 0.5] as const) {
+        const state = createInitialGameState();
+        state.dayState.timeSpeed = speed;
+        useGameStore.setState({
+          gameState: state,
+          tour: { active: false, step: 0, resumeSpeed: 1 }
+        });
+
+        useGameStore.getState().startTour();
+        expect(useGameStore.getState().tour.resumeSpeed).toBe(speed);
+        useGameStore.getState().endTour();
+        expect(useGameStore.getState().gameState.dayState.timeSpeed).toBe(speed);
+      }
+    });
   });
 });

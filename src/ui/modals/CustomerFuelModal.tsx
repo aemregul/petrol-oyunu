@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { FuelType } from '../../domain/types/gameState';
@@ -49,8 +49,10 @@ function requestedText(vehicle: { request: { mode: string; targetValue: number }
 
 /**
  * The fuelling window: pick the customer's nozzle, then BAŞLAT for the sum
- * they named or FULLE if they asked for a full tank, watch the meter run,
- * hand over. The nozzle has to match what they asked for — a station that
+ * they named or FULLE if they asked for a full tank. Starting latches the
+ * nozzle and closes the window; the simulation keeps pouring while the player
+ * is elsewhere, and this window can be reopened to watch or hand over.
+ * The nozzle has to match what they asked for — a station that
  * pours petrol into a diesel engine does not get paid. The driver's sum is
  * already in the box when the window opens; FULLE is only live for a driver
  * who actually asked for it.
@@ -60,7 +62,6 @@ export const CustomerFuelModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const startVehicleFueling = useGameStore((s) => s.startVehicleFueling);
-  const dispenseFuelStep = useGameStore((s) => s.dispenseFuelStep);
   const completeVehicleFueling = useGameStore((s) => s.completeVehicleFueling);
   const cleanVehicleWindows = useGameStore((s) => s.cleanVehicleWindows);
   const dismissCustomer = useGameStore((s) => s.dismissCustomer);
@@ -69,7 +70,6 @@ export const CustomerFuelModal: React.FC = () => {
 
   const [chosenFuel, setChosenFuel] = useState<FuelType | null>(null);
   const [amountText, setAmountText] = useState(() => requestedText(vehicle));
-  const runIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // A different car at the window means a different request in the box.
   useEffect(() => {
@@ -80,20 +80,6 @@ export const CustomerFuelModal: React.FC = () => {
 
   const isFueling = vehicle?.state === 'FUELING';
   const isFinished = !!vehicle && (vehicle.request.isFinished || vehicle.state === 'PAYMENT');
-
-  // Once the trigger is squeezed the meter runs by itself, the way a real
-  // dispenser latches — the old hold-to-pour felt like arm day at the gym.
-  useEffect(() => {
-    if (isFueling && vehicle && !vehicle.request.isFinished) {
-      runIntervalRef.current = setInterval(() => {
-        const finished = dispenseFuelStep(vehicle.id, 0.05);
-        if (finished && runIntervalRef.current) clearInterval(runIntervalRef.current);
-      }, 50);
-    }
-    return () => {
-      if (runIntervalRef.current) clearInterval(runIntervalRef.current);
-    };
-  }, [isFueling, vehicle?.request.isFinished, vehicle?.id, dispenseFuelStep]);
 
   if (!vehicle) return null;
 

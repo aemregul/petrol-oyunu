@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, ShieldCheck, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, ShieldCheck, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -55,6 +55,8 @@ export const HUD: React.FC = () => {
   const landMode = useGameStore((s) => s.landMode);
   const exitLandMode = useGameStore((s) => s.exitLandMode);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
+  const setTimeSpeed = useGameStore((s) => s.setTimeSpeed);
+  const tourActive = useGameStore((s) => s.tour.active);
   const editMode = useGameStore((s) => s.editMode);
   const toggleEditMode = useGameStore((s) => s.toggleEditMode);
   const canEdit = gameState.player.level >= EDIT_MODE_LEVEL;
@@ -235,6 +237,45 @@ export const HUD: React.FC = () => {
           </div>
 
           <div className="hud-day flex items-center gap-2">
+            <div
+              className="flex items-center overflow-hidden rounded-md border-2 border-ink bg-card"
+              role="group"
+              aria-label="Oyun hızı"
+            >
+              <button
+                onClick={() => setTimeSpeed(0)}
+                disabled={tourActive || !dayState.isDayActive}
+                aria-pressed={dayState.timeSpeed === 0}
+                title="Oyunu durdur"
+                className={`h-9 min-w-9 px-2 flex items-center justify-center border-r-2 border-ink transition-colors ${
+                  dayState.timeSpeed === 0 ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
+                } disabled:opacity-50`}
+              >
+                <Pause className="w-4 h-4" strokeWidth={3} />
+              </button>
+              <button
+                onClick={() => setTimeSpeed(0.5)}
+                disabled={tourActive || !dayState.isDayActive}
+                aria-pressed={dayState.timeSpeed === 0.5}
+                title="Oyunu yavaşlat"
+                className={`h-9 min-w-[3.25rem] px-2 font-display text-xs border-r-2 border-ink transition-colors ${
+                  dayState.timeSpeed === 0.5 ? 'bg-kyel text-ink' : 'bg-card text-ink hover:bg-board'
+                } disabled:opacity-50`}
+              >
+                0,5×
+              </button>
+              <button
+                onClick={() => setTimeSpeed(1)}
+                disabled={tourActive || !dayState.isDayActive}
+                aria-pressed={dayState.timeSpeed === 1}
+                title="Normal hızda devam et"
+                className={`h-9 min-w-9 px-2 flex items-center justify-center transition-colors ${
+                  dayState.timeSpeed === 1 ? 'bg-kgrn text-white' : 'bg-card text-ink hover:bg-board'
+                } disabled:opacity-50`}
+              >
+                <Play className="w-4 h-4" strokeWidth={3} />
+              </button>
+            </div>
             <div
               className="k-world px-2.5 py-1 font-display text-base flex items-center gap-1.5 tabular-nums"
               title={`${weatherStyle.label} · Gün ${dayState.currentDay}`}

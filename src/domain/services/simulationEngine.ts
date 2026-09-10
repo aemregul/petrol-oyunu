@@ -6669,14 +6669,19 @@ function tickVehicles(
           if ((vehicle.chargeSecondsLeft ?? 0) <= 0) finalizeCharge(state, vehicle, effects);
           break;
         }
-        // The player drives their own dispensing from the fueling modal.
-        if (vehicle.assignedActor === 'PLAYER') vehicle.patience -= dt * 0.25;
+        // Once the player starts the pump, the latched nozzle belongs to the
+        // simulation rather than to the modal. Closing the card, pausing, and
+        // relaxed speed therefore all obey the same forecourt clock.
+        if (vehicle.assignedActor === 'PLAYER') {
+          vehicle.patience -= dt * 0.25;
+          dispenseStep(state, vehicle, dt, effects);
+        }
         break;
       }
 
       case 'PAYMENT': {
-        // Employee-served customers settle up automatically; player sales are
-        // finalized from the modal.
+        // Employee-served customers settle automatically; a player-served car
+        // waits for the hand-over button even though its pour ran in the world.
         if (vehicle.assignedActor !== 'PLAYER') finalizeSale(state, vehicle, effects);
         break;
       }

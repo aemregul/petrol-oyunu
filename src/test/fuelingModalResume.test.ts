@@ -48,7 +48,8 @@ describe('manual fueling modal can be resumed', () => {
     useGameStore.setState({
       gameState: state,
       activeModal: 'NONE',
-      selectedVehicleId: null
+      selectedVehicleId: null,
+      tour: { active: false, step: 0, resumeSpeed: 1 }
     });
   });
 
@@ -75,7 +76,7 @@ describe('manual fueling modal can be resumed', () => {
     const store = useGameStore.getState();
     store.openFuelingPanelForVehicle('manual_customer');
     store.startVehicleFueling('manual_customer', 'MONEY', 250);
-    store.dispenseFuelStep('manual_customer', 10);
+    store.simulationTick(1);
 
     let current = useGameStore.getState();
     expect(current.gameState.vehicles.manual_customer.state).toBe('PAYMENT');
@@ -85,6 +86,32 @@ describe('manual fueling modal can be resumed', () => {
 
     current.openFuelingPanelForVehicle('manual_customer');
     expect(useGameStore.getState().activeModal).toBe('CUSTOMER_FUEL');
+  });
+
+  it('keeps pouring behind the closed modal and obeys pause and relaxed speed', () => {
+    const store = useGameStore.getState();
+    store.openFuelingPanelForVehicle('manual_customer');
+    expect(store.startVehicleFueling('manual_customer', 'MONEY', 1000)).toBe(true);
+    expect(useGameStore.getState().activeModal).toBe('NONE');
+
+    const reserved = useGameStore.getState().gameState.tanks.gasoline.reservedStock;
+    useGameStore.getState().setTimeSpeed(0);
+    useGameStore.getState().simulationTick(1);
+    let current = useGameStore.getState();
+    expect(current.gameState.vehicles.manual_customer.request.dispensedLiters).toBe(0);
+    expect(current.gameState.tanks.gasoline.reservedStock).toBe(reserved);
+
+    useGameStore.getState().setTimeSpeed(0.5);
+    useGameStore.getState().simulationTick(1);
+    current = useGameStore.getState();
+    const relaxedPour = current.gameState.vehicles.manual_customer.request.dispensedLiters;
+    expect(relaxedPour).toBeGreaterThan(0);
+
+    useGameStore.getState().setTimeSpeed(1);
+    useGameStore.getState().simulationTick(1);
+    current = useGameStore.getState();
+    const normalPour = current.gameState.vehicles.manual_customer.request.dispensedLiters - relaxedPour;
+    expect(normalPour).toBeCloseTo(relaxedPour * 2, 5);
   });
 
   it('does not offer an employee job or an active charging session to the player', () => {

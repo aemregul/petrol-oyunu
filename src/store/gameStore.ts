@@ -21,7 +21,6 @@ import {
   beginFueling,
   beginCharging,
   energyCapacity,
-  dispenseStep,
   finalizeSale,
   placeFuelOrder,
   trackMissionMetric,
@@ -505,6 +504,8 @@ interface GameStore {
   /** Moves a facility on to the next price on its card. */
   cycleFacilityTariff: (id: string) => boolean;
   toggleStationOpen: () => void;
+  /** Pauses, relaxes, or resumes every game-world system together. */
+  setTimeSpeed: (speed: GameState['dayState']['timeSpeed']) => void;
   enterLandMode: (intent?: 'BUY' | 'PAVE') => void;
   exitLandMode: () => void;
   /** Turns rearranging on or off; a click on a structure then lifts it. */
@@ -552,10 +553,9 @@ interface GameStore {
 
   // Fueling Actions
   openFuelingPanelForVehicle: (vehicleId: string) => void;
-  startVehicleFueling: (vehicleId: string, mode: 'LITERS' | 'MONEY' | 'FULL', targetValue: number) => void;
+  startVehicleFueling: (vehicleId: string, mode: 'LITERS' | 'MONEY' | 'FULL', targetValue: number) => boolean;
   /** Plugs an electric customer in by hand, where no attendant is on the post. */
   startVehicleCharging: (vehicleId: string) => boolean;
-  dispenseFuelStep: (vehicleId: string, deltaSeconds: number) => boolean; // true if completed
   completeVehicleFueling: (vehicleId: string) => void;
 
   // Logistics / Orders
@@ -755,8 +755,9 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
     generateDailyMissions(loaded);
   }
 
-  // Pausing is a moment-to-moment control, not something to restore.
-  if (loaded.dayState.isDayActive && loaded.dayState.timeSpeed === 0) {
+  // Speed is a moment-to-moment control, not something to restore. Always
+  // wake a save at the familiar normal pace rather than surprising the player.
+  if (loaded.dayState.isDayActive && loaded.dayState.timeSpeed !== 1) {
     loaded.dayState.timeSpeed = 1;
   }
 
@@ -819,7 +820,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   startTour: () => {
     const { gameState, tour } = get();
-    const resumeSpeed: GameState['dayState']['timeSpeed'] = tour.active ? tour.resumeSpeed : gameState.dayState.timeSpeed || 1;
+    const resumeSpeed: GameState['dayState']['timeSpeed'] = tour.active ? tour.resumeSpeed : gameState.dayState.timeSpeed;
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
     state.dayState.timeSpeed = 0;
     set({ gameState: state, activeModal: 'NONE', tour: { active: true, step: 0, resumeSpeed } });
@@ -843,7 +844,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!tour.active) return;
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
     state.settings.tourSeen = true;
-    state.dayState.timeSpeed = tour.resumeSpeed || 1;
+    state.dayState.timeSpeed = tour.resumeSpeed;
     SaveManager.saveGame(state);
     set({ gameState: state, tour: { active: false, step: 0, resumeSpeed: 1 } });
   },
@@ -1738,6 +1739,16 @@ export const useGameStore = create<GameStore>((set, get) => {
               : '.')
           : 'Tabelaya KAPALI yazıldı; yoldan kimse gelmeyecek.'
     });
+  },
+
+  setTimeSpeed: (speed) => {
+    const { gameState, tour } = get();
+    if (tour.active || !gameState.dayState.isDayActive) return;
+    if (speed !== 0 && speed !== 0.5 && speed !== 1) return;
+    sounds.playClick();
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    state.dayState.timeSpeed = speed;
+    set({ gameState: state });
   },
 
   enterLandMode: (intent = 'BUY') => {
@@ -2712,7 +2723,11 @@ export const useGameStore = create<GameStore>((set, get) => {
   openFuelingPanelForVehicle: (vehicleId) => {
     const { gameState } = get();
     const vehicle = gameState.vehicles[vehicleId];
-    if (!vehicle) return;
+    const waiting = vehicle?.state === 'AT_PUMP' || vehicle?.state === 'REQUEST';
+    const playerSession =
+      vehicle?.assignedActor === 'PLAYER' &&
+      (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT');
+    if (!vehicle || vehicle.chargingBuildingId || (!playerSession && (!waiting || vehicle.assignedActor))) return;
 
     sounds.playPumpStart();
     set({
@@ -2733,24 +2748,16 @@ export const useGameStore = create<GameStore>((set, get) => {
   startVehicleFueling: (vehicleId, mode, targetValue) => {
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     const vehicle = state.vehicles[vehicleId];
-    if (!vehicle) return;
-
-    const effects = createEffects();
-    beginFueling(state, vehicle, mode, targetValue, 'PLAYER', effects);
-    flushEffects(state, effects);
-    set({ gameState: state });
-  },
-
-  dispenseFuelStep: (vehicleId, deltaSeconds) => {
-    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
-    const vehicle = state.vehicles[vehicleId];
     if (!vehicle) return false;
 
     const effects = createEffects();
-    const completed = dispenseStep(state, vehicle, deltaSeconds, effects);
+    const started = beginFueling(state, vehicle, mode, targetValue, 'PLAYER', effects);
     flushEffects(state, effects);
-    set({ gameState: state });
-    return completed;
+    set({
+      gameState: state,
+      ...(started ? { activeModal: 'NONE' as const, selectedVehicleId: null } : {})
+    });
+    return started;
   },
 
   completeVehicleFueling: (vehicleId) => {

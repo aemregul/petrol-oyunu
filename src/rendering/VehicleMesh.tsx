@@ -21,10 +21,9 @@ interface VehicleMeshProps {
 }
 
 /**
- * A manually served customer remains the player's job after another panel
- * covers the dispenser. The fuelling modal owns the timer, so closing it
- * pauses the pour; the car itself must therefore stay clickable until the
- * player reopens the meter and either finishes pouring or hands the sale over.
+ * The latched nozzle keeps running in the simulation after the panel closes.
+ * A player-served car stays clickable so its live meter can be checked and,
+ * once full, the sale can be handed over from the same panel.
  */
 export function canPlayerOpenVehicleService(
   vehicle: VehicleEntity,
@@ -210,7 +209,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
         </Html>
       )}
 
-      {/* The request becomes a resume/hand-over button during manual service. */}
+      {/* The request becomes a live-meter / hand-over button during service. */}
       {(needsService || isFueling || awaitingHandover) && (
         <Html
           position={[0, requestHeight, 0]}
@@ -233,7 +232,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
                 <span className="tracking-wide text-ink">
                   {vehicle.request.dispensedLiters.toFixed(1)}{serviceUnit} <span className="text-mute">•</span> ₺{Math.round(vehicle.request.dispensedLiters * unitPrice)}
                   {canPlayerInteract && (
-                    <span className="text-kgrn"> · {awaitingHandover ? 'Teslim et' : 'Doluma devam et'}</span>
+                    <span className="text-kgrn"> · {awaitingHandover ? 'Teslim et' : 'Dolumu göster'}</span>
                   )}
                 </span>
               ) : (

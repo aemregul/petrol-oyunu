@@ -500,20 +500,15 @@ export interface DayState {
   currentDay: number;
   /** Runs from 6.00 up to 30.00 — six in the morning to six the next. */
   gameTime: number;
-/**
-   * Kept at 1. The clock does not stop: shutting the station is the way to
-   * take a breather, and that is a decision with consequences rather than a
-   * freeze button. Retained as a field so a tick can still be told to idle.
-   */
-  timeSpeed: 0 | 1;
+  /** Player-controlled simulation speed: paused, relaxed, or normal. */
+  timeSpeed: 0 | 0.5 | 1;
   isDayActive: boolean;
   isDayEnding: boolean;
   weather: 'SUNNY' | 'OVERCAST' | 'RAIN';
   /**
-   * Seconds of wall-clock time left on the day's discounted fuel window, and
-   * whether it has already been offered today. Both of these run on real time
-   * rather than the forecourt clock: they are a prompt to the player at the
-   * keyboard, not an event in the world.
+   * Seconds of controlled game time left on the day's discounted fuel window,
+   * and whether it has already been offered today. It pauses and slows with
+   * the rest of the forecourt so the player never loses an offer while paused.
    */
   fuelDealSecondsLeft?: number;
   fuelDealDoneToday?: boolean;
