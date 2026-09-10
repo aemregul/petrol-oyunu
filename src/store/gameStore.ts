@@ -204,6 +204,15 @@ function flushEffects(state: GameState, effects: SimEffects): void {
 export const EDIT_MODE_LEVEL = 5;
 
 /**
+ * The yaw the station is framed from when the game opens, and the one every
+ * "centre the view" returns to: the highway runs from the top left down to the
+ * bottom right and the forecourt sits to its right. The view button turns in
+ * quarters from here, so the camera is only ever at this angle plus a multiple
+ * of ninety degrees.
+ */
+export const DEFAULT_CAMERA_ANGLE = 225;
+
+/**
  * How far the camera may be panned, in world units: the land the player owns
  * plus a margin, so the edges of the plot can be brought to the middle of the
  * screen rather than only to its corner. The highway itself always stays
@@ -813,7 +822,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   relocating: null,
   landMode: { active: false, intent: 'BUY', hovered: null, action: 'NONE', price: 0, canBuy: false },
   editMode: false,
-  cameraAngle: 225, // Yol sol üstten sağ alta iner, istasyon sağında kalır
+  // Yol sol üstten sağ alta iner, istasyon sağında kalır.
+  cameraAngle: DEFAULT_CAMERA_ANGLE,
   cameraView: 0,
   // Framed on the land in the save rather than on the starting forecourt: a
   // player coming back to a grown plot should not open on a corner of it.
@@ -921,7 +931,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     // Centre on everything the player owns and pull back far enough to hold
     // it all. Returning to a fixed spot over the starting forecourt is no use
     // once the plot has grown, least of all across the highway.
-    set({ ...frameOwnedLand(get().gameState), cameraAngle: 225, cameraView: 0 });
+    set({ ...frameOwnedLand(get().gameState), cameraAngle: DEFAULT_CAMERA_ANGLE, cameraView: 0 });
   },
 
   addNotification: (notif) => {
@@ -1126,7 +1136,13 @@ export const useGameStore = create<GameStore>((set, get) => {
       // One press changes exactly one grid coordinate. Mapping through the
       // isometric camera made both coordinates change together, so every arrow
       // walked the structure diagonally across the placement grid.
-      const step: [number, number] =
+      //
+      // These four are calibrated to the default framing, where "left" reads
+      // as up-and-left on an isometric screen. WHICH axis that is depends on
+      // where the camera stands: turn the view a half turn and the same key
+      // sent the structure the opposite way, so the arrows had to be found by
+      // trial and error (Emre, 2026-09-10). The step turns with the camera.
+      const base: [number, number] =
         direction === 'LEFT'
           ? [1, 0]
           : direction === 'RIGHT'
@@ -1134,6 +1150,14 @@ export const useGameStore = create<GameStore>((set, get) => {
             : direction === 'UP'
               ? [0, 1]
               : [0, -1];
+
+      // Quarter turns taken from the default framing. Each one turns the grid
+      // a quarter under the arrows, so the step turns the same quarter back.
+      const quarters = Math.round((state.cameraAngle - DEFAULT_CAMERA_ANGLE) / 90);
+      const turns = ((quarters % 4) + 4) % 4;
+      let step = base;
+      for (let i = 0; i < turns; i++) step = [step[1], -step[0]];
+
       const pointer: [number, number] = [
         buildMode.pointer[0] + step[0],
         buildMode.pointer[1] + step[1]
@@ -3483,7 +3507,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // old expansion would be staring at empty countryside.
       cameraTarget: [16, 12],
       cameraZoom: 4,
-      cameraAngle: 225,
+      cameraAngle: DEFAULT_CAMERA_ANGLE,
       cameraView: 0,
       buildMode: { active: false, buildingType: null, pinned: false, position: [0, 0], pointer: [0, 0], rotation: 0, isValid: true },
       landMode: { active: false, intent: 'BUY', hovered: null, action: 'NONE', price: 0, canBuy: false }
