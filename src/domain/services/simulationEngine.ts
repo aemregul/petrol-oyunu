@@ -39,6 +39,7 @@ import {
   detour,
   straighten,
   FLAT_TYPES,
+  KERB_LINE_PROPS,
   Rect as PathRect
 } from './pathfinding';
 import {
@@ -82,7 +83,7 @@ import {
 } from '../formulas/economy';
 import { dutyActive, managerDailyWage, managerTier, MANAGER_CLEAN_BELOW } from './managerDuties';
 import { pumpName } from './pumpNames';
-import { FAR_SIDE_FRONT, farSideBounds, unpavedHoles } from './land';
+import { FAR_SIDE_FRONT, farSideBounds, onKerbLine, unpavedHoles } from './land';
 import { vehicleBodyHalfExtents } from './vehicleBody';
 import {
   dieselForGenerator,
@@ -1483,6 +1484,14 @@ function solidRects(
   const rects: PathRect[] = [];
   for (const building of Object.values(state.buildings)) {
     if (FLAT_TYPES.includes(building.type)) continue;
+    // A mast on the kerb line is no wall to press against either, or a car
+    // would stop dead against something the route quite rightly ignored.
+    if (
+      KERB_LINE_PROPS.includes(building.type) &&
+      onKerbLine(state.station.plots, building.position, side)
+    ) {
+      continue;
+    }
     // The park this car has a bay in is the one building it may drive into.
     if (building.id === ignoreBuildingId) continue;
     if (drivewaySideAt(building.position[1]) !== side) continue;

@@ -7,7 +7,14 @@
 
 import { FuelType, GameState } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { FAR_SIDE_FRONT, isFootprintOnOwnedLand, ownedBounds, pavedFrontage } from './land';
+import {
+  FAR_SIDE_FRONT,
+  isFootprintOnOwnedLand,
+  onKerbLine,
+  ownedBounds,
+  pavedFrontage,
+  snapToKerbLine
+} from './land';
 import {
   LAYOUT,
   FORECOURT_FRONT,
@@ -27,7 +34,7 @@ import {
   serviceBayRect,
   vehiclesCanStillLeave
 } from './simulationEngine';
-import { FLAT_TYPES } from './pathfinding';
+import { FLAT_TYPES, KERB_LINE_PROPS } from './pathfinding';
 import { buildLimitReason } from './catalogRules';
 
 export interface Footprint {
@@ -310,10 +317,24 @@ export function snapPlacement(
 
     // A quarter turn swaps which side of the footprint faces which axis.
     const turned = rotation === 90 || rotation === 270;
-    return [
-      snapToGrid(position[0], turned ? catalog.size[1] : catalog.size[0]),
-      snapToGrid(position[1], turned ? catalog.size[0] : catalog.size[1])
-    ];
+    const x = snapToGrid(position[0], turned ? catalog.size[1] : catalog.size[0]);
+    const z = snapToGrid(position[1], turned ? catalog.size[0] : catalog.size[1]);
+
+    // A lamp post may stand ON the kerb line rather than in a cell either side
+    // of it: half over the grass, half over the apron, the way a forecourt is
+    // lit (Emre, 2026-09-10). Brought within reach of that line it takes it,
+    // and anywhere further in it snaps to cells like everything else.
+    if (KERB_LINE_PROPS.includes(buildingType)) {
+      const onLine = snapToKerbLine(
+        state.station.plots,
+        position,
+        drivewaySideAt(position[1]),
+        KERB_LINE_REACH
+      );
+      if (onLine) return onLine;
+    }
+
+    return [x, z];
   }
 
   const side = drivewaySideAt(position[1]);
@@ -330,6 +351,13 @@ export function snapPlacement(
   const max = frontage.maxX - half;
   return [max < min ? (frontage.minX + frontage.maxX) / 2 : clamp(x, min, max), z];
 }
+
+/**
+ * How close the pointer must come before a lamp post takes the kerb line: half
+ * a cell, so the line is easy to hit while the band of concrete behind it —
+ * the spot poles have always had — is still reachable.
+ */
+const KERB_LINE_REACH = 0.5;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -505,13 +533,24 @@ export function evaluatePlacement(
     zones.push(serviceBayRect(position, rotation, catalog.size as [number, number], buildingType));
   }
 
-  for (const zone of zones) {
-    if (!isFootprintOnOwnedLand(state.station.plots.ownedParcels, zone)) {
-      return { valid: false, reason: 'Burası sahip olduğunuz arsanın dışında.' };
-    }
+  // A lamp post standing on the kerb line straddles it by design: half its
+  // cell is over the grass, or over the neighbour's field at the plot's outer
+  // edge. So the land tests cannot judge it by its cell — the line itself is
+  // the guarantee, drawn from the paved parcels and nowhere else, and every
+  // other rule below still applies (Emre, 2026-09-10).
+  const onLine =
+    KERB_LINE_PROPS.includes(buildingType) &&
+    onKerbLine(state.station.plots, position, drivewaySideAt(position[1]));
 
-    if (!isFootprintOnOwnedLand(state.station.plots.pavedParcels, zone)) {
-      return { valid: false, reason: 'Önce bu parsele beton dökmelisiniz.' };
+  if (!onLine) {
+    for (const zone of zones) {
+      if (!isFootprintOnOwnedLand(state.station.plots.ownedParcels, zone)) {
+        return { valid: false, reason: 'Burası sahip olduğunuz arsanın dışında.' };
+      }
+
+      if (!isFootprintOnOwnedLand(state.station.plots.pavedParcels, zone)) {
+        return { valid: false, reason: 'Önce bu parsele beton dökmelisiniz.' };
+      }
     }
   }
 
@@ -521,11 +560,13 @@ export function evaluatePlacement(
   // which the parcel checks alone cannot police because parcelAt folds the
   // whole road corridor into row 0. Signs and ramps returned earlier, so this
   // refuses only ordinary structures.
-  const overFrontage = zones.some((zone) =>
-    drivewaySideAt(position[1]) === 'near'
-      ? zone.minZ < FORECOURT_FRONT
-      : zone.maxZ > FAR_SIDE_FRONT
-  );
+  const overFrontage =
+    !onLine &&
+    zones.some((zone) =>
+      drivewaySideAt(position[1]) === 'near'
+        ? zone.minZ < FORECOURT_FRONT
+        : zone.maxZ > FAR_SIDE_FRONT
+    );
   if (overFrontage) {
     return { valid: false, reason: 'Yol banketi inşaata kapalı; betonun gerisine kurun.' };
   }

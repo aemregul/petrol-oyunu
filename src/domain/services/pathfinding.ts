@@ -25,7 +25,7 @@
 
 import { GameState, VehicleEntity } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
-import { unpavedHoles } from './land';
+import { onKerbLine, unpavedHoles } from './land';
 import { vehicleBodyHalfExtents } from './vehicleBody';
 
 /**
@@ -38,6 +38,15 @@ import { vehicleBodyHalfExtents } from './vehicleBody';
  * only the car with a bay in it may enter.
  */
 export const FLAT_TYPES = ['wide_entry', 'wide_exit'];
+
+/**
+ * What may straddle the kerb line without being an obstacle on it. A lamp post
+ * standing there is half over the grass and half over the apron: a mast at the
+ * edge of the concrete, the way a real forecourt is lit (Emre, 2026-09-10).
+ * On the apron proper it is an obstacle like anything else — the line is the
+ * privilege, not the pole.
+ */
+export const KERB_LINE_PROPS = ['light_pole'];
 
 export interface Rect {
   minX: number;
@@ -118,6 +127,12 @@ export function wallRects(
     // A canopy is a roof and a marked-out park is paint on the ground: cars
     // drive under and over these, not round them.
     if (FLAT_TYPES.includes(building.type)) continue;
+    if (
+      KERB_LINE_PROPS.includes(building.type) &&
+      onKerbLine(state.station.plots, building.position, side)
+    ) {
+      continue;
+    }
     if (!onSide(side, building.position[1])) continue;
 
     const turned = building.rotation === 90 || building.rotation === 270;

@@ -32,6 +32,95 @@ export function paveCost(row: number): number {
 export const FAR_SIDE_FRONT = -14;
 
 /**
+ * Where the near forecourt's concrete begins. The engine derives the same
+ * number from the road layout (FORECOURT_FRONT); it is written out here so the
+ * pathfinder can ask about the kerb without importing the engine back, and a
+ * test pins the two together.
+ */
+export const NEAR_SIDE_FRONT = 1;
+
+/** The plot shape the kerb rules read: paving decides where the concrete ends. */
+export interface PavedPlots {
+  width: number;
+  height: number;
+  pavedParcels: string[];
+}
+
+/**
+ * Where a block's concrete ends, as the four lines its kerb trim runs along —
+ * and how far each line reaches, so a corner cannot be extended out into the
+ * countryside. Grass on one side, apron on the other.
+ */
+export function kerbLines(
+  plots: PavedPlots,
+  side: 'near' | 'far'
+): { xs: number[]; zs: number[]; xSpan: [number, number]; zSpan: [number, number] } | null {
+  if (side === 'far') {
+    const b = farSideBounds(plots.pavedParcels);
+    if (!b) return null;
+    // The far block fronts its own carriageway at FAR_SIDE_FRONT and stacks
+    // away from it, so that is its front line and b.minZ its back.
+    return { xs: [b.minX, b.maxX], zs: [b.minZ, FAR_SIDE_FRONT], xSpan: [b.minX, b.maxX], zSpan: [b.minZ, FAR_SIDE_FRONT] };
+  }
+  return {
+    xs: [0, plots.width],
+    zs: [NEAR_SIDE_FRONT, plots.height],
+    xSpan: [0, plots.width],
+    zSpan: [NEAR_SIDE_FRONT, plots.height]
+  };
+}
+
+/**
+ * Whether something stands ON one of those lines rather than on either side of
+ * it — a lamp post straddling the kerb, half over the grass. Nothing else in
+ * the catalogue sits like that, and nothing driving is stopped by it.
+ */
+export function onKerbLine(
+  plots: PavedPlots,
+  position: [number, number],
+  side: 'near' | 'far'
+): boolean {
+  return snapToKerbLine(plots, position, side, 0.01) !== null;
+}
+
+/**
+ * The nearest kerb line within reach, as the position that sits on it — or
+ * null when the pointer is out in the middle of the apron. Only one axis moves:
+ * a post slides along the kerb it is on rather than jumping to the corner.
+ */
+export function snapToKerbLine(
+  plots: PavedPlots,
+  position: [number, number],
+  side: 'near' | 'far',
+  reach: number
+): [number, number] | null {
+  const lines = kerbLines(plots, side);
+  if (!lines) return null;
+
+  const [x, z] = position;
+  const within = (value: number, span: [number, number]) =>
+    value >= Math.min(...span) - 0.01 && value <= Math.max(...span) + 0.01;
+
+  let bestAt: [number, number] | null = null;
+  let bestAway = Infinity;
+  const consider = (at: [number, number], away: number) => {
+    if (away > reach || away >= bestAway) return;
+    bestAt = at;
+    bestAway = away;
+  };
+
+  if (within(x, lines.xSpan)) {
+    for (const line of lines.zs) consider([x, line], Math.abs(z - line));
+  }
+  if (within(z, lines.zSpan)) {
+    for (const line of lines.xs) consider([line, z], Math.abs(x - line));
+  }
+
+  return bestAt;
+}
+
+
+/**
  * Land cannot be bought beyond these limits, so the map stays bounded.
  *
  * The station starts on a 2x2 block and may grow three parcels to the right

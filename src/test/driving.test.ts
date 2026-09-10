@@ -6,7 +6,8 @@ import {
   vehicleBodyHalfExtents
 } from '../domain/services/simulationEngine';
 import { evaluatePlacement, getFootprint } from '../domain/services/placement';
-import { blockLayout, LAYOUT } from '../domain/services/simulationEngine';
+import { blockLayout, drivewaySideAt, LAYOUT } from '../domain/services/simulationEngine';
+import { onKerbLine } from '../domain/services/land';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState } from '../domain/types/gameState';
 
@@ -29,6 +30,23 @@ const FLAT = ['canopy'];
  * overlap there is the car being served, not a car in a wall.
  */
 const SERVICE = ['ev_charger_ac', 'ev_charger_dc'];
+
+/**
+ * A lamp post straddling the kerb line is a mast at the edge of the concrete,
+ * deliberately no obstacle there (Emre, 2026-09-10) — so a car whose body
+ * passes over its cell on the way in or out is the feature working, not a car
+ * in a wall. On the apron it counts like anything else, which is why this is a
+ * test of WHERE it stands rather than of what it is.
+ */
+function onKerbLineHere(
+  state: GameState,
+  building: { type: string; position: [number, number] }
+): boolean {
+  return (
+    building.type === 'light_pole' &&
+    onKerbLine(state.station.plots, building.position, drivewaySideAt(building.position[1]))
+  );
+}
 
 /**
  * Half the body, in grid units. Measured rather than assumed: the mesh is 3.6
@@ -152,6 +170,7 @@ function trespasses(state: GameState, seconds: number): { hits: string[]; arrive
 
       for (const building of Object.values(state.buildings)) {
         if (FLAT.includes(building.type) || SERVICE.includes(building.type)) continue;
+        if (onKerbLineHere(state, building)) continue;
         // The one building a car may be in: the park it has a bay in.
         if (vehicle.parkingBuildingId === building.id) continue;
         const f = getFootprint(building.position, building.size, building.rotation);
