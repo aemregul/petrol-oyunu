@@ -1770,9 +1770,7 @@ describe('price, demand and reputation', () => {
     expect(dailyPriceReputationDelta(dear)).toBeLessThan(0);
   });
 
-  it('gives the forecourt its chance at a charging customer', () => {
-    // "Uses the facilities while waiting" was flavour text: an EV customer
-    // paid for electricity and nothing else, ever.
+  it('gives the forecourt its chance at a charging customer, then lets it go', () => {
     const state = createInitialGameState();
     state.player.level = 12;
     state.buildings.cafe = {
@@ -1799,8 +1797,14 @@ describe('price, demand and reputation', () => {
     }
 
     // Fifty customers past a café with a 26% catch rate: the till has rung.
+    // "Uses the facilities while waiting" was flavour text before that.
     expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
     expect(state.dayState.todayStats.customersServed).toBe(50);
+    // But the money is a till roll, not a second trip: a charged car leaves
+    // rather than setting off across the apron for a park.
+    expect(
+      Object.values(state.vehicles).every((v) => v.state === 'EXIT' || v.state === 'DESPAWN')
+    ).toBe(true);
   });
 });
 

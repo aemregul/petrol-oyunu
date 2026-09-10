@@ -8,10 +8,9 @@ import {
   beginFueling,
   dispenseStep,
   finalizeSale,
-  finalizeCharge,
+  blockLayout,
   blockFacilities,
-  facilityOnlyShare,
-  PUMP_WALK_SHARE
+  facilityOnlyShare
 } from '../domain/services/simulationEngine';
 import {
   parkingBay,
@@ -165,6 +164,22 @@ function serve(state: GameState, vehicle: VehicleEntity): void {
   finalizeSale(state, vehicle, effects);
 }
 
+/** A driver who chose a building on the road, without also buying fuel. */
+function facilityCustomer(state: GameState, id = 'car'): VehicleEntity {
+  const car = customerAtPump(state, id);
+  state.pumps.pump_1.currentVehicleId = null;
+  state.pumps.pump_1.state = 'IDLE';
+  const block = blockLayout(state, 'near')!;
+  car.state = 'ROAD_APPROACH';
+  car.targetPumpId = null;
+  car.facilityIntent = true;
+  car.worldPosition = [block.entry.x, 0, block.laneZ];
+  car.targetWaypoint = null;
+  car.route = [];
+  runSimulationTick(state, 0.05, createEffects());
+  return car;
+}
+
 describe('facilities - geometry', () => {
   it('lays four car bays across a park, nosing at the kerb, entered from behind', () => {
     const park = building('p', 'car_park', [9.5, 10.5]);
@@ -249,17 +264,13 @@ describe('facilities - the card', () => {
 describe('facilities - the visit', () => {
   it('parks, walks in, pays at the door, walks back and backs out', () => {
     const state = forecourt({ park: true, tariff: 1 });
-    const car = customerAtPump(state);
-    // Came for the toilet as well as fuel; with the die on 0.5 the driver
-    // moves the car to the park rather than leaving it at the pump.
-    car.facilityIntent = true;
-    serve(state, car);
+    const car = facilityCustomer(state);
 
     expect(car.state).toBe('TO_PARK');
     expect(car.visitMode).toBe('PARK');
     expect(car.parkingBuildingId).toBe('park');
     expect(car.visitBuildingId).toBe('wc');
-    // The pump is free the moment the car pulls away from it.
+    // This was a facility-only trip; the pump was never claimed.
     expect(state.pumps.pump_1.currentVehicleId).toBeNull();
     expect(state.pumps.pump_1.state).toBe('IDLE');
 
@@ -324,9 +335,7 @@ describe('facilities - the visit', () => {
     // …unless it is the park you are heading for.
     expect(inRects(wallRects(state, 'near', undefined, 'park'), park.position[0], park.position[1])).toBe(false);
     // And a car parks in it without the solid-structure rule refusing the step.
-    const car = customerAtPump(state);
-    car.facilityIntent = true;
-    serve(state, car);
+    const car = facilityCustomer(state);
     expect(car.state).toBe('TO_PARK');
     expect(advanceUntil(state, () => car.state === 'VISITING', 60)).toBe(true);
     expect(car.solidStuckSeconds ?? 0).toBe(0);
@@ -334,9 +343,7 @@ describe('facilities - the visit', () => {
 
   it('drives out instead of disappearing after giving up a blocked parking trip', () => {
     const state = forecourt({ park: true });
-    const car = customerAtPump(state);
-    car.facilityIntent = true;
-    serve(state, car);
+    const car = facilityCustomer(state);
     expect(car.state).toBe('TO_PARK');
 
     // The parking target disappears after the trip has already accumulated a
@@ -354,44 +361,25 @@ describe('facilities - the visit', () => {
     expect(Math.hypot(car.worldPosition[0] - before[0], car.worldPosition[2] - before[2])).toBeGreaterThan(0);
   });
 
-  it('lets a driver leave the car at the pump and hold the bay until they are back', () => {
-    // The die on 0.1: under the toilet's odds, and under the share who walk
-    // from the pump.
-    pinRandom(0.1);
-    expect(0.1).toBeLessThan(PUMP_WALK_SHARE);
-
+  it('sends a fuel customer straight out instead of starting a second visit', () => {
     const state = forecourt({ tariff: 1 });
     const car = customerAtPump(state);
     serve(state, car);
 
-    expect(car.state).toBe('VISITING');
-    expect(car.visitMode).toBe('PUMP');
-    expect(car.visitor?.phase).toBe('TO_BUILDING');
-    // The bay is still theirs.
-    expect(state.pumps.pump_1.currentVehicleId).toBe('car');
-    expect(state.pumps.pump_1.state).not.toBe('IDLE');
-    // The car has not moved.
-    expect(car.worldPosition).toEqual([8.5, 0, 5.6]);
-
-    expect(advanceUntil(state, () => car.state === 'EXIT' || car.state === 'DESPAWN', 60)).toBe(true);
-    expect(state.buildings.wc.till).toBe(15);
+    expect(car.state).toBe('EXIT');
+    expect(car.visitMode ?? null).toBeNull();
+    expect(car.visitBuildingId ?? null).toBeNull();
+    expect(car.parkingBuildingId ?? null).toBeNull();
+    expect(car.visitor).toBeUndefined();
+    expect(state.buildings.wc.till).toBe(0);
     expect(state.pumps.pump_1.currentVehicleId).toBeNull();
     expect(state.pumps.pump_1.state).toBe('IDLE');
   });
 
-  it('books a fraction of the visit when there is nowhere to park', () => {
+  it('books a fraction of a facility-only visit when there is nowhere to park', () => {
     const state = forecourt({ tariff: 2 });
     state.buildings.cafe = building('cafe', 'cafe', [13, 8], { till: 0 });
-    // A charged car is served where it stands; this one came for the café.
-    const car = customerAtPump(state);
-    car.archetype = 'ev';
-    car.targetPumpId = null;
-    car.facilityIntent = true;
-    car.request.calculatedLiters = 30;
-    state.pumps.pump_1.currentVehicleId = null;
-    state.pumps.pump_1.state = 'IDLE';
-
-    finalizeCharge(state, car, createEffects());
+    const car = facilityCustomer(state);
 
     expect(car.state).toBe('OPTIONAL_SHOP');
     expect(car.visitMode).toBe('VIRTUAL');
@@ -410,10 +398,9 @@ describe('facilities - the visit', () => {
 
   it('charges nothing at a free toilet but still counts the visit', () => {
     pinRandom(0.1);
-    const state = forecourt({ tariff: 0 });
-    const car = customerAtPump(state);
-    serve(state, car);
-    expect(car.state).toBe('VISITING');
+    const state = forecourt({ park: true, tariff: 0 });
+    const car = facilityCustomer(state);
+    expect(car.state).toBe('TO_PARK');
 
     expect(advanceUntil(state, () => car.state === 'EXIT' || car.state === 'DESPAWN', 60)).toBe(true);
     expect(state.buildings.wc.till).toBe(0);
@@ -424,13 +411,8 @@ describe('facilities - the visit', () => {
     const state = forecourt({ park: true, tariff: 1 });
     const cars: VehicleEntity[] = [];
     for (let i = 0; i < 5; i++) {
-      const car = customerAtPump(state, `car_${i}`);
-      car.facilityIntent = true;
-      serve(state, car);
+      const car = facilityCustomer(state, `car_${i}`);
       cars.push(car);
-      // Free the pump for the next one; the served car is on its way.
-      state.pumps.pump_1.currentVehicleId = null;
-      state.pumps.pump_1.state = 'IDLE';
     }
 
     const parked = cars.filter((c) => c.state === 'TO_PARK');
@@ -510,13 +492,21 @@ describe('facilities - the visit', () => {
       guest.state = 'VISITING';
       guest.visitBuildingId = 'hotel';
       guest.targetPumpId = null;
+      guest.visitor = {
+        phase: 'INSIDE',
+        worldPosition: [4, 0, 4],
+        heading: 0,
+        route: [],
+        targetWaypoint: null,
+        insideSecondsLeft: 60,
+        carDoor: guest.worldPosition,
+        look: i
+      };
     }
     state.pumps.pump_1.currentVehicleId = null;
     state.pumps.pump_1.state = 'IDLE';
 
-    const late = customerAtPump(state, 'late');
-    late.facilityIntent = true;
-    serve(state, late);
+    const late = facilityCustomer(state, 'late');
     expect(late.visitBuildingId).toBeNull();
     expect(['EXIT', 'DESPAWN']).toContain(late.state);
   });

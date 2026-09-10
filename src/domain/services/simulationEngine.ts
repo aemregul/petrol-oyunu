@@ -3691,7 +3691,7 @@ export function dispenseStep(
   return false;
 }
 
-/** Settles payment, tip, XP, market basket and mission progress for one sale. */
+/** Settles payment, tip, XP and mission progress for one sale. */
 /**
  * Settles a charging session and sends the driver on their way.
  *
@@ -3772,8 +3772,7 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
   state.dayState.todayStats.serviceScoreSum =
     (state.dayState.todayStats.serviceScoreSum || 0) + serviceScore;
 
-  // "Uses the facilities while waiting" was flavour text until now: the shop,
-  // the wash and the café never saw a kuruş from a charging customer.
+  // The forecourt gets its chance at this customer too — see rollSideServices.
   rollSideServices(state, vehicle, effects);
 
   trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
@@ -3781,9 +3780,10 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
 
   vehicle.chargingBuildingId = null;
   vehicle.chargeSecondsLeft = 0;
-  // A charger is not a pump, so there is no bay to hold: the driver either
-  // moves the car to the park or has the visit booked from the road.
-  afterService(state, vehicle, null, effects);
+  // Charging and facility visits are separate trip intents. Once the battery
+  // is full this driver's job is done; sending it to a park next would cross
+  // the departure stream and turn a single visit into two unrelated ones.
+  sendAway(state, vehicle);
 }
 
 /**
@@ -3791,9 +3791,29 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
  * out: the wash, the café, the tyre bay. This is what those buildings are
  * for — and it applies to a driver who charged just as much as to one who
  * fuelled; if anything the EV driver had longer to kill in the shop.
+ *
+ * Money, not traffic: nothing here routes a car anywhere. The gridlock that
+ * split fuelling from visiting came from sending a paid-up customer across
+ * the apron to a park, and that is gone — the till roll never caused it, and
+ * without it a shop could not pay for itself at all.
  */
 function rollSideServices(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
-  const facilities = blockFacilities(state, vehicleSide(vehicle));
+  const side = vehicleSide(vehicle);
+
+  // The shop, the café, the toilet: a driver paying at the pump nips in while
+  // the tank fills, so the visit is booked where it happens rather than by
+  // sending the car across the apron afterwards — which is the trip that
+  // gridlocked the forecourt. Booked at the same fraction the game already
+  // uses for a driver who could not park (virtualShare): they were never in
+  // there long. Without it a shop earns only from the few who came for it and
+  // nothing else, and no walk-in building can pay for itself.
+  const walkIn = pickFacility(state, side, vehicle.archetype);
+  if (walkIn) {
+    const conf = facilityConfig(walkIn.type);
+    bookVisit(state, walkIn, vehicle, conf?.virtualShare ?? 0.5, effects);
+  }
+
+  const facilities = blockFacilities(state, side);
 
   for (const service of facilities.services) {
     if (Math.random() >= service.chance) continue;
@@ -3898,9 +3918,12 @@ export function finalizeSale(
   const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
   vehicle.assignedActor = null;
 
-  // Paid up. Whether the driver now goes in for a coffee, and how, is the
-  // facilities' decision — and it is the same decision for a car that charged.
-  afterService(state, vehicle, pump, effects);
+  // Fuel and facility visits are separate trips. Paid customers release the
+  // bay and leave directly; only a driver who chose a facility on the road
+  // ever heads for a park.
+  if (pump) releasePump(pump);
+  vehicle.targetPumpId = null;
+  sendAway(state, vehicle);
 
   trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
   trackMissionMetric(state, 'FUEL_LITERS_SOLD', dispensed, effects);
@@ -3912,14 +3935,6 @@ export function finalizeSale(
 /* ------------------------------------------------------------------ */
 /* Facilities: the buildings people walk into                          */
 /* ------------------------------------------------------------------ */
-
-/**
- * How often a driver who bought fuel leaves the car standing at the pump to
- * walk over, rather than moving it to the park first. Rare on purpose: it is
- * the mechanic that holds a bay hostage and nudges the player toward another
- * pump, and it would be a nuisance rather than a nudge if it were common.
- */
-export const PUMP_WALK_SHARE = 0.3;
 
 /** How fast a driver walks, in grid units per game second. */
 const WALK_SPEED = 1.15;
@@ -4366,27 +4381,21 @@ function standingAtBay(
 }
 
 /**
- * What a driver does once they are served — or once they have arrived, if
- * they came for the buildings rather than the pumps.
+ * Starts the one facility visit this driver chose before entering the plot.
  *
- * Three ways in. Most drivers who want a facility move the car to a park bay
- * and walk from there. A few leave it where it stands at the pump and hold
- * the bay for the duration. And a driver who wants the facility but finds
- * nowhere to park has the visit booked at a fraction without getting out —
- * the building still earns something, the player is told what a park would
- * be worth. The pump is released on every path but the one that keeps it.
+ * They park and walk when a matching bay is available. If there is no usable
+ * bay, the visit is represented at a fraction without creating another route
+ * across the apron. Fuel and charging customers never enter this path.
  */
-function afterService(
+function startFacilityVisit(
   state: GameState,
   vehicle: VehicleEntity,
-  pump: PumpEntity | null,
   effects: SimEffects
 ): void {
   const side = vehicleSide(vehicle);
-  const building = pickFacility(state, side, vehicle.archetype, !!vehicle.facilityIntent);
+  const building = pickFacility(state, side, vehicle.archetype, true);
 
   if (!building) {
-    if (pump) releasePump(pump);
     vehicle.targetPumpId = null;
     vehicle.visitBuildingId = null;
     vehicle.visitMode = null;
@@ -4398,16 +4407,6 @@ function afterService(
   vehicle.waitingTimeSeconds = 0;
   vehicle.shoppingIntent = true;
   const conf = facilityConfig(building.type)!;
-
-  if (pump && conf.walkFromPump && Math.random() < PUMP_WALK_SHARE) {
-    // The car stays put and so does the pump's claim on it.
-    vehicle.visitMode = 'PUMP';
-    setVehicleState(vehicle, 'VISITING');
-    spawnVisitor(state, vehicle, building);
-    return;
-  }
-
-  if (pump) releasePump(pump);
   vehicle.targetPumpId = null;
 
   const bay = findParkingBay(state, vehicle, blockFor(state, vehicle));
@@ -6638,7 +6637,7 @@ function tickVehicles(
         // the park, or a visit booked from where they stand if there is none.
         // A driver who finds nothing they want after all simply drives on.
         if (vehicle.facilityIntent) {
-          afterService(state, vehicle, null, effects);
+          startFacilityVisit(state, vehicle, effects);
           break;
         }
 
@@ -6702,7 +6701,7 @@ function tickVehicles(
           // Nothing here to fuel with, so this driver came for the shop.
           // Queueing for a pump that does not exist would only strand them.
           vehicle.facilityIntent = true;
-          afterService(state, vehicle, null, effects);
+          startFacilityVisit(state, vehicle, effects);
         } else {
           const hasQueueRoom = queued.length < maxQueueLength(state, block);
           const joining = hasQueueRoom
