@@ -127,7 +127,11 @@ function notify(
 }
 
 /** Explain a visually surprising turn-away caused by the vehicle's real body size. */
-function notifyNoManeuverRoom(vehicle: VehicleEntity, effects: SimEffects): void {
+function notifyNoManeuverRoom(
+  vehicle: VehicleEntity,
+  effects: SimEffects,
+  reputationPenalty: boolean
+): void {
   const name =
     vehicle.modelVariant === 'limousine'
       ? 'Limuzin'
@@ -141,7 +145,10 @@ function notifyNoManeuverRoom(vehicle: VehicleEntity, effects: SimEffects): void
     'WARNING',
     'Manevra Alanı Yetersiz',
     `${name}, pompa veya kuyruğa güvenli bir rota bulamadığı için tesisten ayrıldı. ` +
-      'Geçişlerin çevresinde daha geniş alan bırakın.'
+      'Geçişlerin çevresinde daha geniş alan bırakın.' +
+      (reputationPenalty
+        ? ' (-0.015 İtibar)'
+        : ' Seviye 1–5 arasında itibar etkilenmez.')
   );
 }
 
@@ -6110,6 +6117,27 @@ function turnAway(state: GameState): void {
 }
 
 /**
+ * A layout penalty cannot be fair before the player has had a reasonable
+ * chance to rebuild the forecourt. The first five levels are protected;
+ * from level six onward an avoidable no-room departure is a lost customer.
+ */
+function turnAwayForNoManeuver(
+  state: GameState,
+  vehicle: VehicleEntity,
+  effects: SimEffects
+): void {
+  const reputationPenalty = state.player.level > 5;
+  if (reputationPenalty) {
+    state.player.reputation = clamp(state.player.reputation - 0.015, 1, 5);
+    state.dayState.todayStats.customersLost++;
+    state.player.statistics.totalCustomersLost++;
+  }
+  notifyNoManeuverRoom(vehicle, effects, reputationPenalty);
+  sendAway(state, vehicle);
+  turnAway(state);
+}
+
+/**
  * A prospective customer that sees the closed sign before leaving the
  * carriageway simply carries on with the traffic. Giving it an EXIT route
  * would assume it was already on the apron; from the road that route cuts
@@ -6512,9 +6540,7 @@ function tickVehicles(
         // and forcing a line to them would be a car driving through the wall.
         // The driver turns round at the mouth instead.
         if (!reachable(state, vehicle, block, [queueSlotPosition(state, 0, side)])) {
-          notifyNoManeuverRoom(vehicle, effects);
-          sendAway(state, vehicle);
-          turnAway(state);
+          turnAwayForNoManeuver(state, vehicle, effects);
           break;
         }
 
@@ -6551,9 +6577,12 @@ function tickVehicles(
             const hadRoomButNoRoute =
               (!!point && !toCharger) ||
               (!!chargeLine && chargeQueued.length < chargeLine.slots.length && !toQueue);
-            if (hadRoomButNoRoute) notifyNoManeuverRoom(vehicle, effects);
-            sendAway(state, vehicle);
-            turnAway(state);
+            if (hadRoomButNoRoute) {
+              turnAwayForNoManeuver(state, vehicle, effects);
+            } else {
+              sendAway(state, vehicle);
+              turnAway(state);
+            }
           }
           break;
         }
@@ -6596,9 +6625,12 @@ function tickVehicles(
             queued.push(vehicle);
           } else {
             // Forecourt is full, or walled off — this driver never even stops.
-            if (hasQueueRoom) notifyNoManeuverRoom(vehicle, effects);
-            sendAway(state, vehicle);
-            turnAway(state);
+            if (hasQueueRoom) {
+              turnAwayForNoManeuver(state, vehicle, effects);
+            } else {
+              sendAway(state, vehicle);
+              turnAway(state);
+            }
           }
         }
         break;

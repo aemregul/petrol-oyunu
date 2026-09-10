@@ -152,33 +152,40 @@ describe('a station nobody can enter', () => {
     expect(titles.filter((t) => t === 'Yol Kapalı')).toHaveLength(1);
   });
 
-  it('explains when a limousine already at the entrance cannot manoeuvre to service', () => {
-    const state = station();
-    plantPoleInTheWay(state);
-    const block = blockLayout(state, 'near')!;
-    const limo: VehicleEntity = {
-      id: 'limo', archetype: 'luxury', modelVariant: 'limousine', fuelType: 'gasoline',
-      tankCapacity: 80, currentFuel: 20,
-      request: {
-        mode: 'LITERS', targetValue: 40, calculatedLiters: 40, calculatedPrice: 0,
-        dispensedLiters: 0, isFinished: false
-      },
-      patience: 40, maxPatience: 40, satisfaction: 100,
-      state: 'ROAD_APPROACH', targetPumpId: null, assignedActor: null,
-      worldPosition: [block.entry.x, 0, block.laneZ], targetWaypoint: null, route: [],
-      heading: 0, speed: 1, routeProgress: 0, waitingTimeSeconds: 0,
-      shoppingIntent: false
-    };
-    state.vehicles = { limo };
-    const effects = createEffects();
+  it('explains a limousine manoeuvre failure but protects reputation through level five', () => {
+    for (const [level, penalized] of [[5, false], [6, true]] as const) {
+      const state = station();
+      state.player.level = level;
+      plantPoleInTheWay(state);
+      const block = blockLayout(state, 'near')!;
+      const limo: VehicleEntity = {
+        id: `limo_${level}`, archetype: 'luxury', modelVariant: 'limousine', fuelType: 'gasoline',
+        tankCapacity: 80, currentFuel: 20,
+        request: {
+          mode: 'LITERS', targetValue: 40, calculatedLiters: 40, calculatedPrice: 0,
+          dispensedLiters: 0, isFinished: false
+        },
+        patience: 40, maxPatience: 40, satisfaction: 100,
+        state: 'ROAD_APPROACH', targetPumpId: null, assignedActor: null,
+        worldPosition: [block.entry.x, 0, block.laneZ], targetWaypoint: null, route: [],
+        heading: 0, speed: 1, routeProgress: 0, waitingTimeSeconds: 0,
+        shoppingIntent: false
+      };
+      state.vehicles = { [limo.id]: limo };
+      const reputationBefore = state.player.reputation;
+      const lostBefore = state.dayState.todayStats.customersLost;
+      const effects = createEffects();
 
-    runSimulationTick(state, 0.05, effects);
+      runSimulationTick(state, 0.05, effects);
 
-    expect(['EXIT', 'DESPAWN']).toContain(limo.state);
-    expect(effects.notifications).toContainEqual(expect.objectContaining({
-      title: 'Manevra Alanı Yetersiz',
-      message: expect.stringContaining('Limuzin')
-    }));
+      expect(['EXIT', 'DESPAWN']).toContain(limo.state);
+      expect(state.player.reputation).toBeCloseTo(reputationBefore - (penalized ? 0.015 : 0), 6);
+      expect(state.dayState.todayStats.customersLost).toBe(lostBefore + (penalized ? 1 : 0));
+      expect(effects.notifications).toContainEqual(expect.objectContaining({
+        title: 'Manevra Alanı Yetersiz',
+        message: expect.stringContaining(penalized ? '-0.015 İtibar' : 'itibar etkilenmez')
+      }));
+    }
   });
 
   it('says nothing about a station that is simply closed or simply healthy', () => {
