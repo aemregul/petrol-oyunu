@@ -153,6 +153,12 @@ describe('the queue and the bay line', () => {
     expect(unreachable).toHaveLength(0);
     expect(stuckReservations).toBe(0);
     expect(state.dayState.todayStats.customersServed).toBeGreaterThan(8);
-    expect(state.dayState.todayStats.customersLost).toBe(0);
+    // The WC does not falsely reject ordinary cars any more. The one lifted
+    // monster truck is genuinely too wide for this cramped queue mouth, so at
+    // level 12 it follows the explicit manoeuvre rule and tells the player.
+    const manoeuvre = effects.notifications.filter((n) => n.title === 'Manevra Alanı Yetersiz');
+    expect(manoeuvre).toHaveLength(1);
+    expect(manoeuvre[0].message).toContain('Monster Truck');
+    expect(state.dayState.todayStats.customersLost).toBe(1);
   });
 });

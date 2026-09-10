@@ -202,6 +202,8 @@ describe('facilities - geometry', () => {
     expect(parkingTypeFor({ archetype: 'firetruck', modelVariant: 'firetruck' })).toBe('truck_park');
     expect(parkingTypeFor({ archetype: 'truck', modelVariant: 'truck-with-trailer' })).toBe('truck_park');
     expect(parkingTypeFor({ archetype: 'bus', modelVariant: 'bus' })).toBe('truck_park');
+    expect(parkingTypeFor({ archetype: 'luxury', modelVariant: 'limousine' })).toBe('truck_park');
+    expect(parkingTypeFor({ archetype: 'commuter', modelVariant: 'monster-truck' })).toBe('truck_park');
     expect(parkingTypeFor({ archetype: 'commuter', modelVariant: 'sedan' })).toBe('car_park');
     expect(parkingTypeFor({ archetype: 'ambulance', modelVariant: 'ambulance' })).toBe('car_park');
   });
@@ -436,6 +438,52 @@ describe('facilities - the visit', () => {
     expect(new Set(parked.map((c) => c.parkingSlot)).size).toBe(4);
     // The fifth found the park full and had the visit booked from the road.
     expect(cars.filter((c) => c.state === 'OPTIONAL_SHOP')).toHaveLength(1);
+  });
+
+  it('lets a car finish the neighbouring bay instead of stopping short', () => {
+    const state = forecourt({ park: true, tariff: 1 });
+    const park = state.buildings.park;
+    const firstBay = parkingBay(park, 0, { length: 0.9 });
+    const secondBay = parkingBay(park, 1, { length: 0.9 });
+
+    const parked = customerAtPump(state, 'parked');
+    parked.state = 'VISITING';
+    parked.targetPumpId = null;
+    parked.visitBuildingId = 'wc';
+    parked.visitMode = 'PARK';
+    parked.parkingBuildingId = 'park';
+    parked.parkingSlot = 0;
+    parked.worldPosition = firstBay.pose;
+    parked.heading = firstBay.heading;
+    parked.targetWaypoint = null;
+    parked.route = [];
+    parked.visitor = {
+      phase: 'INSIDE',
+      worldPosition: [1, 0, 7],
+      heading: 0,
+      route: [],
+      targetWaypoint: null,
+      insideSecondsLeft: 60,
+      carDoor: firstBay.pose,
+      look: 0
+    };
+
+    const arriving = customerAtPump(state, 'arriving');
+    arriving.state = 'TO_PARK';
+    arriving.targetPumpId = null;
+    arriving.visitBuildingId = 'wc';
+    arriving.visitMode = 'PARK';
+    arriving.parkingBuildingId = 'park';
+    arriving.parkingSlot = 1;
+    arriving.worldPosition = secondBay.runUp;
+    arriving.heading = secondBay.heading;
+    arriving.targetWaypoint = secondBay.pose;
+    arriving.route = [];
+
+    expect(advanceUntil(state, () => arriving.state === 'VISITING', 20)).toBe(true);
+    expect(arriving.worldPosition[0]).toBeCloseTo(secondBay.pose[0], 3);
+    expect(arriving.worldPosition[2]).toBeCloseTo(secondBay.pose[2], 3);
+    expect(arriving.solidStuckSeconds ?? 0).toBe(0);
   });
 
   it('counts a driver who came for the buildings, and how many do', () => {

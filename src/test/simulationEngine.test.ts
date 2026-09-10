@@ -353,7 +353,7 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(state.dayState.todayStats.customersTurnedAway ?? 0).toBe(turnedAwayBefore);
   });
 
-  it('reserves a crossing before two forecourt routes enter it', () => {
+  it('lets crossed forecourt routes clear after a short give-way', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.station.open = false;
@@ -379,11 +379,15 @@ describe('simulationEngine - vehicle lifecycle', () => {
     yielding.state = 'ROAD_APPROACH';
     state.vehicles = { a_first: first, b_yielding: yielding };
 
-    runSimulationTick(state, 0.05, createEffects());
+    let worstWait = 0;
+    for (let i = 0; i < 40; i++) {
+      runSimulationTick(state, 0.05, createEffects());
+      worstWait = Math.max(worstWait, yielding.blockedSeconds ?? 0);
+    }
 
-    expect(first.worldPosition[0]).toBeGreaterThan(3);
-    expect(yielding.worldPosition).toEqual([5, 0, 10]);
-    expect(yielding.blockedSeconds).toBeGreaterThan(0);
+    expect(first.state).toBe('DESPAWN');
+    expect(yielding.state).toBe('DESPAWN');
+    expect(worstWait).toBeLessThan(1.1);
   });
 
   it('sends the earliest compatible fuel customer to an idle bay', () => {

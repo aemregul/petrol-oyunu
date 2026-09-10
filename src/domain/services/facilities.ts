@@ -114,7 +114,12 @@ export function parkingTypeFor(vehicle: {
     vehicle.archetype === 'firetruck' ||
     vehicle.modelVariant === 'truck-with-trailer' ||
     vehicle.modelVariant === 'bus' ||
-    vehicle.modelVariant === 'firetruck';
+    vehicle.modelVariant === 'firetruck' ||
+    // These two use a car archetype but not a car-sized body. Sending either
+    // into a 2.7-wide car bay makes the neighbours block its final turn and
+    // leaves the whole parking aisle waiting behind it.
+    vehicle.modelVariant === 'limousine' ||
+    vehicle.modelVariant === 'monster-truck';
   return big ? 'truck_park' : 'car_park';
 }
 
