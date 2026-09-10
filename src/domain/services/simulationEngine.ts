@@ -1260,19 +1260,35 @@ function distanceAhead(
 }
 
 /**
- * How much of its speed a vehicle may use, given what is in front of it.
+ * The lorry as the scene actually draws it, in grid units: chassis from -4.4
+ * to +3.2 scene units with the cab's bumper out at +3.95, 2.2 wide — halved,
+ * because the scene draws a grid unit as two.
  *
- * Every vehicle obeys this — out on the highway, down the ramps and across the
- * forecourt alike — so cars fall in behind one another instead of driving
- * through each other, and a busy station backs up the way a real one does.
- * Easing off rather than stopping dead means a quick car settles in behind a
- * slow one instead of snapping to a halt.
+ * The engine used to carry no figure for this at all, and every rule that
+ * needed one guessed low: cars braked for a lorry a car-length shorter than
+ * the one on screen, and the lorry itself measured its stopping distance from
+ * its own middle. Both now read from here.
  */
+const TRUCK_HALF_LENGTH = 2.1;
+const TRUCK_HALF_WIDTH = 0.55;
+/** Where the drawn body's centre sits relative to the driven point. */
+const TRUCK_BODY_OFFSET = -0.1;
+
+/**
+ * The gap the lorry will not close on anybody, right of way or not. Half a
+ * metre of daylight: enough that the two bodies never meet on screen, small
+ * enough that a car with somewhere to go is still waved through first.
+ */
+const TRUCK_HARD_STOP_GAP = 0.25;
+
 /**
  * Every tanker on the plot or the road, shaped like traffic for the following
- * rules. A lorry is three car-lengths of steel, so it enters the list as
- * three bodies — nose, middle, tail — and a car braking for any of them is a
- * car that no longer drives through the trailer.
+ * rules. A lorry is four car-lengths of steel, so it enters the list as a row
+ * of bodies down its whole length — nose to tail, a car's length apart — and
+ * a car braking for any of them is a car that no longer drives through the
+ * trailer. Three points spanning only the middle of it was how cars ended up
+ * parked inside the cistern: past the last point there was nothing to brake
+ * for, and the last point was a metre short of the steel.
  */
 function truckBodies(state: GameState): VehicleEntity[] {
   const bodies: VehicleEntity[] = [];
@@ -1283,15 +1299,16 @@ function truckBodies(state: GameState): VehicleEntity[] {
 
     const dx = Math.sin(truck.heading);
     const dz = Math.cos(truck.heading);
-    for (const along of [-1.1, 0, 1.1]) {
+    for (const along of [-2, -1, 0, 1, 2]) {
+      const at = along + TRUCK_BODY_OFFSET;
       bodies.push({
         id: `truck_${order.id}_${along}`,
         worldPosition: [
-          truck.worldPosition[0] + dx * along,
+          truck.worldPosition[0] + dx * at,
           0,
-          truck.worldPosition[2] + dz * along
+          truck.worldPosition[2] + dz * at
         ],
-        // Only the nose is "going somewhere"; the other two are cargo.
+        // Only the nose is "going somewhere"; the rest is cargo.
         targetWaypoint: along > 0 ? truck.targetWaypoint : null,
         route: [],
         heading: truck.heading
@@ -1310,6 +1327,15 @@ function truckBodies(state: GameState): VehicleEntity[] {
  */
 const FORECOURT_CROSSING_GRACE_SECONDS = 0.75;
 
+/**
+ * How much of its speed a vehicle may use, given what is in front of it.
+ *
+ * Every vehicle obeys this — out on the highway, down the ramps and across the
+ * forecourt alike — so cars fall in behind one another instead of driving
+ * through each other, and a busy station backs up the way a real one does.
+ * Easing off rather than stopping dead means a quick car settles in behind a
+ * slow one instead of snapping to a halt.
+ */
 function followThrottle(
   state: GameState,
   vehicle: VehicleEntity,
@@ -4578,6 +4604,64 @@ function tankerBay(
 }
 
 /**
+ * Whether the corner the lorry is about to take would swing its trailer
+ * through somebody.
+ *
+ * A vehicle here turns by pointing itself at its next waypoint, so a lorry
+ * reaching a corner rotates a quarter-turn between one tick and the next —
+ * and sixteen metres of trailer sweeps a quarter-circle with it. Cars
+ * standing beside the corner, at a pump or in the queue, were inside that
+ * arc, and no rule about what is *in front* could ever have caught them:
+ * they were never in front of the lorry. The lorry turned into them.
+ *
+ * So the ground the body will pass over has to be clear before the turn is
+ * taken, sampled through the swing rather than only at its ends.
+ */
+function turnSweepBlocked(
+  state: GameState,
+  truck: NonNullable<FuelOrderEntity['truck']>
+): boolean {
+  const corner = truck.targetWaypoint;
+  const next = truck.route[0];
+  if (!corner || !next) return false;
+
+  // Only worth asking once the corner is a body-length away: further back the
+  // lorry has room to stop, and it would be holding station for a car that
+  // will have driven off by the time it gets there.
+  const away = Math.hypot(
+    corner[0] - truck.worldPosition[0],
+    corner[2] - truck.worldPosition[2]
+  );
+  if (away > TRUCK_HALF_LENGTH) return false;
+
+  const after = Math.atan2(next[0] - corner[0], next[2] - corner[2]);
+  const turn = ((after - truck.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  // A kink in a lane is not a corner; the trailer stays where it was.
+  if (Math.abs(turn) < 0.35) return false;
+
+  for (const vehicle of Object.values(state.vehicles)) {
+    const body = vehicleBodyHalfExtents(vehicle);
+    const ox = vehicle.worldPosition[0] - corner[0];
+    const oz = vehicle.worldPosition[2] - corner[2];
+    // Outside the circle the body can reach from the corner: never touched.
+    if (Math.hypot(ox, oz) > TRUCK_HALF_LENGTH + body.length) continue;
+
+    for (let step = 0; step <= 4; step++) {
+      const heading = truck.heading + (turn * step) / 4;
+      const sx = Math.sin(heading);
+      const sz = Math.cos(heading);
+      const along = Math.abs(ox * sx + oz * sz - TRUCK_BODY_OFFSET);
+      const lateral = Math.abs(ox * sz - oz * sx);
+      if (along < TRUCK_HALF_LENGTH + body.length && lateral < TRUCK_HALF_WIDTH + body.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Whether a customer car stands in the lorry's path. Other lorries
  * deliberately do not: they held each other at the gate and in the aisles,
  * and a queue of paid-for fuel sitting on the road felt like the game being
@@ -4592,27 +4676,54 @@ function truckHeldUp(
   const onRoad = Math.abs(truck.worldPosition[2] - roadLaneZ) < 1.5;
   const dx = Math.sin(truck.heading);
   const dz = Math.cos(truck.heading);
-  const inPath = (x: number, z: number, reach: number) => {
-    const ox = x - truck.worldPosition[0];
-    const oz = z - truck.worldPosition[2];
-    const ahead = ox * dx + oz * dz;
-    const lateral = Math.abs(ox * dz - oz * dx);
-    return ahead > 0.4 && ahead < reach && lateral < 1.5;
+
+  if (turnSweepBlocked(state, truck)) return true;
+
+  /**
+   * Bumper to bumper, not centre to centre. Emre, 2026-09-10: the lorry drove
+   * clean through a hatchback and an SUV on a busy forecourt. It was measuring
+   * two units of stopping distance from its own middle — but its bumper is
+   * already two units ahead of that, so the point it was watching for traffic
+   * sat *behind* its own nose, and the car's tail was a metre inside the cab
+   * before anything registered. It braked, in the sense that a wall brakes.
+   */
+  const bumperGap = (vehicle: VehicleEntity): number | null => {
+    const ox = vehicle.worldPosition[0] - truck.worldPosition[0];
+    const oz = vehicle.worldPosition[2] - truck.worldPosition[2];
+    const body = vehicleBodyHalfExtents(vehicle);
+    // Ahead of the drawn body's centre, so a car alongside the trailer or
+    // behind it is traffic the lorry has already passed, not traffic in its
+    // way — the mirror is not the windscreen.
+    const along = ox * dx + oz * dz - TRUCK_BODY_OFFSET;
+    if (along <= 0) return null;
+    // Their half-length whichever way they are pointing: a car sitting across
+    // the lorry's path is as much in the way as one lined up with it, and
+    // half a car's width of corridor let the flank of the trailer graze one
+    // that was standing sideways at a pump.
+    const lateral = Math.abs(ox * dz - oz * dx) - TRUCK_HALF_WIDTH - body.length;
+    if (lateral > 0) return null;
+    return along - TRUCK_HALF_LENGTH - body.length;
   };
 
   for (const vehicle of Object.values(state.vehicles)) {
     // On the plot the customer already yields to the lorry, so it only needs
-    // to stop at the last safe body-length. Looking the full road distance
-    // ahead there made a tanker wait behind unrelated pump traffic forever.
-    const reach = onRoad ? FOLLOW_DISTANCE * 1.5 : 2.15;
-    if (!inPath(vehicle.worldPosition[0], vehicle.worldPosition[2], reach)) continue;
+    // the gap it would leave at a pump. Looking the full road distance ahead
+    // there made a tanker wait behind unrelated pump traffic forever.
+    const reach = onRoad ? FOLLOW_DISTANCE : FORECOURT_FOLLOW_DISTANCE - 0.9;
+    const gap = bumperGap(vehicle);
+    if (gap === null || gap > reach) continue;
 
     // If that car is itself braking for this lorry, both would sit there
     // waiting for the other until the driver's patience ran out — which is
     // exactly how customers were being lost at a station with nothing wrong
     // with it. Nose to nose, the lorry has right of way and the car yields.
+    //
+    // Right of way is not a licence to drive through anybody, though: inside
+    // the last half-metre the lorry stops whatever the give-way rule says.
+    // Waiting there is not a deadlock — a lorry stood still for four seconds
+    // asks the planner for a way round, and the car has its own way out.
     const theirDir = headingVector(vehicle);
-    if (theirDir) {
+    if (theirDir && gap > TRUCK_HARD_STOP_GAP) {
       const bx = truck.worldPosition[0] - vehicle.worldPosition[0];
       const bz = truck.worldPosition[2] - vehicle.worldPosition[2];
       const theirAhead = bx * theirDir.x + bz * theirDir.z;
