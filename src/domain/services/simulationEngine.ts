@@ -126,6 +126,25 @@ function notify(
   effects.notifications.push(holdMs ? { type, title, message, holdMs } : { type, title, message });
 }
 
+/** Explain a visually surprising turn-away caused by the vehicle's real body size. */
+function notifyNoManeuverRoom(vehicle: VehicleEntity, effects: SimEffects): void {
+  const name =
+    vehicle.modelVariant === 'limousine'
+      ? 'Limuzin'
+      : vehicle.modelVariant === 'bus'
+        ? 'Otobüs'
+        : vehicle.modelVariant === 'truck-with-trailer'
+          ? 'Römorklu kamyon'
+          : 'Araç';
+  notify(
+    effects,
+    'WARNING',
+    'Manevra Alanı Yetersiz',
+    `${name}, pompa veya kuyruğa güvenli bir rota bulamadığı için tesisten ayrıldı. ` +
+      'Geçişlerin çevresinde daha geniş alan bırakın.'
+  );
+}
+
 /**
  * How long an event's explanation stays on screen. The card in the corner
  * only names the event; this toast is where "Rafineri Zammı" is explained,
@@ -1118,6 +1137,8 @@ function clampLaneToApron(
  * about two units long, so this leaves roughly half a car length of air.
  */
 const FOLLOW_DISTANCE = 2.8;
+/** Low-speed apron gap: one car body plus a visible bumper margin. */
+const FORECOURT_FOLLOW_DISTANCE = 1.9;
 const FOLLOW_CORRIDOR = 1.2;
 
 /**
@@ -1292,7 +1313,8 @@ function followThrottle(
   // that is ample on the forecourt is nothing at all out on the road.
   const pace = highwayPace(vehicle, block);
   const ownBody = vehicleBodyHalfExtents(vehicle);
-  const wanted = (FOLLOW_DISTANCE + Math.max(0, ownBody.length - 0.9)) * pace;
+  const baseDistance = pace > 1 ? FOLLOW_DISTANCE : FORECOURT_FOLLOW_DISTANCE;
+  const wanted = (baseDistance + Math.max(0, ownBody.length - 0.9)) * pace;
 
   // Joining a lane is a different problem from following it: the car that
   // matters is coming along the lane, not sitting in front. A driver pulling
@@ -1348,13 +1370,13 @@ function followThrottle(
     if (noGap) return { throttle: 0, gap: 0 };
   }
 
-  // Emre'nin 2026-09-02 kuralı: tesis içinde araç, araca engel değildir —
-  // gerekirse birbirlerinin içinden geçerler ve forecourt'ta trafik düğümü
-  // hiç kurulmaz. Takip etme, yol verme ve kavşak pazarlığı yalnızca
-  // karayoluna aittir; yapılardan kaçınmak ise rotanın işi, frenin değil.
-  if (Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) >= 1.5) {
-    return { throttle: 1, gap: Infinity };
-  }
+  // Forecourt traffic used to become "ghosts" past the kerb so an awkward
+  // layout could never form a queue. That avoided one kind of gridlock by
+  // introducing two worse ones: customers drove through each other and
+  // through delivery lorries. The same deterministic right-of-way rule used
+  // at the driveway now applies across the plot. Mutual conflicts are broken
+  // by stable id below, while customer cars always yield to the synthetic
+  // lorry bodies in `traffic`.
 
   const toTarget = Math.hypot(
     target[0] - vehicle.worldPosition[0],
@@ -1486,6 +1508,46 @@ function bodyInRects(
   return false;
 }
 
+/** Exact oriented-body overlap for the few cars that are standing in place. */
+function vehicleBodiesOverlap(a: VehicleEntity, b: VehicleEntity): boolean {
+  const frame = (vehicle: VehicleEntity) => ({
+    body: vehicleBodyHalfExtents(vehicle),
+    ahead: { x: Math.sin(vehicle.heading), z: Math.cos(vehicle.heading) },
+    across: { x: Math.cos(vehicle.heading), z: -Math.sin(vehicle.heading) }
+  });
+  const one = frame(a);
+  const two = frame(b);
+  const dx = b.worldPosition[0] - a.worldPosition[0];
+  const dz = b.worldPosition[2] - a.worldPosition[2];
+  const apart = (axis: { x: number; z: number }) => {
+    const reach = (f: typeof one) =>
+      Math.abs(f.ahead.x * axis.x + f.ahead.z * axis.z) * f.body.length +
+      Math.abs(f.across.x * axis.x + f.across.z * axis.z) * f.body.width;
+    return Math.abs(dx * axis.x + dz * axis.z) >= reach(one) + reach(two) - 0.04;
+  };
+  return !(apart(one.ahead) || apart(one.across) || apart(two.ahead) || apart(two.across));
+}
+
+const STANDING_TRAFFIC_STATES: VehicleState[] = [
+  'PUMP_RESERVED', 'AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'VISITING'
+];
+
+/** Whether this step newly entered a car that is parked for service. */
+function entersStandingVehicle(
+  state: GameState,
+  vehicle: VehicleEntity,
+  before: [number, number, number],
+  headingBefore: number
+): boolean {
+  const previous = { ...vehicle, worldPosition: before, heading: headingBefore };
+  return Object.values(state.vehicles).some((other) =>
+    other.id !== vehicle.id &&
+    STANDING_TRAFFIC_STATES.includes(other.state) &&
+    vehicleBodiesOverlap(vehicle, other) &&
+    !vehicleBodiesOverlap(previous, other)
+  );
+}
+
 /**
  * Whether a car's body stays out of every solid the whole way along one
  * straight leg, facing the way it travels. Sampled from just past the start:
@@ -1530,6 +1592,7 @@ function driveInTraffic(
 ): boolean {
   const { throttle, gap } = followThrottle(state, vehicle, block);
   const pace = highwayPace(vehicle, block);
+  const blockedBefore = vehicle.blockedSeconds ?? 0;
 
   // Crawling counts as being held up, not just standing still: a car nosing
   // out onto a road that is never empty would otherwise inch along for the
@@ -1554,6 +1617,10 @@ function driveInTraffic(
   // dışarı çıkabilir.
   const before: [number, number, number] = [...vehicle.worldPosition];
   const headingBefore = vehicle.heading;
+  const targetBefore = vehicle.targetWaypoint
+    ? ([...vehicle.targetWaypoint] as [number, number, number])
+    : null;
+  const routeBefore = vehicle.route.map((point) => [...point] as [number, number, number]);
   const wasInside = bodyInSolid(state, vehicle, block.side, before[0], before[2], headingBefore);
 
   const arrived = driveToward(
@@ -1586,6 +1653,18 @@ function driveInTraffic(
         solidRerouteAttempts(vehicle.solidStuckSeconds)
       );
     }
+    return false;
+  }
+
+  // The follower handles moving traffic without another all-car scan. A car
+  // fixed at a pump or park has no route vector, though, and an exiting car's
+  // turning rear corner can otherwise clip it. Roll back only that rare step.
+  if (entersStandingVehicle(state, vehicle, before, headingBefore)) {
+    vehicle.worldPosition = before;
+    vehicle.heading = headingBefore;
+    vehicle.targetWaypoint = targetBefore;
+    vehicle.route = routeBefore;
+    vehicle.blockedSeconds = blockedBefore + dt;
     return false;
   }
 
@@ -2652,6 +2731,12 @@ function sendAway(state: GameState, vehicle: VehicleEntity): void {
   setVehicleState(vehicle, 'EXIT');
   setRoute(vehicle, backOut ? [backOut, ...route] : route);
   vehicle.reversing = !!backOut;
+  // A driver can arrive here because the way to a selected parking bay stayed
+  // blocked long enough to give up. That old wait belongs to the abandoned
+  // parking manoeuvre, not to the new exit route: carrying it into EXIT made
+  // the next tick despawn the car before it moved a centimetre.
+  vehicle.blockedSeconds = 0;
+  vehicle.solidStuckSeconds = 0;
 }
 
 /**
@@ -4347,11 +4432,7 @@ function truckHeldUp(
   truck: NonNullable<FuelOrderEntity['truck']>,
   roadLaneZ: number
 ): boolean {
-  // Emre'nin 2026-09-02 kuralı tankere de uygulanır: tesis içinde araç araca
-  // engel değildir — kuyruktaki bir müşteri berthe giden kırk tonluğu asla
-  // rehin alamaz. Yol üstünde ise trafiğe saygı sürer.
-  if (Math.abs(truck.worldPosition[2] - roadLaneZ) >= 1.5) return false;
-
+  const onRoad = Math.abs(truck.worldPosition[2] - roadLaneZ) < 1.5;
   const dx = Math.sin(truck.heading);
   const dz = Math.cos(truck.heading);
   const inPath = (x: number, z: number, reach: number) => {
@@ -4363,7 +4444,11 @@ function truckHeldUp(
   };
 
   for (const vehicle of Object.values(state.vehicles)) {
-    if (!inPath(vehicle.worldPosition[0], vehicle.worldPosition[2], 3.2)) continue;
+    // On the plot the customer already yields to the lorry, so it only needs
+    // to stop at the last safe body-length. Looking the full road distance
+    // ahead there made a tanker wait behind unrelated pump traffic forever.
+    const reach = onRoad ? FOLLOW_DISTANCE * 1.5 : 2.15;
+    if (!inPath(vehicle.worldPosition[0], vehicle.worldPosition[2], reach)) continue;
 
     // If that car is itself braking for this lorry, both would sit there
     // waiting for the other until the driver's patience ran out — which is
@@ -4582,6 +4667,16 @@ function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
 
   const route = tankerRoute(state, order.fuelType);
   if (!route) return;
+
+  // Delivery lorries and ordinary road traffic share the same off-map entry.
+  // Spawning forty tonnes on top of a car already crossing that point creates
+  // an overlap before either following rule gets a chance to brake.
+  const spawnBusy = Object.values(state.vehicles).some(
+    (vehicle) =>
+      Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < FOLLOW_CORRIDOR &&
+      Math.abs(vehicle.worldPosition[0] - start[0]) < FOLLOW_DISTANCE * 1.5
+  );
+  if (spawnBusy) return;
 
   order.truck = {
     worldPosition: start,
@@ -5541,6 +5636,11 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     (v) =>
       Math.abs(v.worldPosition[2] - block.roadLaneZ) < FOLLOW_CORRIDOR &&
       Math.abs(v.worldPosition[0] - block.roadStartX) < FOLLOW_DISTANCE * 1.5
+  ) || state.fuelOrders.some(
+    (order) =>
+      !!order.truck &&
+      Math.abs(order.truck.worldPosition[2] - block.roadLaneZ) < FOLLOW_CORRIDOR &&
+      Math.abs(order.truck.worldPosition[0] - block.roadStartX) < FOLLOW_DISTANCE * 1.5
   );
   if (spawnBlocked) return;
 
@@ -6395,11 +6495,15 @@ function tickVehicles(
         }
 
         const arrived = driveInTraffic(state, vehicle, block, dt);
-        if (isWedged(vehicle)) {
-          // Never made it in, so nothing to release — just carry on down the
-          // road rather than standing in the entrance blocking it.
+        if (isWedged(vehicle) && stillOnRoad) {
+          // Still on the carriageway, so nothing to release — carry on down
+          // the road rather than standing in the entrance blocking it. Once
+          // a car has crossed the kerb it must finish the visit it committed
+          // to; converting it to PASSING there draws a road-bound diagonal
+          // across the forecourt and looks like it entered only to leave.
           setVehicleState(vehicle, 'PASSING');
           setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+          turnAway(state);
           break;
         }
         if (!arrived) break;
@@ -6408,6 +6512,7 @@ function tickVehicles(
         // and forcing a line to them would be a car driving through the wall.
         // The driver turns round at the mouth instead.
         if (!reachable(state, vehicle, block, [queueSlotPosition(state, 0, side)])) {
+          notifyNoManeuverRoom(vehicle, effects);
           sendAway(state, vehicle);
           turnAway(state);
           break;
@@ -6443,6 +6548,10 @@ function tickVehicles(
             setRoute(vehicle, toQueue);
             chargeQueued.push(vehicle);
           } else {
+            const hadRoomButNoRoute =
+              (!!point && !toCharger) ||
+              (!!chargeLine && chargeQueued.length < chargeLine.slots.length && !toQueue);
+            if (hadRoomButNoRoute) notifyNoManeuverRoom(vehicle, effects);
             sendAway(state, vehicle);
             turnAway(state);
           }
@@ -6476,10 +6585,10 @@ function tickVehicles(
           vehicle.facilityIntent = true;
           afterService(state, vehicle, null, effects);
         } else {
-          const joining =
-            queued.length < maxQueueLength(state, block)
-              ? queueJoinRoute(state, vehicle, block, queued.length, side, queued)
-              : null;
+          const hasQueueRoom = queued.length < maxQueueLength(state, block);
+          const joining = hasQueueRoom
+            ? queueJoinRoute(state, vehicle, block, queued.length, side, queued)
+            : null;
 
           if (joining) {
             setVehicleState(vehicle, 'QUEUE');
@@ -6487,6 +6596,7 @@ function tickVehicles(
             queued.push(vehicle);
           } else {
             // Forecourt is full, or walled off — this driver never even stops.
+            if (hasQueueRoom) notifyNoManeuverRoom(vehicle, effects);
             sendAway(state, vehicle);
             turnAway(state);
           }
@@ -6590,7 +6700,8 @@ function tickVehicles(
           }
         }
 
-        // Only the head of the queue may claim a point that has come free.
+        // A charger line leads to one kind of service point, so only its head
+        // may claim a socket. The mixed fuel queue below is different.
         if (slot === 0 && wantsCharge) {
           const point = findFreeCharger(state, side, vehicle, block);
           const toPost = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
@@ -6607,10 +6718,20 @@ function tickVehicles(
           break;
         }
 
-        if (slot === 0) {
-          const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle, block);
-          if (pump && reservePumpFor(state, vehicle, pump)) {
-            queued.shift();
+        if (!wantsCharge && slot >= 0) {
+          // One mixed queue feeds every fuel island. A diesel customer at the
+          // head must not leave five petrol bays idle while every petrol car
+          // waits behind it. The earliest driver who can use any bay that is
+          // free *now* is dispatched; FIFO is still preserved among drivers
+          // competing for the same available service.
+          const firstServiceable = queued.find((waiting) =>
+            !!findAvailablePump(state, waiting.fuelType, mods, side, waiting, block)
+          );
+          if (firstServiceable?.id === vehicle.id) {
+            const pump = findAvailablePump(state, vehicle.fuelType, mods, side, vehicle, block);
+            if (pump && reservePumpFor(state, vehicle, pump)) {
+              queued.splice(slot, 1);
+            }
           }
         }
         break;

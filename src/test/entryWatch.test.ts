@@ -11,7 +11,7 @@ import {
 } from '../domain/services/simulationEngine';
 import { evaluatePlacement, snapPlacement } from '../domain/services/placement';
 import { GAME_CONFIG } from '../config/gameConfig';
-import { GameState } from '../domain/types/gameState';
+import { GameState, VehicleEntity } from '../domain/types/gameState';
 
 /**
  * Emre, 2026-09-09, canlı sürüm, 8. gün: iki gün boyunca tek bir araç
@@ -150,6 +150,35 @@ describe('a station nobody can enter', () => {
     expect(arrivals).toBe(0);
     // And now the game says so — exactly once, not every few seconds.
     expect(titles.filter((t) => t === 'Yol Kapalı')).toHaveLength(1);
+  });
+
+  it('explains when a limousine already at the entrance cannot manoeuvre to service', () => {
+    const state = station();
+    plantPoleInTheWay(state);
+    const block = blockLayout(state, 'near')!;
+    const limo: VehicleEntity = {
+      id: 'limo', archetype: 'luxury', modelVariant: 'limousine', fuelType: 'gasoline',
+      tankCapacity: 80, currentFuel: 20,
+      request: {
+        mode: 'LITERS', targetValue: 40, calculatedLiters: 40, calculatedPrice: 0,
+        dispensedLiters: 0, isFinished: false
+      },
+      patience: 40, maxPatience: 40, satisfaction: 100,
+      state: 'ROAD_APPROACH', targetPumpId: null, assignedActor: null,
+      worldPosition: [block.entry.x, 0, block.laneZ], targetWaypoint: null, route: [],
+      heading: 0, speed: 1, routeProgress: 0, waitingTimeSeconds: 0,
+      shoppingIntent: false
+    };
+    state.vehicles = { limo };
+    const effects = createEffects();
+
+    runSimulationTick(state, 0.05, effects);
+
+    expect(['EXIT', 'DESPAWN']).toContain(limo.state);
+    expect(effects.notifications).toContainEqual(expect.objectContaining({
+      title: 'Manevra Alanı Yetersiz',
+      message: expect.stringContaining('Limuzin')
+    }));
   });
 
   it('says nothing about a station that is simply closed or simply healthy', () => {

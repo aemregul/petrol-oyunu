@@ -30,11 +30,12 @@ import {
   closeForecourt,
   finalizeCharge,
   dailyPriceReputationDelta,
+  vehicleBodyHalfExtents,
   DRIVEWAY_Z,
   LAYOUT
 } from '../domain/services/simulationEngine';
 import { GAME_EVENTS } from '../config/eventConfig';
-import { GameState, VehicleState } from '../domain/types/gameState';
+import { GameState, VehicleEntity, VehicleState } from '../domain/types/gameState';
 import { GAME_CONFIG } from '../config/gameConfig';
 
 /**
@@ -83,6 +84,26 @@ function advanceUntil(
     runSimulationTick(state, step, effects);
   }
   return predicate(state);
+}
+
+/** Exact overlap of two rendered, oriented vehicle bodies. */
+function vehicleBodiesOverlap(a: VehicleEntity, b: VehicleEntity): boolean {
+  const frame = (vehicle: VehicleEntity) => ({
+    body: vehicleBodyHalfExtents(vehicle),
+    ahead: { x: Math.sin(vehicle.heading), z: Math.cos(vehicle.heading) },
+    across: { x: Math.cos(vehicle.heading), z: -Math.sin(vehicle.heading) }
+  });
+  const one = frame(a);
+  const two = frame(b);
+  const dx = b.worldPosition[0] - a.worldPosition[0];
+  const dz = b.worldPosition[2] - a.worldPosition[2];
+  const apart = (axis: { x: number; z: number }) => {
+    const reach = (f: typeof one) =>
+      Math.abs(f.ahead.x * axis.x + f.ahead.z * axis.z) * f.body.length +
+      Math.abs(f.across.x * axis.x + f.across.z * axis.z) * f.body.width;
+    return Math.abs(dx * axis.x + dz * axis.z) >= reach(one) + reach(two) - 0.04;
+  };
+  return !(apart(one.ahead) || apart(one.across) || apart(two.ahead) || apart(two.across));
 }
 
 describe('simulationEngine - vehicle lifecycle', () => {
@@ -303,6 +324,62 @@ describe('simulationEngine - vehicle lifecycle', () => {
 
     expect(furthestFromRoad).toBeLessThan(0.1);
     expect(state.dayState.todayStats.customersServed).toBe(servedBefore);
+  });
+
+  it('does not turn a car that crossed the kerb into through traffic', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.station.open = false;
+    const block = blockLayout(state, 'near')!;
+    const entryX = drivewayLaneX(block.entry, 0);
+    const car = {
+      id: 'committed', archetype: 'commuter', modelVariant: 'sedan', fuelType: 'gasoline',
+      tankCapacity: 60, currentFuel: 20,
+      request: { mode: 'LITERS', targetValue: 20, calculatedLiters: 20,
+        calculatedPrice: 0, dispensedLiters: 0, isFinished: false },
+      patience: 120, maxPatience: 120, satisfaction: 100,
+      state: 'ROAD_APPROACH', targetPumpId: null, assignedActor: null,
+      worldPosition: [entryX, 0, block.minZ + 0.5],
+      targetWaypoint: [entryX, 0, block.laneZ], route: [],
+      heading: 0, speed: 1, routeProgress: 0, waitingTimeSeconds: 0,
+      shoppingIntent: false, blockedSeconds: 21
+    } as VehicleEntity;
+    state.vehicles = { committed: car };
+    const turnedAwayBefore = state.dayState.todayStats.customersTurnedAway ?? 0;
+
+    runSimulationTick(state, 0.05, createEffects());
+
+    expect(car.state).toBe('ROAD_APPROACH');
+    expect(state.dayState.todayStats.customersTurnedAway ?? 0).toBe(turnedAwayBefore);
+  });
+
+  it('sends the earliest compatible fuel customer to an idle bay', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.station.open = false;
+    const block = blockLayout(state, 'near')!;
+    const queued = (id: string, fuelType: 'gasoline' | 'diesel', index: number): VehicleEntity => ({
+      id, archetype: 'commuter', modelVariant: 'sedan', fuelType,
+      tankCapacity: 60, currentFuel: 20,
+      request: { mode: 'LITERS', targetValue: 20, calculatedLiters: 20,
+        calculatedPrice: 0, dispensedLiters: 0, isFinished: false },
+      patience: 120, maxPatience: 120, satisfaction: 100,
+      state: 'QUEUE', targetPumpId: null, assignedActor: null,
+      worldPosition: queueSlotPosition(state, index, 'near'),
+      targetWaypoint: null, route: [], heading: Math.PI / 2, speed: 1,
+      routeProgress: 0, waitingTimeSeconds: 20 - index, shoppingIntent: false
+    });
+    const dieselHead = queued('diesel_head', 'diesel', 0);
+    const petrolBehind = queued('petrol_behind', 'gasoline', 1);
+    state.vehicles = { diesel_head: dieselHead, petrol_behind: petrolBehind };
+
+    runSimulationTick(state, 0.05, createEffects());
+
+    expect(dieselHead.state).toBe('QUEUE');
+    expect(petrolBehind.state).toBe('PUMP_RESERVED');
+    expect(petrolBehind.targetPumpId).toBe('pump_1');
+    expect(state.pumps.pump_1.currentVehicleId).toBe('petrol_behind');
+    expect(block.queueZ).toBeDefined();
   });
 
   it('sends the customer away when the pump fails under them', () => {
@@ -1139,15 +1216,11 @@ describe('simulationEngine - highway lanes and driveways', () => {
     expect(state.dayState.todayStats.marketRevenue).toBeGreaterThan(0);
   });
 
-  // Emre'nin 2026-09-02 kuralı: tesis İÇİNDE araçlar birbirine engel olmaz —
-  // gerekirse iç içe geçerler, forecourt trafiği diye bir şey yoktur. Mesafe
-  // disiplini yalnızca karayolunda aranır; bu test de yalnızca orayı ölçer.
-  it('keeps road traffic apart and never gridlocks', () => {
+  it('keeps traffic bodies apart on the road and forecourt without gridlock', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
     state.pricing.gasoline.playerPrice = state.pricing.gasoline.regionalAverage * 0.85;
 
-    const roadZ = blockLayout(state, 'near')!.roadLaneZ;
     let pairs = 0;
     let touching = 0;
     let longestTransit = 0;
@@ -1155,20 +1228,12 @@ describe('simulationEngine - highway lanes and driveways', () => {
 
     for (let tick = 0; tick < 3000 && !state.dayState.isDayEnding; tick++) {
       runSimulationTick(state, 0.2, createEffects());
-      const vehicles = Object.values(state.vehicles).filter(
-        (v) => Math.abs(v.worldPosition[2] - roadZ) < 1.5
-      );
+      const vehicles = Object.values(state.vehicles);
 
       for (let a = 0; a < vehicles.length; a++) {
         for (let b = a + 1; b < vehicles.length; b++) {
-          const gap = Math.hypot(
-            vehicles[a].worldPosition[0] - vehicles[b].worldPosition[0],
-            vehicles[a].worldPosition[2] - vehicles[b].worldPosition[2]
-          );
           pairs++;
-          // A vehicle is about 1.35 grid units wide, so anything under this is
-          // two cars sharing the same tarmac rather than passing beside it.
-          if (gap < 1.2) touching++;
+          if (vehicleBodiesOverlap(vehicles[a], vehicles[b])) touching++;
         }
       }
 
@@ -1186,7 +1251,7 @@ describe('simulationEngine - highway lanes and driveways', () => {
     }
 
     expect(pairs).toBeGreaterThan(1000);
-    expect(touching / pairs).toBeLessThan(0.01);
+    expect(touching).toBe(0);
     expect(longestTransit).toBeLessThan(120);
   });
 
@@ -1514,7 +1579,7 @@ describe('the lorry shares the forecourt', () => {
     expect(placeFuelOrder(state, 'gasoline', 800, effects)).toBe(true);
     state.fuelOrders[0].remainingSeconds = 0.1;
 
-    let worstOverlap = Infinity;
+    const overlaps: string[] = [];
     for (let i = 0; i < 6000; i++) {
       runSimulationTick(state, 0.2, effects);
       for (const order of state.fuelOrders) {
@@ -1527,19 +1592,26 @@ describe('the lorry shares the forecourt', () => {
         for (const along of [-1.1, 0, 1.1]) {
           const bx = truck.worldPosition[0] + dx * along;
           const bz = truck.worldPosition[2] + dz * along;
+          const body = {
+            archetype: 'commuter', modelVariant: 'sedan', heading: truck.heading,
+            worldPosition: [bx, 0, bz]
+          } as VehicleEntity;
           for (const vehicle of Object.values(state.vehicles)) {
-            worstOverlap = Math.min(
-              worstOverlap,
-              Math.hypot(vehicle.worldPosition[0] - bx, vehicle.worldPosition[2] - bz)
-            );
+            if (vehicleBodiesOverlap(vehicle, body)) {
+              overlaps.push(
+                `${order.state}/${truck.phase} segment=${along} car=${vehicle.state} ` +
+                `truck=${truck.worldPosition[0].toFixed(2)},${truck.worldPosition[2].toFixed(2)} ` +
+                `car=${vehicle.worldPosition[0].toFixed(2)},${vehicle.worldPosition[2].toFixed(2)} ` +
+                `heads=${truck.heading.toFixed(2)}/${vehicle.heading.toFixed(2)}`
+              );
+            }
           }
         }
       }
       if (state.fuelOrders.length === 0) break;
     }
 
-    // Bodies this close would be drawn inside one another.
-    expect(worstOverlap).toBeGreaterThan(0.9);
+    expect(overlaps).toEqual([]);
   });
 
   // Emre'nin 2026-09-02 kararı: tankerler birbirini BEKLEMEZ — hepsi aynı

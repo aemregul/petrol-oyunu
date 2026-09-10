@@ -330,6 +330,28 @@ describe('facilities - the visit', () => {
     expect(car.solidStuckSeconds ?? 0).toBe(0);
   });
 
+  it('drives out instead of disappearing after giving up a blocked parking trip', () => {
+    const state = forecourt({ park: true });
+    const car = customerAtPump(state);
+    car.facilityIntent = true;
+    serve(state, car);
+    expect(car.state).toBe('TO_PARK');
+
+    // The parking target disappears after the trip has already accumulated a
+    // full stuck timer. The old timer must not condemn the fresh exit route.
+    car.blockedSeconds = 21;
+    car.solidStuckSeconds = 21;
+    delete state.buildings.park;
+    const before = [...car.worldPosition];
+
+    advance(state, 0.1, 0.05);
+
+    expect(car.state).toBe('EXIT');
+    expect(car.blockedSeconds ?? 0).toBeLessThan(1);
+    expect(car.solidStuckSeconds ?? 0).toBe(0);
+    expect(Math.hypot(car.worldPosition[0] - before[0], car.worldPosition[2] - before[2])).toBeGreaterThan(0);
+  });
+
   it('lets a driver leave the car at the pump and hold the bay until they are back', () => {
     // The die on 0.1: under the toilet's odds, and under the share who walk
     // from the pump.
