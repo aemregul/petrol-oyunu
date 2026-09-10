@@ -66,6 +66,15 @@ const CLEARANCE = 1.1;
 const PASSING_CLEARANCE = 0.7;
 
 /**
+ * Visual meshes include mirrors, bumpers and soft margins that should not
+ * turn a two-cell driving gap into a wall. The solid-body check in the
+ * simulation remains the final authority; the planner may borrow this small
+ * amount so a limousine chooses the corridor instead of declaring it
+ * impossible because of a few centimetres of art overlap.
+ */
+const ROUTE_TOLERANCE = 0.12;
+
+/**
  * Küçük eşya: direk, çöp kutusu, çalı, hava-su. Bir binanın dönüş payını
  * (1.1) hak etmezler — 1x1'lik bir direk aracın merkezi için 3.2x3.2'lik
  * yasak alana dönüşüyor ve girişin dibinde bekleme hattına giden yolu
@@ -579,11 +588,23 @@ function plot(
   const body = vehicleBodyHalfExtents(vehicle);
   const passing = Math.max(PASSING_CLEARANCE, body.width + PASSING_CLEARANCE - 0.43);
   const turnRoom = Math.max(CLEARANCE, body.length + CLEARANCE - 0.9);
+  // Pump art and its collision footprint differ by a few centimetres. Give
+  // only islands that small grace; walls, parks, grass and the plot boundary
+  // keep their exact clearance so tolerance can never invent a route through
+  // a building or off the concrete.
+  const pumpPassing = Math.max(
+    PASSING_CLEARANCE - ROUTE_TOLERANCE,
+    body.width + PASSING_CLEARANCE - 0.43 - ROUTE_TOLERANCE
+  );
+  const pumpTurnRoom = Math.max(
+    CLEARANCE - ROUTE_TOLERANCE,
+    body.length + CLEARANCE - 0.9 - ROUTE_TOLERANCE
+  );
 
   const rects = [
     ...keep(
       wallRects(state, side, passing, ignoreBuildingId),
-      pumpRects(state, side, ignorePumpId, passing)
+      pumpRects(state, side, ignorePumpId, pumpPassing)
     ),
     ...(extraRects ?? [])
   ];
@@ -594,7 +615,7 @@ function plot(
   const turning = [
     ...keep(
       wallRects(state, side, turnRoom, ignoreBuildingId),
-      pumpRects(state, side, ignorePumpId, turnRoom)
+      pumpRects(state, side, ignorePumpId, pumpTurnRoom)
     ),
     ...(extraRects ?? [])
   ];

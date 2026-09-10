@@ -67,6 +67,7 @@ describe('leaving the forecourt', () => {
         let struck = 0;
         const insideLaneDetails: string[] = [];
         let worstBlocked = 0;
+        let worstBlockedDetail = '';
         let exitTicks = 0;
         let passTicks = 0;
         const seen = new Set<string>();
@@ -76,7 +77,24 @@ describe('leaving the forecourt', () => {
           const vs = Object.values(state.vehicles);
 
           for (const v of vs) {
-            worstBlocked = Math.max(worstBlocked, v.blockedSeconds ?? 0);
+            if ((v.blockedSeconds ?? 0) > worstBlocked) {
+              worstBlocked = v.blockedSeconds ?? 0;
+              const nearby = vs
+                .filter(
+                  (other) =>
+                    other.id !== v.id &&
+                    Math.hypot(
+                      other.worldPosition[0] - v.worldPosition[0],
+                      other.worldPosition[2] - v.worldPosition[2]
+                    ) < 4
+                )
+                .map(
+                  (other) =>
+                    `${other.state}@${other.worldPosition[0].toFixed(1)},${other.worldPosition[2].toFixed(1)}→${other.targetWaypoint?.[0].toFixed(1)},${other.targetWaypoint?.[2].toFixed(1)}`
+                )
+                .join(' | ');
+              worstBlockedDetail = `${v.state}/${v.archetype}/${v.modelVariant ?? '-'} @ ${v.worldPosition[0].toFixed(2)},${v.worldPosition[2].toFixed(2)} -> ${v.targetWaypoint?.[0].toFixed(2)},${v.targetWaypoint?.[2].toFixed(2)} nearby=[${nearby}]`;
+            }
 
             // A car still on its way out has no business standing in the road.
             seen.add(v.id);
@@ -117,7 +135,7 @@ describe('leaving the forecourt', () => {
         expect(insideLaneDetails).toEqual([]);
         // The 30-second knot this test was written for; ordinary give-way
         // waits are a few seconds.
-        expect(worstBlocked).toBeLessThan(12);
+        expect(worstBlocked, worstBlockedDetail).toBeLessThan(12);
       } finally {
         spy.mockRestore();
       }

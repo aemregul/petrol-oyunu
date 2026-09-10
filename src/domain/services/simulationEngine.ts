@@ -1299,6 +1299,111 @@ function truckBodies(state: GameState): VehicleEntity[] {
   return bodies;
 }
 
+interface ReservedRouteConflict {
+  mine: number;
+  theirs: number;
+}
+
+/** How far ahead a driver books the apron before entering a crossing. */
+const FORECOURT_RESERVATION_LOOKAHEAD = 4;
+
+/**
+ * The next few straight pieces of a route, with distance from the vehicle.
+ * Booking more than one piece is what stops a driver entering a junction
+ * whose conflict lies just beyond their current corner waypoint.
+ */
+function upcomingRouteSegments(
+  vehicle: VehicleEntity,
+  limit = FORECOURT_RESERVATION_LOOKAHEAD
+): Array<{ from: [number, number]; to: [number, number]; offset: number; length: number }> {
+  const points = [vehicle.targetWaypoint, ...vehicle.route].filter(
+    (point): point is [number, number, number] => point !== null
+  );
+  const segments: Array<{ from: [number, number]; to: [number, number]; offset: number; length: number }> = [];
+  let from: [number, number] = [vehicle.worldPosition[0], vehicle.worldPosition[2]];
+  let offset = 0;
+
+  for (const point of points) {
+    const to: [number, number] = [point[0], point[2]];
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    if (length > 0.01) segments.push({ from, to, offset, length });
+    offset += length;
+    if (offset >= limit) break;
+    from = to;
+  }
+  return segments;
+}
+
+/** Exact crossing of two finite route pieces; parallel following is handled separately. */
+function segmentCrossing(
+  a: { from: [number, number]; to: [number, number]; offset: number; length: number },
+  b: { from: [number, number]; to: [number, number]; offset: number; length: number }
+): ReservedRouteConflict | null {
+  const arx = a.to[0] - a.from[0];
+  const arz = a.to[1] - a.from[1];
+  const brx = b.to[0] - b.from[0];
+  const brz = b.to[1] - b.from[1];
+  const denominator = arx * brz - arz * brx;
+  if (Math.abs(denominator) < 0.001) return null;
+
+  const qx = b.from[0] - a.from[0];
+  const qz = b.from[1] - a.from[1];
+  const at = (qx * brz - qz * brx) / denominator;
+  const bt = (qx * arz - qz * arx) / denominator;
+  if (at < 0 || at > 1 || bt < 0 || bt > 1) return null;
+  return { mine: a.offset + a.length * at, theirs: b.offset + b.length * bt };
+}
+
+/** Nearest junction both vehicles intend to occupy in the next few seconds. */
+function upcomingRouteConflict(
+  vehicle: VehicleEntity,
+  other: VehicleEntity
+): ReservedRouteConflict | null {
+  let nearest: ReservedRouteConflict | null = null;
+  for (const mine of upcomingRouteSegments(vehicle)) {
+    for (const theirs of upcomingRouteSegments(other)) {
+      const crossing = segmentCrossing(mine, theirs);
+      if (
+        crossing &&
+        crossing.mine <= FORECOURT_RESERVATION_LOOKAHEAD &&
+        crossing.theirs <= FORECOURT_RESERVATION_LOOKAHEAD &&
+        (!nearest || crossing.mine < nearest.mine)
+      ) {
+        nearest = crossing;
+      }
+    }
+  }
+  return nearest;
+}
+
+function forecourtPriority(vehicle: VehicleEntity): number {
+  if (vehicle.state === 'EXIT') return 0;
+  if (vehicle.state === 'TO_PARK' || vehicle.state === 'PUMP_RESERVED') return 1;
+  if (vehicle.state === 'QUEUE') return 2;
+  return 3;
+}
+
+/**
+ * Stable right-of-way for a booked crossing. A body already entering the
+ * junction clears first; otherwise departures clear the plot before new
+ * arrivals, then proximity and id break ties without tick-to-tick flicker.
+ */
+function hasForecourtPriority(
+  vehicle: VehicleEntity,
+  other: VehicleEntity,
+  conflict: ReservedRouteConflict
+): boolean {
+  const mineInside = conflict.mine <= vehicleBodyHalfExtents(vehicle).length + 0.3;
+  const theirsInside = conflict.theirs <= vehicleBodyHalfExtents(other).length + 0.3;
+  if (mineInside !== theirsInside) return mineInside;
+
+  const minePriority = forecourtPriority(vehicle);
+  const theirPriority = forecourtPriority(other);
+  if (minePriority !== theirPriority) return minePriority < theirPriority;
+  if (Math.abs(conflict.mine - conflict.theirs) > 0.25) return conflict.mine < conflict.theirs;
+  return vehicle.id < other.id;
+}
+
 function followThrottle(
   state: GameState,
   vehicle: VehicleEntity,
@@ -1391,9 +1496,34 @@ function followThrottle(
   );
 
   let nearest = Infinity;
+  let reservationThrottle = 1;
 
   for (const other of traffic) {
     if (other.id === vehicle.id) continue;
+
+    // Book crossings before either car enters them. The old follower only
+    // noticed the other body after the two centre-lines had met; a bus could
+    // then lie sideways across the whole apron until the five-second recovery
+    // valve let somebody ghost through. Parallel traffic remains the normal
+    // bumper-following problem below.
+    if (
+      pace <= 1 &&
+      !other.id.startsWith('truck_') &&
+      (other.blockedSeconds ?? 0) < 1.5 &&
+      Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1.5
+    ) {
+      const conflict = upcomingRouteConflict(vehicle, other);
+      if (conflict && !hasForecourtPriority(vehicle, other, conflict)) {
+        // Stop a full bumper margin before the swept crossing, not at its
+        // centre. Long vehicles otherwise enter far enough that their tail
+        // still lies across the winner's lane while they are yielding.
+        const hold = vehicleBodyHalfExtents(vehicle).length + 1.2;
+        reservationThrottle = Math.min(
+          reservationThrottle,
+          clamp((conflict.mine - hold) / 1.2, 0, 1)
+        );
+      }
+    }
 
     // Routes meet at shared points — the mouth of a ramp, the head of the
     // exit lane. Two cars converging on one from different directions cannot
@@ -1429,8 +1559,15 @@ function followThrottle(
     nearest = mutual ? bodyAdjustedGap - CAR_CLEARANCE : bodyAdjustedGap;
   }
 
-  if (nearest === Infinity) return { throttle: 1, gap: Infinity };
-  return { throttle: clamp((nearest - wanted) / wanted, 0, 1), gap: nearest };
+  if (nearest === Infinity) {
+    // A booked junction is a give-way line, not a slow obstacle to edge past.
+    // gap=0 keeps the five-second impatience valve from breaking the booking.
+    return { throttle: reservationThrottle, gap: reservationThrottle < 1 ? 0 : Infinity };
+  }
+  return {
+    throttle: Math.min(reservationThrottle, clamp((nearest - wanted) / wanted, 0, 1)),
+    gap: nearest
+  };
 }
 
 /** True once a driver has spent longer than anyone would getting nowhere. */
@@ -1536,8 +1673,30 @@ function vehicleBodiesOverlap(a: VehicleEntity, b: VehicleEntity): boolean {
 }
 
 const STANDING_TRAFFIC_STATES: VehicleState[] = [
-  'PUMP_RESERVED', 'AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'VISITING'
+  'AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'VISITING'
 ];
+
+/** Current service traffic, shaped as temporary walls for a local detour. */
+function standingVehicleRects(state: GameState, vehicle: VehicleEntity): PathRect[] {
+  const own = vehicleBodyHalfExtents(vehicle);
+  return Object.values(state.vehicles)
+    .filter(
+      (other) => other.id !== vehicle.id && STANDING_TRAFFIC_STATES.includes(other.state)
+    )
+    .map((other) => {
+      const body = vehicleBodyHalfExtents(other);
+      const sin = Math.abs(Math.sin(other.heading));
+      const cos = Math.abs(Math.cos(other.heading));
+      const halfX = sin * body.length + cos * body.width + own.width + 0.15;
+      const halfZ = cos * body.length + sin * body.width + own.width + 0.15;
+      return {
+        minX: other.worldPosition[0] - halfX,
+        maxX: other.worldPosition[0] + halfX,
+        minZ: other.worldPosition[2] - halfZ,
+        maxZ: other.worldPosition[2] + halfZ
+      };
+    });
+}
 
 /** Whether this step newly entered a car that is parked for service. */
 function entersStandingVehicle(
@@ -1672,6 +1831,32 @@ function driveInTraffic(
     vehicle.targetWaypoint = targetBefore;
     vehicle.route = routeBefore;
     vehicle.blockedSeconds = blockedBefore + dt;
+
+    // Waiting is correct for a moment; waiting until the 20-second despawn
+    // valve is not. Once the other car has clearly stopped this manoeuvre,
+    // retain the destination but redraw the remaining route around its body.
+    if (vehicle.blockedSeconds > 1.5) {
+      const remaining = [targetBefore, ...routeBefore].filter(
+        (point): point is [number, number, number] => point !== null
+      );
+      const detour = remaining.length
+        ? routeAroundOrNull(
+            state,
+            vehicle,
+            block.side,
+            remaining,
+            { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
+            frontageKeepOut(block),
+            vehicle.targetPumpId ?? undefined,
+            vehicle.parkingBuildingId ?? undefined,
+            standingVehicleRects(state, vehicle)
+          )
+        : null;
+      if (detour) {
+        setRoute(vehicle, detour);
+        vehicle.blockedSeconds = 0;
+      }
+    }
     return false;
   }
 

@@ -353,6 +353,39 @@ describe('simulationEngine - vehicle lifecycle', () => {
     expect(state.dayState.todayStats.customersTurnedAway ?? 0).toBe(turnedAwayBefore);
   });
 
+  it('reserves a crossing before two forecourt routes enter it', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.station.open = false;
+    const crossingCar = (
+      id: string,
+      position: [number, number, number],
+      target: [number, number, number]
+    ): VehicleEntity => ({
+      id, archetype: 'commuter', modelVariant: 'sedan', fuelType: 'gasoline',
+      tankCapacity: 50, currentFuel: 40,
+      request: {
+        mode: 'LITERS', targetValue: 0, calculatedLiters: 0, calculatedPrice: 0,
+        dispensedLiters: 0, isFinished: true
+      },
+      patience: 40, maxPatience: 40, satisfaction: 100,
+      state: 'EXIT', targetPumpId: null, assignedActor: null,
+      worldPosition: position, targetWaypoint: target, route: [],
+      heading: 0, speed: 1, routeProgress: 0, waitingTimeSeconds: 0,
+      shoppingIntent: false
+    });
+    const first = crossingCar('a_first', [3, 0, 12], [7, 0, 12]);
+    const yielding = crossingCar('b_yielding', [5, 0, 10], [5, 0, 14]);
+    yielding.state = 'ROAD_APPROACH';
+    state.vehicles = { a_first: first, b_yielding: yielding };
+
+    runSimulationTick(state, 0.05, createEffects());
+
+    expect(first.worldPosition[0]).toBeGreaterThan(3);
+    expect(yielding.worldPosition).toEqual([5, 0, 10]);
+    expect(yielding.blockedSeconds).toBeGreaterThan(0);
+  });
+
   it('sends the earliest compatible fuel customer to an idle bay', () => {
     const state = createInitialGameState();
     state.dayState.timeSpeed = 1;
