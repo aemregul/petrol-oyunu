@@ -95,6 +95,11 @@ export const BUILDING_MODELS: Record<string, BuildingModelConfig> = {
   mini_market: {
     url: `${COMMERCIAL}/building-e.glb`,
     fit: 'footprint',
+    // Ofisle aynı dert (Emre, 2026-09-10): oran koruyan sığdırma modeli 5x5
+    // plotun içinde kısa bırakıyor, arkasında bir birimlik "yapıya dahil"
+    // hayalet bant kalıyordu — market arka kaldırıma sıfıra sıfır
+    // dayanamıyordu. Plot aynı kalır; bina plotu duvar duvara doldurur.
+    fillFootprint: true,
     maxHeight: 5.5
   },
   toilet: {

@@ -537,7 +537,10 @@ export const GAME_CONFIG: GameConfig = {
       category: 'service',
       price: 61500,
       dailyUpkeep: 200,
-      size: [5, 5],
+      // 5 wide, 4 deep (Emre, 2026-09-10): at 5x5 the shop read as a long
+      // building pushed toward the road; a step shallower keeps the frontage
+      // and gives a row of forecourt back.
+      size: [5, 4],
       unlockLevel: 6,
       description: 'Yakıt alan müşterilere sepet satışı yaparak yan gelir üretir.',
       icon: 'ShoppingBag'

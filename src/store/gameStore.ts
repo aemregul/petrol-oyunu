@@ -686,6 +686,14 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   // wherever an older save happened to leave it.
   syncPriceSign(loaded);
 
+  // The market went from 5x5 to 5x4 (Emre, 2026-09-10). A shop saved at the
+  // old size would keep claiming a row it no longer covers; the catalogue is
+  // the authority, the centre stays where the player put it.
+  for (const building of Object.values(loaded.buildings)) {
+    if (building.type !== 'mini_market') continue;
+    building.size = [...GAME_CONFIG.buildings.mini_market.size] as [number, number];
+  }
+
   // The pylon's reserved cell shrank to the mast's actual base; a sign saved
   // under the old size would go on claiming four cells it never stood on.
   for (const building of Object.values(loaded.buildings)) {

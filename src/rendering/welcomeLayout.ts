@@ -153,7 +153,8 @@ export const WELCOME_STRUCTURES: BuildingEntity[] = [
   welcomeBuilding('wb_tank', 'tank_farm', [14.5, 10.5]),
   welcomeBuilding('wb_office', 'office', [11, 11], 0, 2),
   welcomeBuilding('wb_cafe', 'cafe', [7.5, 10.5], 0, 2),
-  welcomeBuilding('wb_market', 'mini_market', [3.5, 11.5], 0, 2),
+  // Market 5x4 oldu (2026-09-10): cephe yine z=9'da, merkez yarım birim geri.
+  welcomeBuilding('wb_market', 'mini_market', [3.5, 11], 0, 2),
 
   // Sol kaldırım (yüksek x): çıkış koridorunun hemen ardında otopark,
   // 270° ile bay başları kaldırıma dönük; önünde çöp kutusu.
