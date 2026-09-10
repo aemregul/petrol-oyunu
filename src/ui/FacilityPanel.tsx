@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import {
   facilityConfig,
@@ -67,6 +67,9 @@ export const FacilityPanel: React.FC = () => {
     (v) => v.visitBuildingId === building.id && v.visitor?.phase === 'INSIDE'
   ).length;
   const sellValue = structureValue(building.id) + till;
+  // Rearranging is a late-game luxury; the panel says so rather than offering
+  // a button that only warns (Emre, 2026-09-10).
+  const canMove = gameState.player.level >= EDIT_MODE_LEVEL;
   const canAffordUpgrade = !!upgrade && gameState.player.cash >= upgrade.cost;
 
   const handleClose = () => {
@@ -195,9 +198,15 @@ export const FacilityPanel: React.FC = () => {
                 sounds.playClick();
                 relocateStructure(building.id);
               }}
-              className="w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm"
+              disabled={!canMove}
+              title={canMove ? 'Yapıyı kaldır ve yeni yerine koy' : `Taşımak için Seviye ${EDIT_MODE_LEVEL} gerekiyor`}
+              className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
+                canMove
+                  ? 'bg-card hover:bg-board text-ink'
+                  : 'bg-board text-mute cursor-not-allowed'
+              }`}
             >
-              Taşı
+              {canMove ? 'Taşı' : `Taşı — Sv.${EDIT_MODE_LEVEL}`}
             </button>
 
             <button

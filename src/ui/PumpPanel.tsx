@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { calculateRepairCost } from '../domain/formulas/economy';
 import { Fuel, X, Wrench, Umbrella, Sun } from 'lucide-react';
@@ -52,6 +52,9 @@ export const PumpPanel: React.FC = () => {
   );
 
   const attendantConfig = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
+  // Rearranging is a late-game luxury; the panel says so rather than offering
+  // a button that only warns (Emre, 2026-09-10).
+  const canMove = gameState.player.level >= EDIT_MODE_LEVEL;
   const upgrade = GAME_CONFIG.buildingUpgrades[upgradePathFor('pump_standard')]?.[pump.level + 1];
   const repairCost =
     pump.health < 100
@@ -203,9 +206,15 @@ export const PumpPanel: React.FC = () => {
             {/* Taşı (Relocate) Button */}
             <button
               onClick={handleRelocate}
-              className="w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm"
+              disabled={!canMove}
+              title={canMove ? 'Pompayı kaldır ve yeni yerine koy' : `Taşımak için Seviye ${EDIT_MODE_LEVEL} gerekiyor`}
+              className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
+                canMove
+                  ? 'bg-card hover:bg-board text-ink'
+                  : 'bg-board text-mute cursor-not-allowed'
+              }`}
             >
-              Taşı
+              {canMove ? 'Taşı' : `Taşı — Sv.${EDIT_MODE_LEVEL}`}
             </button>
 
             {/* Döndür (Rotate) Button */}

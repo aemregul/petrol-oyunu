@@ -1,6 +1,6 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { isFacility } from '../domain/services/facilities';
 import {
@@ -123,6 +123,12 @@ export const StructurePanel: React.FC = () => {
     'w-full py-3.5 game-btn bg-card hover:bg-board text-ink font-display tracking-wide text-sm';
   const note =
     'w-full py-2.5 rounded-md bg-board border-2 border-dashed border-mute text-mute text-center font-extrabold text-xs';
+  // Rearranging is a late-game luxury; the panel says so rather than offering
+  // a button that only warns (Emre, 2026-09-10).
+  const lockedBtn =
+    'w-full py-3.5 game-btn bg-board text-mute cursor-not-allowed font-display tracking-wide text-sm';
+  const canMove = gameState.player.level >= EDIT_MODE_LEVEL;
+  const moveLockedHint = `Taşımak için Seviye ${EDIT_MODE_LEVEL} gerekiyor`;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center p-4">
@@ -354,9 +360,11 @@ export const StructurePanel: React.FC = () => {
                   sounds.playClick();
                   relocateStructure(building.id);
                 }}
-                className={neutral}
+                disabled={!canMove}
+                title={canMove ? 'Yapıyı kaldır ve yeni yerine koy' : moveLockedHint}
+                className={canMove ? neutral : lockedBtn}
               >
-                Taşı
+                {canMove ? 'Taşı' : `Taşı — Sv.${EDIT_MODE_LEVEL}`}
               </button>
             )}
 

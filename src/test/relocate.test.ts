@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { createInitialGameState } from '../domain/types/initialState';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { GameState, BuildingEntity } from '../domain/types/gameState';
@@ -157,6 +157,33 @@ describe('relocating structures', () => {
     expect(pumps[0].health).toBe(61);
     expect(pumps[0].flowRateLps).toBe(13);
     expect(pumps[0].supportedFuels).toEqual(['gasoline', 'diesel']);
+  });
+
+  it('refuses to lift anything before the level that unlocks rearranging', () => {
+    // Emre, 2026-09-10: the level was enforced on the edit-mode switch, but
+    // every structure panel carries its own "Taşı" button straight to this
+    // action — three open doors beside one locked one.
+    const state = useGameStore.getState().gameState;
+    state.player.level = EDIT_MODE_LEVEL - 1;
+    const origin: [number, number] = [10, 8];
+    const id = put(state, 'mini_market', origin);
+    useGameStore.setState({ gameState: { ...state }, editMode: false, relocating: null });
+
+    expect(useGameStore.getState().relocateStructure(id)).toBe(false);
+    expect(useGameStore.getState().relocateStructure('pump_1')).toBe(false);
+
+    const after = useGameStore.getState();
+    expect(after.relocating).toBeNull();
+    expect(after.buildMode.active).toBe(false);
+    // Nothing was lifted: both are still standing where they were.
+    expect(after.gameState.buildings[id]?.position).toEqual(origin);
+    expect(after.gameState.pumps.pump_1).toBeDefined();
+
+    // And at the unlocking level the same call goes through.
+    const ok = useGameStore.getState().gameState;
+    ok.player.level = EDIT_MODE_LEVEL;
+    useGameStore.setState({ gameState: { ...ok } });
+    expect(useGameStore.getState().relocateStructure(id)).toBe(true);
   });
 
   it('puts a cancelled move back exactly where it came from', () => {

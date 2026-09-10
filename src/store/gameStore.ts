@@ -1621,6 +1621,20 @@ export const useGameStore = create<GameStore>((set, get) => {
    */
   relocateStructure: (id) => {
     const { gameState } = get();
+
+    // Rearranging unlocks at a level, and the gate belongs here rather than on
+    // the switch that turns edit mode on: every structure panel carries its
+    // own "Taşı" button that comes straight to this action, so the level was
+    // enforced on one door while three others stood open (Emre, 2026-09-10).
+    if (gameState.player.level < EDIT_MODE_LEVEL) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Taşıma Kilitli',
+        message: `Yapıları taşımak için Seviye ${EDIT_MODE_LEVEL} gerekiyor.`
+      });
+      return false;
+    }
+
     // Bays live in their own collection but move exactly like anything else.
     const isPump = !!gameState.pumps[id];
     const source = isPump ? gameState.pumps[id] : gameState.buildings[id];
