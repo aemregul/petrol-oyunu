@@ -315,75 +315,96 @@ export const StaffModal: React.FC = () => {
         {activeTab === 'manager' && (
           <div className="p-6 flex flex-col gap-4 overflow-y-auto flex-1">
             {!hasManager ? (
-              // Hire Manager Requirements Screen
-              <div className="bg-board border-2 border-ink rounded-md p-5 flex flex-col gap-4">
-                <div>
-                  <div className="font-display text-lg text-ink">İstasyon Müdürü İşe Alımı</div>
-                  <div className="text-xs text-mute mt-1">
-                    Müdür belirlediğin kasa rezervi dahilinde istasyonu tur tur dolaşır: Sv.1 kasaları toplar,
-                    yakıt sipariş eder, pompacı atar ve bakım yaptırır; Sv.2 fiyat dengeler, bataryayı gece
-                    doldurur, sahayı temizler ve arıza tamir eder; Sv.3 tedarikçi indiriminde depoları fuller.
-                    Terfi paralı.
-                  </div>
-                </div>
+              // Hiring: what the job is in one line, then the five conditions
+              // as one table — label left, where you stand right, a tick or a
+              // cross — and the one button. It used to be a paragraph and a
+              // two-column scatter of "(x/y)" fragments (Emre, 2026-09-10).
+              (() => {
+                const cash = gameState.player.cash;
+                const rows: Array<{ label: string; value: string; met: boolean }> = [
+                  {
+                    label: 'Oyuncu seviyesi',
+                    value: `${gameState.player.level} / ${managerConf.minLevel}`,
+                    met: gameState.player.level >= managerConf.minLevel
+                  },
+                  {
+                    label: 'İstasyon itibarı',
+                    value: `${gameState.player.reputation.toFixed(2)} / ${managerConf.minReputation.toFixed(2)}`,
+                    met: gameState.player.reputation >= managerConf.minReputation
+                  },
+                  {
+                    label: 'Aktif pompacı',
+                    value: `${attendants.length} / ${managerConf.minActiveAttendants}`,
+                    met: attendants.length >= managerConf.minActiveAttendants
+                  },
+                  {
+                    label: 'Son 3 günde kârlı gün',
+                    value:
+                      recentProfits.length < 3
+                        ? `${profitableDays} / ${managerConf.minProfitableDaysInLast3} · ${recentProfits.length}/3 gün veri`
+                        : `${profitableDays} / ${managerConf.minProfitableDaysInLast3}`,
+                    met: profitBarMet
+                  },
+                  {
+                    label: 'İşe alım bedeli',
+                    value: `₺${lira(managerConf.hireCost)} · kasa ₺${lira(Math.round(cash))}`,
+                    met: cash >= managerConf.hireCost
+                  }
+                ];
+                const allMet = rows.every((r) => r.met);
 
-                <div className="grid grid-cols-2 gap-3 text-xs text-ink">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className={`w-4 h-4 ${gameState.player.level >= managerConf.minLevel ? 'text-kgrn' : 'text-mute'}`}
-                    />
-                    <span>Oyuncu Seviyesi: {managerConf.minLevel} ({gameState.player.level}/{managerConf.minLevel})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className={`w-4 h-4 ${gameState.player.reputation >= managerConf.minReputation ? 'text-kgrn' : 'text-mute'}`}
-                    />
-                    <span>İstasyon İtibarı: {managerConf.minReputation.toFixed(2)} ({gameState.player.reputation.toFixed(2)}/{managerConf.minReputation.toFixed(2)})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className={`w-4 h-4 ${attendants.length >= managerConf.minActiveAttendants ? 'text-kgrn' : 'text-mute'}`}
-                    />
-                    <span>Aktif Pompacı: {managerConf.minActiveAttendants} ({attendants.length}/{managerConf.minActiveAttendants})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className={`w-4 h-4 ${profitBarMet ? 'text-kgrn' : 'text-mute'}`}
-                    />
-                    <span>
-                      Son 3 günün {managerConf.minProfitableDaysInLast3}'si kârlı (
-                      {profitableDays}/{managerConf.minProfitableDaysInLast3}
-                      {recentProfits.length < 3 ? ` — ${recentProfits.length}/3 gün veri` : ''})
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className={`w-4 h-4 ${gameState.player.cash >= managerConf.hireCost ? 'text-kgrn' : 'text-mute'}`}
-                    />
-                    <span>İşe Alım Bedeli: {lira(managerConf.hireCost)} TL</span>
-                  </div>
-                </div>
+                return (
+                  <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-kblu" />
+                      <span className="font-display text-base text-ink">İstasyon Müdürü İşe Al</span>
+                    </div>
+                    <div className="text-xs text-mute">
+                      Belirlediğin kasa rezervine dokunmadan istasyonu tur tur dolaşır: kasaları toplar, yakıt
+                      sipariş eder, pompacı atar, bakım yaptırır. Seviyesi yükseldikçe görevleri artar.
+                    </div>
 
-                <button
-                  onClick={hireManager}
-                  className="game-btn w-full py-3.5 rounded-md font-display tracking-wide text-sm uppercase bg-kgrn hover:bg-kgrn-dark text-white mt-2"
-                >
-                  Müdürü Göreve Başlat (₺{lira(managerConf.hireCost)})
-                </button>
-              </div>
+                    <div className="bg-paper border-2 border-ink rounded-md px-3">
+                      {rows.map((r) => (
+                        <div key={r.label} className="k-row last:border-b-0">
+                          <span className="flex items-center gap-2">
+                            {r.met ? (
+                              <CheckCircle2 className="w-4 h-4 text-kgrn shrink-0" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4 text-kred shrink-0" />
+                            )}
+                            {r.label}
+                          </span>
+                          <span className={r.met ? 'text-kgrn' : 'text-ink'}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={hireManager}
+                      disabled={!allMet}
+                      title={allMet ? 'Müdürü göreve başlat' : 'Eksik şartlar kırmızı işaretli'}
+                      className={`game-btn w-full py-3.5 rounded-md font-display tracking-wide text-sm uppercase ${
+                        allMet ? 'bg-kgrn hover:bg-kgrn-dark text-white' : 'bg-card text-mute cursor-not-allowed'
+                      }`}
+                    >
+                      Müdürü Göreve Başlat — ₺{lira(managerConf.hireCost)}
+                    </button>
+                  </div>
+                );
+              })()
             ) : (
-              // The manager's card: grade, pay, promotion, and the job
-              // description as toggles — what the grade has not unlocked shows
-              // locked with the grade that would unlock it.
+              // The manager's card, in the same four rows as an attendant's:
+              // name and grade, four figures, the next grade, the job as
+              // toggles. One shape for everyone on the payroll.
               (() => {
                 const level = managerLevel(gameState);
                 const tier = managerTier(gameState);
                 const next = level < MANAGER_MAX_LEVEL ? managerTierAt(level + 1) : null;
                 const settings = gameState.managerSettings;
-                const canPromote =
-                  !!next &&
-                  gameState.player.reputation >= next.minReputation &&
-                  gameState.player.cash >= next.upgradeCost;
+                const repOk = !!next && gameState.player.reputation >= next.minReputation;
+                const cashOk = !!next && gameState.player.cash >= next.upgradeCost;
+                const canPromote = repOk && cashOk;
                 const allThresholds = managerTierAt(MANAGER_MAX_LEVEL).orderThresholds;
                 const thresholdMinLevel = (pct: number) =>
                   managerConf.tiers.find((t) => t.orderThresholds.includes(pct))?.level ?? MANAGER_MAX_LEVEL;
@@ -391,164 +412,194 @@ export const StaffModal: React.FC = () => {
                   managerConf.tiers.find((t) => t.canFillTank)?.level ?? MANAGER_MAX_LEVEL;
                 const fillOn = settings.orderTargetPercent >= 100;
                 const chip = (on: boolean, locked: boolean) =>
-                  `game-btn flex items-center gap-1.5 border-2 border-ink rounded-md px-3 py-1.5 font-display text-xs tracking-wide ${
+                  `game-btn flex items-center justify-center gap-1.5 border-2 border-ink rounded-md px-3 py-1.5 font-display text-xs tracking-wide ${
                     locked
-                      ? 'bg-board text-mute opacity-70 cursor-not-allowed'
+                      ? 'bg-paper text-mute opacity-70 cursor-not-allowed'
                       : on
                         ? 'bg-kgrn text-white'
-                        : 'bg-board text-ink hover:bg-paper'
+                        : 'bg-paper text-ink hover:bg-card'
                   }`;
-                const dutyLine = (t: (typeof managerConf.tiers)[number], from: (typeof managerConf.tiers)[number] | null) =>
-                  t.duties
-                    .filter((d) => !from || !from.duties.includes(d))
-                    .map((d) => DUTY_LABEL[d].label.toLowerCase())
-                    .join(', ');
+                const gained = next
+                  ? next.duties
+                      .filter((d) => !tier.duties.includes(d))
+                      .map((d) => DUTY_LABEL[d].label.toLowerCase())
+                      .join(', ')
+                  : '';
+                const cells = [
+                  { label: 'Yevmiye', value: `₺${tier.dailyWage.toLocaleString('tr-TR')}/gün`, tone: 'text-ink' },
+                  { label: 'Tur süresi', value: `${tier.tourSeconds} sn`, tone: 'text-kblu' },
+                  { label: 'İtibar', value: gameState.player.reputation.toFixed(2), tone: 'text-ink' },
+                  { label: 'Kasa rezervi', value: `₺${settings.kasaReserve.toLocaleString('tr-TR')}`, tone: 'text-kgrn' }
+                ];
 
                 return (
                   <div className="flex flex-col gap-4">
                     <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
-                      <div className="flex flex-wrap justify-between items-center gap-2 border-b-2 border-dotted border-mute/60 pb-2">
-                        <div className="flex items-center gap-2">
-                          <Shield className="w-5 h-5 text-kblu" />
-                          <span className="font-display text-base text-ink">Müdür Sv.{level}</span>
-                          <span className="text-xs text-mute">
-                            · yevmiye ₺{tier.dailyWage.toLocaleString('tr-TR')}/gün
+                      {/* 1 — Who, what grade; the one destructive action, right. */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Shield className="w-5 h-5 text-kblu shrink-0" />
+                          <span className="font-display text-base text-ink truncate">İstasyon Müdürü</span>
+                          <span className="bg-kblu text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink whitespace-nowrap">
+                            Seviye {level}
                           </span>
+                          {!next && (
+                            <span className="bg-kyel text-ink text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink whitespace-nowrap">
+                              ⭐ MAKS
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {next ? (
+                        <button
+                          onClick={fireManager}
+                          title="İşten Çıkar"
+                          className="game-btn p-2 rounded-md bg-kred hover:bg-kred-dark text-white flex items-center justify-center shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* 2 — Four equal figures. */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {cells.map((cell) => (
+                          <div key={cell.label} className="bg-paper border-2 border-ink rounded-md px-3 py-2">
+                            <div className="k-label">{cell.label}</div>
+                            <div className={`font-display font-extrabold text-[15px] tabular-nums ${cell.tone}`}>
+                              {cell.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 3 — The next grade, in the same slot as an attendant's. */}
+                      <div className="flex items-center gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
+                        <span className="k-label w-20 shrink-0">{next ? `Seviye ${next.level}` : 'Maks'}</span>
+                        {next ? (
+                          <>
+                            <div className="flex-1 min-w-0 text-xs font-mono text-ink flex flex-wrap gap-x-3 gap-y-0.5">
+                              <span>
+                                Tur <span className="text-kblu font-bold">{tier.tourSeconds} → {next.tourSeconds} sn</span>
+                              </span>
+                              <span>
+                                Yevmiye <span className="font-bold">₺{next.dailyWage.toLocaleString('tr-TR')}/gün</span>
+                              </span>
+                              {gained && (
+                                <span>
+                                  Yeni görev <span className="text-kgrn font-bold">{gained}</span>
+                                </span>
+                              )}
+                              <span className={repOk ? 'text-kgrn' : 'text-kred'}>
+                                İtibar {gameState.player.reputation.toFixed(2)} / {next.minReputation.toFixed(2)}
+                              </span>
+                            </div>
                             <button
                               onClick={upgradeManager}
                               disabled={!canPromote}
                               title={
                                 canPromote
-                                  ? `Tur ${next.tourSeconds} sn'ye iner, yevmiye ₺${next.dailyWage.toLocaleString('tr-TR')}/gün olur.`
-                                  : `İtibar ${next.minReputation.toFixed(2)} ve ₺${next.upgradeCost.toLocaleString('tr-TR')} gerekir.`
+                                  ? 'Bir üst seviyeye terfi ettir'
+                                  : !repOk
+                                    ? `İtibar ${next.minReputation.toFixed(2)} gerekir`
+                                    : 'Kasa yetmiyor'
                               }
-                              className={`game-btn flex items-center gap-1 px-3 py-1.5 rounded-md font-display text-xs uppercase tracking-wide ${
-                                canPromote ? 'bg-kyel text-ink' : 'bg-board text-mute opacity-70 cursor-not-allowed'
+                              className={`game-btn text-xs font-display tracking-wide px-3 py-2 rounded-md flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                                canPromote ? 'bg-kblu hover:bg-kblu-dark text-white' : 'bg-card text-mute cursor-not-allowed'
                               }`}
                             >
-                              <ArrowUpCircle className="w-4 h-4" />
-                              Sv.{next.level} terfi · ₺{next.upgradeCost.toLocaleString('tr-TR')}
+                              <ArrowUpCircle className="w-3.5 h-3.5" />
+                              <span>Terfi — ₺{next.upgradeCost.toLocaleString('tr-TR')}</span>
                             </button>
-                          ) : (
-                            <span className="k-label">MAKS · Sv.{MANAGER_MAX_LEVEL}</span>
-                          )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-ink">
+                            En yüksek seviye — tur <span className="text-kblu font-bold">{tier.tourSeconds} sn</span>, bütün görevler açık.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* The job: what to do, when to order, how much to keep back —
+                        three labelled rows, chips in an even grid instead of a
+                        wrap, and one line saying what the settings add up to. */}
+                    <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
+                      <div className="flex items-start gap-3">
+                        <span className="k-label w-20 shrink-0 pt-2">Görevler</span>
+                        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {MANAGER_DUTIES.map((duty) => {
+                            const unlocked = dutyUnlocked(gameState, duty);
+                            const on = dutyEnabled(settings, duty);
+                            return (
+                              <button
+                                key={duty}
+                                disabled={!unlocked}
+                                title={
+                                  unlocked
+                                    ? DUTY_LABEL[duty].hint
+                                    : `Sv.${dutyMinLevel(duty)} müdürle açılır. ${DUTY_LABEL[duty].hint}`
+                                }
+                                onClick={() => updateManagerSettings({ [MANAGER_DUTY_SETTING[duty]]: !on })}
+                                className={chip(on, !unlocked)}
+                              >
+                                {unlocked ? (
+                                  on ? <Check className="w-3.5 h-3.5 shrink-0" /> : <span className="w-3.5" />
+                                ) : (
+                                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span className="truncate">{DUTY_LABEL[duty].label}</span>
+                                {!unlocked && <span className="text-[10px] shrink-0">Sv.{dutyMinLevel(duty)}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <span className="k-label w-20 shrink-0 pt-2">Sipariş eşiği</span>
+                        <div className="flex-1 flex flex-wrap gap-2">
+                          {allThresholds.map((pct) => {
+                            const unlocked = tier.orderThresholds.includes(pct);
+                            const on = settings.orderThresholdPercent === pct;
+                            return (
+                              <button
+                                key={pct}
+                                disabled={!unlocked}
+                                title={unlocked ? `Tank %${pct} altına inince tanker çağırır.` : `Sv.${thresholdMinLevel(pct)} müdürle açılır.`}
+                                onClick={() => updateManagerSettings({ orderThresholdPercent: pct })}
+                                className={chip(on, !unlocked)}
+                              >
+                                {!unlocked && <Lock className="w-3.5 h-3.5" />}%{pct}
+                              </button>
+                            );
+                          })}
                           <button
-                            onClick={fireManager}
-                            className="game-btn flex items-center gap-1 px-3 py-1.5 rounded-md font-display text-xs uppercase tracking-wide bg-kred text-white"
+                            disabled={!tier.canFillTank}
+                            title={
+                              tier.canFillTank
+                                ? 'Sipariş depoyu %100 doldurur; kapalıyken %90 hedefler.'
+                                : `Sv.${fillMinLevel} müdürle açılır.`
+                            }
+                            onClick={() => updateManagerSettings({ orderTargetPercent: fillOn ? 90 : 100 })}
+                            className={chip(fillOn, !tier.canFillTank)}
                           >
-                            <Trash2 className="w-4 h-4" />
-                            İşten Çıkar
+                            {tier.canFillTank ? (fillOn ? <Check className="w-3.5 h-3.5" /> : null) : <Lock className="w-3.5 h-3.5" />}
+                            Depoyu fulle
                           </button>
                         </div>
                       </div>
-                      <div className="text-[11px] text-mute leading-relaxed">
-                        <b className="text-ink">{tier.tourSeconds} sn'de bir tur</b> (
-                        {managerConf.tiers.map((t) => `Sv.${t.level} ${t.tourSeconds}`).join(' · ')}
-                        ): {managerConf.tiers.map((t, i) => (
-                          <span key={t.level}>
-                            {i > 0 ? '; ' : ''}
-                            <b className={t.level <= level ? 'text-ink' : 'text-mute'}>Sv.{t.level}</b>{' '}
-                            {dutyLine(t, i > 0 ? managerConf.tiers[i - 1] : null)}
-                          </span>
-                        ))}
-                        . Sen başka şubedeyken şubeyi işletir — günlük net kazancı kasana otomatik yazılır.
-                        {next && (
-                          <>
-                            {' '}Terfi için itibar {next.minReputation.toFixed(2)} (
-                            {gameState.player.reputation.toFixed(2)}).
-                          </>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
-                      <span className="k-label">Müdüre talimat — neyi yapsın, ne zaman sipariş versin</span>
-                      <div className="flex flex-wrap gap-2">
-                        {MANAGER_DUTIES.map((duty) => {
-                          const unlocked = dutyUnlocked(gameState, duty);
-                          const on = dutyEnabled(settings, duty);
-                          return (
-                            <button
-                              key={duty}
-                              disabled={!unlocked}
-                              title={
-                                unlocked
-                                  ? DUTY_LABEL[duty].hint
-                                  : `Sv.${dutyMinLevel(duty)} müdürle açılır. ${DUTY_LABEL[duty].hint}`
-                              }
-                              onClick={() =>
-                                updateManagerSettings({ [MANAGER_DUTY_SETTING[duty]]: !on })
-                              }
-                              className={chip(on, !unlocked)}
-                            >
-                              {unlocked ? (
-                                on ? <Check className="w-3.5 h-3.5" /> : null
-                              ) : (
-                                <Lock className="w-3.5 h-3.5" />
-                              )}
-                              {DUTY_LABEL[duty].label}
-                              {!unlocked && <span className="text-[10px]">Sv.{dutyMinLevel(duty)}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <span className="k-label mt-1">Tank şu orana düşünce sipariş versin</span>
-                      <div className="flex flex-wrap gap-2">
-                        {allThresholds.map((pct) => {
-                          const unlocked = tier.orderThresholds.includes(pct);
-                          const on = settings.orderThresholdPercent === pct;
-                          return (
-                            <button
-                              key={pct}
-                              disabled={!unlocked}
-                              title={unlocked ? `Tank %${pct} altına inince tanker çağırır.` : `Sv.${thresholdMinLevel(pct)} müdürle açılır.`}
-                              onClick={() => updateManagerSettings({ orderThresholdPercent: pct })}
-                              className={chip(on, !unlocked)}
-                            >
-                              {!unlocked && <Lock className="w-3.5 h-3.5" />}%{pct}
-                            </button>
-                          );
-                        })}
-                        <button
-                          disabled={!tier.canFillTank}
-                          title={
-                            tier.canFillTank
-                              ? 'Sipariş depoyu %100 doldurur; kapalıyken %90 hedefler.'
-                              : `Sv.${fillMinLevel} müdürle açılır.`
-                          }
-                          onClick={() => updateManagerSettings({ orderTargetPercent: fillOn ? 90 : 100 })}
-                          className={chip(fillOn, !tier.canFillTank)}
-                        >
-                          {tier.canFillTank ? (fillOn ? <Check className="w-3.5 h-3.5" /> : null) : <Lock className="w-3.5 h-3.5" />}
-                          Depoyu FULLE
-                        </button>
-                      </div>
-                      <div className="text-[11px] text-mute">
-                        Şu an: tank %{settings.orderThresholdPercent} altına inince %{settings.orderTargetPercent} seviyesine kadar
-                        sipariş. Pompa bakımı sağlık %{settings.minHealthThreshold} altına inince.
-                        {dutyUnlocked(gameState, 'nightGridFill') && (
-                          <>
-                            {' '}Gece tarifesi {GAME_CONFIG.ev.gridTariff.night.from}:00–{GAME_CONFIG.ev.gridTariff.night.to}:00,
-                            batarya %{GAME_CONFIG.ev.nightFillFloorPercent} altına inerse saate bakmadan doldurur.
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-display text-base text-ink">Kasa Rezervi Güvencesi</span>
-                        <span className="font-display tabular-nums text-kgrn">
-                          ₺{settings.kasaReserve.toLocaleString('tr-TR')}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-mute">
-                        Müdür yapacağı hiçbir harcamada — sipariş, bakım, tamir — kasanı bu tutarın altına düşüremez.
-                        Günün maaşları ve kredi taksitleri de bütçeden önce ayrılır.
+                      <div className="flex items-start gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
+                        <span className="k-label w-20 shrink-0 pt-0.5">Özet</span>
+                        <div className="text-xs text-ink leading-relaxed">
+                          Tank <b>%{settings.orderThresholdPercent}</b> altına inince <b>%{settings.orderTargetPercent}</b>'e kadar sipariş ·
+                          bakım sağlık <b>%{settings.minHealthThreshold}</b> altında
+                          {dutyUnlocked(gameState, 'nightGridFill') && (
+                            <>
+                              {' '}· batarya gece tarifesinde ({GAME_CONFIG.ev.gridTariff.night.from}:00–{GAME_CONFIG.ev.gridTariff.night.to}:00),
+                              %{GAME_CONFIG.ev.nightFillFloorPercent} altında hemen
+                            </>
+                          )}
+                          {' '}· kasa <b>₺{settings.kasaReserve.toLocaleString('tr-TR')}</b> altına asla inmez; maaşlar ve taksitler
+                          bütçeden önce ayrılır.
+                        </div>
                       </div>
                     </div>
                   </div>
