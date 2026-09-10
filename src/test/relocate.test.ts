@@ -175,6 +175,33 @@ describe('relocating structures', () => {
     expect(back?.position).toEqual(origin);
   });
 
+  it('treats switching edit mode off mid-move as a cancel: structure back, ghost gone', () => {
+    // Emre, 2026-09-10: the edit button went dim but the market kept riding
+    // the pointer, and the only way out was to drop it somewhere.
+    const state = useGameStore.getState().gameState;
+    const origin: [number, number] = [10, 8];
+    const id = put(state, 'mini_market', origin);
+    // The store is one module-level instance: start from the mode being off
+    // whatever an earlier test left behind.
+    useGameStore.setState({ gameState: { ...state }, editMode: false, relocating: null });
+
+    useGameStore.getState().toggleEditMode();
+    expect(useGameStore.getState().editMode).toBe(true);
+    useGameStore.getState().relocateStructure(id);
+    useGameStore.getState().setBuildPreviewPos([4, 4]);
+    expect(useGameStore.getState().relocating).not.toBeNull();
+
+    useGameStore.getState().toggleEditMode();
+
+    const s = useGameStore.getState();
+    expect(s.editMode).toBe(false);
+    expect(s.relocating).toBeNull();
+    expect(s.buildMode.active).toBe(false);
+    const back = Object.values(s.gameState.buildings).filter((b) => b.type === 'mini_market');
+    expect(back).toHaveLength(1);
+    expect(back[0].position).toEqual(origin);
+  });
+
   it('puts a cancelled pump move back as a pump, not a building', () => {
     useGameStore.getState().relocateStructure('pump_1');
     useGameStore.getState().exitBuildMode();

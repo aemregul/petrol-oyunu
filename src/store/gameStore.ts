@@ -1790,6 +1790,12 @@ export const useGameStore = create<GameStore>((set, get) => {
       return;
     }
 
+    // Switching the mode off in the middle of a move is a cancel: the
+    // structure goes back where it stood and the ghost stops following the
+    // pointer. Left alone, the button dimmed while the move carried on and
+    // the player had no way out but placing it somewhere (Emre, 2026-09-10).
+    if (!on && get().relocating) get().exitBuildMode();
+
     // Buying land and rearranging it are two different jobs, and a structure
     // panel left open belongs to neither.
     set({
