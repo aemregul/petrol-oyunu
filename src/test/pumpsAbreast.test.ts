@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
-import { createEffects, runSimulationTick, blockLayout } from '../domain/services/simulationEngine';
+import {
+  createEffects,
+  runSimulationTick,
+  blockLayout,
+  bodyInSolid
+} from '../domain/services/simulationEngine';
 import { evaluatePlacement, snapPlacement } from '../domain/services/placement';
-import { GameState } from '../domain/types/gameState';
+import { GameState, VehicleEntity } from '../domain/types/gameState';
 
 /**
  * Emre, 2026-09-09: "pompaları yan yana koyduğumuzda araçlar tıkanıyor ve
@@ -128,6 +133,49 @@ describe('two pumps as close abreast as the rules allow', () => {
       }, 60_000);
     }
   }
+
+  it('lets a car into the mouth of its own bay, while the island stays a wall to everyone else', () => {
+    // The exact pose the simulation froze in (Emre, 2026-09-10): a car that
+    // has reserved the right-hand pump of the pair, turned in at the mouth of
+    // its bay, half a metre short. Every step it tried to take ended inside
+    // its OWN island, so the solid rule refused all of them; it stood there
+    // twenty seconds, the wedge valve fired and the customer left unserved.
+    //
+    // The route planner never counted that island — pumpRects takes an
+    // ignorePumpId for exactly this reason — so the car was sent somewhere
+    // the driving rule would not let it go.
+    const s = twoPumpsAbreast(90, false);
+    const bay: [number, number] = [10.5, 6.6];
+    const at: [number, number] = [10.08, 6.29];
+    const heading = 0.94;
+
+    const car: VehicleEntity = {
+      id: 'car', archetype: 'luxury', modelVariant: 'kenney-suv-luxury',
+      fuelType: 'gasoline', tankCapacity: 60, currentFuel: 20,
+      request: {
+        mode: 'LITERS', targetValue: 20, calculatedLiters: 20, calculatedPrice: 0,
+        dispensedLiters: 0, isFinished: false
+      },
+      patience: 30, maxPatience: 30, satisfaction: 100, state: 'PUMP_RESERVED',
+      targetPumpId: 'pb', assignedActor: null, worldPosition: [at[0], 0, at[1]],
+      targetWaypoint: [bay[0], 0, bay[1]], route: [], heading, speed: 1,
+      routeProgress: 0, waitingTimeSeconds: 0, shoppingIntent: false
+    };
+
+    // Its own island is not a wall to it: it may finish the turn in.
+    expect(bodyInSolid(s, car, 'near', at[0], at[1], heading)).toBe(false);
+    expect(bodyInSolid(s, car, 'near', bay[0], bay[1], heading)).toBe(false);
+
+    // To a car with no claim on that pump the island is as solid as ever —
+    // the exemption is the one bay this driver is going to, not a hole in
+    // the rule.
+    const passerby = { ...car, targetPumpId: null };
+    expect(bodyInSolid(s, passerby, 'near', at[0], at[1], heading)).toBe(true);
+
+    // And the neighbouring island is still a wall to both of them.
+    const intoNeighbour: [number, number] = [s.pumps.pa.position[0], s.pumps.pa.position[1]];
+    expect(bodyInSolid(s, car, 'near', intoNeighbour[0], intoNeighbour[1], heading)).toBe(true);
+  });
 
   it('sends impatient leavers out through the mouth, never over the field (unstaffed, rotation 90)', () => {
     // No attendant: every customer waits, gives up and is sent away from the

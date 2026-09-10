@@ -1474,7 +1474,8 @@ const SOLID_SHRINK = -0.15;
 function solidRects(
   state: GameState,
   side: DrivewaySide,
-  ignoreBuildingId?: string | null
+  ignoreBuildingId?: string | null,
+  ignorePumpId?: string | null
 ): PathRect[] {
   // Binalar sıfır toleransla katıdır. Küçültme payı yalnız araç dibinde
   // durulan yapılara — pompa adaları VE şarj direkleri: bay'e yanaşan aracın
@@ -1509,7 +1510,15 @@ function solidRects(
   for (const hole of unpavedHoles(state.station.plots, side)) {
     rects.push(hole);
   }
-  rects.push(...pumpRects(state, side, undefined, SOLID_SHRINK));
+  // Aracın gitmekte olduğu ada ona duvar olamaz. Bay adanın hemen yanında
+  // durur; 90° dönük bir pompada bay uzun kenara düşer ve araç içeri açıyla
+  // girerken burnu kendi adasının köşesini süpürür. Rota planlayıcı bu adayı
+  // zaten sayMIYOR (pumpRects'in ignorePumpId'si tam bunun için) — katı yapı
+  // kuralı sayınca rota çiziliyor, araç bay'in ağzına kadar geliyor ve son
+  // yarım metre reddediliyor: 20 saniye kıpırdamadan bekleyip sıkışma
+  // valfiyle hizmet almadan çekip gidiyordu (Emre, 2026-09-10). Otopark için
+  // aynı muafiyet yukarıda zaten var.
+  rects.push(...pumpRects(state, side, ignorePumpId ?? undefined, SOLID_SHRINK));
   return rects;
 }
 
@@ -1521,7 +1530,13 @@ export function bodyInSolid(
   z: number,
   heading: number
 ): boolean {
-  return bodyInRects(solidRects(state, side, vehicle.parkingBuildingId), vehicle, x, z, heading);
+  return bodyInRects(
+    solidRects(state, side, vehicle.parkingBuildingId, vehicle.targetPumpId),
+    vehicle,
+    x,
+    z,
+    heading
+  );
 }
 
 /** Whether any corner of the body, posed here, falls inside one of these. */
@@ -1644,7 +1659,7 @@ function bodyClearAlong(
   const length = Math.hypot(dx, dz);
   if (length < 1e-6) return true;
 
-  const rects = solidRects(state, side, vehicle.parkingBuildingId);
+  const rects = solidRects(state, side, vehicle.parkingBuildingId, vehicle.targetPumpId);
   if (rects.length === 0) return true;
 
   const heading = Math.atan2(dx, dz);
