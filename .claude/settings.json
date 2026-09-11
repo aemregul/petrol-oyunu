@@ -471,11 +471,35 @@
       "Bash(node staff_shot.mjs)",
       "Bash(sed -i '' 's/schemaVersion: 1,/schemaVersion: 6,/' staff_shot.mjs)",
       "Bash(sed -i '' \"s/console.log\\('ise al', await domClick\\('İşe Al'\\)\\);/console.log\\('no hire needed'\\);/\" staff_shot.mjs)",
-      "Bash(curl -s -o /dev/null --max-time 2 http://127.0.0.1:5199/)"
+      "Bash(curl -s -o /dev/null --max-time 2 http://127.0.0.1:5199/)",
+      "Bash(git status *)",
+      "Read(//Users/emre/**)",
+      "Bash(MANAGER=1 SHOT=manager_modal.png node manager_shot.mjs)",
+      "Bash(SHOT=hire_modal.png node manager_shot.mjs)",
+      "Bash(sort -t: -k2 -n)",
+      "Bash(node sandbox_shot.mjs)",
+      "Bash(node market_shot.mjs)",
+      "Bash(perl -0pi -e 's/  cameraAngle: 225, \\\\/\\\\/ Yol sol üstten sağ alta iner, istasyon sağında kalır/  \\\\/\\\\/ Yol sol üstten sağ alta iner, istasyon sağında kalır.\\\\n  cameraAngle: DEFAULT_CAMERA_ANGLE,/' src/store/gameStore.ts)",
+      "Bash(perl -0pi -e \"s/set\\\\\\(\\\\{ \\\\.\\\\.\\\\.frameOwnedLand\\\\\\(get\\\\\\(\\\\\\)\\\\.gameState\\\\\\), cameraAngle: 225, cameraView: 0 \\\\}\\\\\\);/set\\({ ...frameOwnedLand\\(get\\(\\).gameState\\), cameraAngle: DEFAULT_CAMERA_ANGLE, cameraView: 0 }\\);/\" src/store/gameStore.ts)",
+      "Bash(perl -0pi -e 's/      cameraAngle: 225,\\\\n      cameraView: 0,/      cameraAngle: DEFAULT_CAMERA_ANGLE,\\\\n      cameraView: 0,/' src/store/gameStore.ts)",
+      "Bash(curl -s -o /dev/null -w \"sunucu HTTP %{http_code}\\\\n\" http://127.0.0.1:5199/)",
+      "Bash(git commit -q -m 'fix\\(traffic\\): keep fuelling and visiting as separate trips *)",
+      "Bash(git rebase *)",
+      "Bash(PARK_DEBUG=1 npx vitest run src/test/_flow.test.ts)",
+      "Bash(git -C /Users/emre/petrol-oyunu worktree remove --force /tmp/baseline-cb1ff85)",
+      "Bash(git -C /Users/emre/petrol-oyunu worktree list)",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "/private/tmp",
-      "/Users/emre/petrol-oyunu"
+      "/Users/emre/petrol-oyunu",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/store",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/rendering/models",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/config",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/rendering",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/test",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/ui",
+      "/Users/emre/petrol-oyunu-yeni-sorunlar/src/domain/services"
     ]
   }
 }

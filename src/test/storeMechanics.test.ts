@@ -44,6 +44,37 @@ beforeEach(() => {
   });
 });
 
+describe('station cleaning', () => {
+  it('does not charge for a station that is already displayed as 100% clean', () => {
+    const state = useGameStore.getState().gameState;
+    state.station.cleanliness = 99.6;
+    const cashBefore = state.player.cash;
+    const cleanActionsBefore = state.player.statistics.cleanActionsCount;
+    useGameStore.setState({ gameState: { ...state } });
+
+    expect(useGameStore.getState().cleanStation()).toBe(false);
+
+    const after = useGameStore.getState().gameState;
+    expect(after.player.cash).toBe(cashBefore);
+    expect(after.player.statistics.cleanActionsCount).toBe(cleanActionsBefore);
+    expect(after.station.cleanliness).toBe(99.6);
+  });
+
+  it('charges only once when a valid cleaning reaches 100%', () => {
+    const state = useGameStore.getState().gameState;
+    state.station.cleanliness = 80;
+    const cashBefore = state.player.cash;
+    useGameStore.setState({ gameState: { ...state } });
+
+    expect(useGameStore.getState().cleanStation()).toBe(true);
+    expect(useGameStore.getState().cleanStation()).toBe(false);
+
+    const after = useGameStore.getState().gameState;
+    expect(after.station.cleanliness).toBe(100);
+    expect(after.player.cash).toBe(cashBefore - GAME_CONFIG.economy.siteCleanCost);
+  });
+});
+
 describe('tank packages', () => {
   it('upgrades a tank package into real litres, on the promised ladder', () => {
     const state = useGameStore.getState().gameState;

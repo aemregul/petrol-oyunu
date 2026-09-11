@@ -2610,6 +2610,12 @@ export const useGameStore = create<GameStore>((set, get) => {
     const { gameState } = get();
     const cost = GAME_CONFIG.economy.siteCleanCost; // 300 TL
 
+    // Cleanliness decays in fractions, while the maintenance desk shows a
+    // rounded percentage. Treat anything displayed as 100% as already clean,
+    // and guard it here as well as in the UI so repeated/direct calls cannot
+    // charge the till for work that has no visible effect.
+    if (Math.round(gameState.station.cleanliness) >= 100) return false;
+
     if (gameState.player.cash < cost) {
       get().addNotification({
         type: 'WARNING',

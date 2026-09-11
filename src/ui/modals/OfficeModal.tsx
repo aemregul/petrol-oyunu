@@ -316,6 +316,8 @@ export const OfficeModal: React.FC = () => {
   const [editingName, setEditingName] = useState<string | null>(null);
 
   const { player, station } = gameState;
+  const stationCleanlinessDisplay = Math.round(station.cleanliness);
+  const cleaningDisabled = stationCleanlinessDisplay >= 100 || player.cash < GAME_CONFIG.economy.siteCleanCost;
   const figures = officeFigures(gameState);
   const office = Object.values(gameState.buildings).find((b) => b.type === 'office');
   const priceSign = Object.values(gameState.buildings).find((b) => b.type === 'price_sign');
@@ -672,12 +674,12 @@ export const OfficeModal: React.FC = () => {
               <Section title="Saha">
                 <div className="flex items-center gap-3 py-3">
                   <span className="text-[15px] font-display text-ink flex-1">Temizlik</span>
-                  <span className="k-bar w-28 h-2.5"><i style={{ width: `${Math.round(gameState.station.cleanliness)}%` }} className={gameState.station.cleanliness < 40 ? 'bg-kred' : 'bg-kgrn'} /></span>
-                  <span className="font-display tabular-nums text-ink w-12 text-right">%{Math.round(gameState.station.cleanliness)}</span>
+                  <span className="k-bar w-28 h-2.5"><i style={{ width: `${stationCleanlinessDisplay}%` }} className={station.cleanliness < 40 ? 'bg-kred' : 'bg-kgrn'} /></span>
+                  <span className="font-display tabular-nums text-ink w-12 text-right">%{stationCleanlinessDisplay}</span>
                   <button
                     onClick={() => { sounds.playClick(); cleanStation(); }}
-                    disabled={gameState.station.cleanliness >= 100 || player.cash < GAME_CONFIG.economy.siteCleanCost}
-                    className={`game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide ${gameState.station.cleanliness >= 100 || player.cash < GAME_CONFIG.economy.siteCleanCost ? 'bg-card text-mute' : 'bg-kgrn text-white'}`}
+                    disabled={cleaningDisabled}
+                    className={`game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide ${cleaningDisabled ? 'bg-card text-mute' : 'bg-kgrn text-white'}`}
                   >
                     Temizle · {lira(GAME_CONFIG.economy.siteCleanCost)}
                   </button>
