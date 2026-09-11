@@ -9,7 +9,8 @@ import { VehicleEntity } from '../domain/types/gameState';
  * Built from the same blocks as the pump attendant so the two read as the
  * same kind of person, but in ordinary clothes — the colours are drawn from
  * the car, so the same driver keeps the same coat from door to door. While
- * they are inside nothing is drawn: the building has them.
+ * they are inside the mesh stays mounted but invisible. This preserves its
+ * world position until the return walk begins.
  */
 
 const COATS = ['#2563eb', '#dc2626', '#0f766e', '#7c3aed', '#ea580c', '#475569', '#be185d', '#65a30d'];
@@ -57,7 +58,7 @@ export const VisitorMesh: React.FC<{ vehicle: VehicleEntity }> = ({ vehicle }) =
     if (rightArm.current) rightArm.current.rotation.x = swing * 0.8;
   });
 
-  if (!visitor || visitor.phase === 'INSIDE') return null;
+  if (!visitor) return null;
 
   const coat = COATS[visitor.look % COATS.length];
   const trousers = TROUSERS[(visitor.look >> 3) % TROUSERS.length];
@@ -65,7 +66,7 @@ export const VisitorMesh: React.FC<{ vehicle: VehicleEntity }> = ({ vehicle }) =
   const hair = (visitor.look >> 9) % 3 === 0 ? '#3f2a1d' : (visitor.look >> 9) % 3 === 1 ? '#0f172a' : '#a16207';
 
   return (
-    <group ref={groupRef} scale={1.05}>
+    <group ref={groupRef} scale={1.05} visible={visitor.phase !== 'INSIDE'}>
       {/* Legs, hinged at the hip so they swing from there — the leg hangs
           below its pivot and the shoe rides on the end of it. Hinged at the
           middle, the legs floated and the shoes sat alone on the ground as
