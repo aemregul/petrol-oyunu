@@ -204,6 +204,7 @@ function setOrderState(orderId: string, current: OrderState, next: OrderState): 
 export function releasePump(pump: PumpEntity): void {
   pump.currentVehicleId = null;
   if (pump.state === 'BROKEN' || pump.state === 'MAINTENANCE') return;
+  if (pump.state === 'IDLE') return;
 
   if (PumpStateMachine.canTransition(pump.state, 'IDLE')) {
     setPumpState(pump, 'IDLE');
@@ -7800,7 +7801,8 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     state.station.managerTourSecondsLeft = left;
     return;
   }
-  state.station.managerTourSecondsLeft = managerTier(state).tourSeconds;
+  const tier = managerTier(state);
+  state.station.managerTourSecondsLeft = tier.tourSeconds;
 
   const estimatedWages =
     Object.values(state.employees).reduce((sum, e) => sum + e.wage, 0) + managerDailyWage(state);
@@ -7814,7 +7816,21 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
     estimatedWages
   );
 
+  const dealStocking = dutyActive(state, 'dealStock') && isFuelDealOn(state);
+
   if (dutyActive(state, 'fuelOrder')) {
+    // Old saves can retain a senior manager's controls after a new junior is
+    // hired. Enforce the current grade here as well as in the panel: a junior
+    // may use only one of their thresholds and cannot normally fill to 100%.
+    const allowedThresholds = tier.orderThresholds.filter(
+      (threshold) => threshold <= settings.orderThresholdPercent
+    );
+    const orderThresholdPercent =
+      allowedThresholds.at(-1) ?? tier.orderThresholds[0] ?? settings.orderThresholdPercent;
+    const normalTargetPercent = tier.canFillTank
+      ? Math.min(100, settings.orderTargetPercent)
+      : Math.min(90, settings.orderTargetPercent);
+
     // Only what the station can actually sell. The tank farm stocks all three
     // fuels from day one, so ordering by capacity alone had the manager
     // paying for LPG deliveries at a station with no LPG nozzle — three
@@ -7824,10 +7840,14 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       if (tank.capacity <= 0) continue;
 
       const fillPercent = (tank.stock / tank.capacity) * 100;
-      if (fillPercent > settings.orderThresholdPercent) continue;
+      if (fillPercent > orderThresholdPercent) continue;
       if (state.fuelOrders.some((o) => o.fuelType === fuelType)) continue;
 
-      const needed = tank.capacity * (settings.orderTargetPercent / 100) - tank.stock;
+      // During the supplier deal the top-grade stock-up duty takes precedence
+      // over the ordinary 90% reorder. Otherwise the first order occupied the
+      // fuel slot and the deal code below could never finish filling the tank.
+      const targetPercent = dealStocking ? 100 : normalTargetPercent;
+      const needed = tank.capacity * (targetPercent / 100) - tank.stock;
       const conf = GAME_CONFIG.fuels[fuelType];
       const orderLiters = Math.max(
         conf.orderMinLiters,
@@ -7835,8 +7855,10 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       );
       if (orderLiters > tank.capacity - tank.stock) continue;
 
-      const cost = orderLiters * state.pricing[fuelType].todayWholesaleCost + conf.deliveryFee;
-      const reason = `${conf.shortName} stoku %${fillPercent.toFixed(0)} seviyesine düştü.`;
+      const cost = orderLiters * wholesaleNow(state, fuelType) + conf.deliveryFee;
+      const reason = dealStocking
+        ? `${conf.shortName} indirimdeyken depo fullendi.`
+        : `${conf.shortName} stoku %${fillPercent.toFixed(0)} seviyesine düştü.`;
 
       if (cost > budget) {
         logAction('FUEL_ORDER', `${reason} Kasa rezervi korunduğu için sipariş verilmedi.`, 'SKIPPED_RESERVE', orderLiters);
@@ -7852,7 +7874,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
   // The supplier's minute of cheap fuel. A sharp manager fills every tank the
   // station sells from while it lasts — whatever the reorder rule says, and
   // right up to the brim, because this is the one time a full tank is cheap.
-  if (dutyActive(state, 'dealStock') && isFuelDealOn(state)) {
+  if (dealStocking) {
     for (const fuelType of fuelsOnSale(state)) {
       const tank = state.tanks[fuelType];
       if (tank.capacity <= 0) continue;
@@ -7877,8 +7899,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
   }
 
   if (dutyActive(state, 'pricing')) {
-    for (const fuelType of Object.keys(state.pricing) as FuelType[]) {
-      if (state.tanks[fuelType].capacity <= 0) continue;
+    for (const fuelType of fuelsOnSale(state)) {
       const pricing = state.pricing[fuelType];
 
       // Track the regional average while defending the configured minimum margin.
