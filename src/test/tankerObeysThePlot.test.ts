@@ -4,7 +4,8 @@ import {
   createEffects,
   runSimulationTick,
   blockLayout,
-  drivewayLaneX
+  drivewayLaneX,
+  highwayLaneZ
 } from '../domain/services/simulationEngine';
 import { wallRects } from '../domain/services/pathfinding';
 import { GameState } from '../domain/types/gameState';
@@ -52,6 +53,7 @@ describe('the delivery lorry obeys the plot', () => {
     state.station.open = false;
     const block = blockLayout(state, 'near')!;
     const entryX = drivewayLaneX(block.entry, 0);
+    const rightLaneZ = highwayLaneZ(block, 'right');
     const effects = createEffects();
 
     let heldSeconds = 0;
@@ -68,7 +70,7 @@ describe('the delivery lorry obeys the plot', () => {
           tankCapacity: 60,
           currentFuel: 20,
           state: 'AT_PUMP',
-          worldPosition: [truck.worldPosition[0] + 2, 0, block.roadLaneZ],
+          worldPosition: [truck.worldPosition[0] + 2, 0, rightLaneZ],
           targetWaypoint: null,
           route: [],
           heading: Math.PI / 2,
@@ -85,8 +87,8 @@ describe('the delivery lorry obeys the plot', () => {
     const truck = state.fuelOrders[0].truck;
     expect(heldSeconds).toBeGreaterThan(4);
     expect(truck).toBeDefined();
-    expect(truck!.worldPosition[2]).toBeCloseTo(block.roadLaneZ);
-    expect(truck!.targetWaypoint).toEqual([entryX, 0, block.roadLaneZ]);
+    expect(truck!.worldPosition[2]).toBeCloseTo(rightLaneZ);
+    expect(truck!.targetWaypoint).toEqual([entryX, 0, rightLaneZ]);
   });
 
   it('never drives through a building or off the concrete', () => {

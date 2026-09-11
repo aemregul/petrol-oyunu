@@ -247,6 +247,11 @@ export interface VehicleEntity {
   parkingSlot?: number | null;
   /** Backing out of a bay: the nose keeps pointing where it was. */
   reversing?: boolean;
+  /**
+   * This driver abandoned the visit and should merge into the left/overtaking
+   * lane after clearing the exit, rather than lingering in the entry lane.
+   */
+  leaveViaPassingLane?: boolean;
   /** The driver, once they have got out of the car. */
   visitor?: FacilityVisitor;
   /** The player wiped this customer's windscreen — service they remember. */

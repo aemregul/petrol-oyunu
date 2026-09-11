@@ -249,7 +249,7 @@ export function releaseAttendantJob(state: GameState, employee: EmployeeEntity):
 export const LAYOUT = {
   /** Highway centreline. The plot's front edge butts up against it. */
   roadZ: -3,
-  /** Half a carriageway, in grid units. One lane, one direction. */
+  /** Half a two-lane, one-way carriageway, in grid units. */
   roadHalfWidth: 2.2,
   /** Landscaped central reservation between the two carriageways. */
   medianWidth: 2.6,
@@ -465,7 +465,7 @@ export interface PlotLayout {
   exitLaneZ: number;
   queueHeadX: number;
   roadEndX: number;
-  /** Half a carriageway, in grid units. */
+  /** Half a two-lane carriageway, in grid units. */
   roadHalfWidth: number;
   /** Centre of the near carriageway — the one that serves this station. */
   roadLaneZ: number;
@@ -730,6 +730,7 @@ export interface BlockLayout {
    */
   queueZ: number;
   /** Carriageway serving this block, and where cars join and leave it. */
+  roadHalfWidth: number;
   roadLaneZ: number;
   roadStartX: number;
   roadEndX: number;
@@ -745,6 +746,32 @@ export interface BlockLayout {
   maxX: number;
   minZ: number;
   maxZ: number;
+}
+
+/** The two lanes carried by each one-way carriageway. */
+export type HighwayLane = 'right' | 'left';
+
+/**
+ * Centre of a real traffic lane, rather than the centre line painted between
+ * them. The right lane is always the kerb/station lane; the left lane is the
+ * median/overtaking lane. The far carriageway is mirrored, so the signs flip
+ * there together with its direction of travel.
+ */
+export function highwayLaneZ(
+  block: Pick<BlockLayout, 'side' | 'roadLaneZ' | 'roadHalfWidth'>,
+  lane: HighwayLane
+): number {
+  const towardStation = block.side === 'near' ? 1 : -1;
+  const offset = block.roadHalfWidth / 2;
+  return block.roadLaneZ + towardStation * (lane === 'right' ? offset : -offset);
+}
+
+/** True anywhere between the two edge lines of this carriageway. */
+function onCarriageway(
+  vehicle: Pick<VehicleEntity, 'worldPosition'>,
+  block: Pick<BlockLayout, 'roadLaneZ' | 'roadHalfWidth'>
+): boolean {
+  return Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < block.roadHalfWidth + 0.15;
 }
 
 /**
@@ -898,6 +925,7 @@ export function blockLayout(
         queueHeadX,
         queueStep: LAYOUT.queueSpacing,
         queueZ: layByZ,
+        roadHalfWidth,
         roadLaneZ: farRoadLaneZ,
         roadStartX: box.maxX + LAYOUT.roadMargin,
         roadEndX: box.minX - LAYOUT.roadMargin,
@@ -912,6 +940,7 @@ export function blockLayout(
         queueHeadX,
         queueStep: -LAYOUT.queueSpacing,
         queueZ: layByZ,
+        roadHalfWidth,
         roadLaneZ: LAYOUT.roadZ,
         roadStartX: box.minX - LAYOUT.roadMargin,
         roadEndX: box.maxX + LAYOUT.roadMargin,
@@ -1100,7 +1129,7 @@ const HIGHWAY_SPEED = 2.4;
 
 /** Whether a vehicle is out on the carriageway rather than on the concrete. */
 function highwayPace(vehicle: VehicleEntity, block: BlockLayout): number {
-  return Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1 ? HIGHWAY_SPEED : 1;
+  return onCarriageway(vehicle, block) ? HIGHWAY_SPEED : 1;
 }
 
 /**
@@ -1178,6 +1207,10 @@ const MERGE_GAP = 4;
  * still applies; whoever is already past cannot be driven into.
  */
 const MERGE_GAP_BEHIND_PAD = 3;
+
+/** A lane changer gives overtaking traffic a full car-length on either side. */
+const LANE_CHANGE_GAP_AHEAD = 6;
+const LANE_CHANGE_GAP_BEHIND = 5;
 
 /**
  * How close to a lane a driver has to be before waiting for a gap in it. Any
@@ -1352,6 +1385,27 @@ function followThrottle(
       ? Object.values(state.vehicles)
       : [...Object.values(state.vehicles), ...truckBodies(state)];
 
+  // Moving from the kerb lane to the overtaking lane is a merge, not a
+  // diagonal shortcut. Traffic already in the left lane has right of way;
+  // the changer waits in the right lane until there is room both ahead and
+  // behind. Once the gap opens the ordinary follower continues to protect
+  // both cars through the diagonal part of the manoeuvre.
+  const leftLaneZ = highwayLaneZ(block, 'left');
+  const changingLeft =
+    onCarriageway(vehicle, block) &&
+    Math.abs(target[2] - leftLaneZ) < 0.15 &&
+    Math.abs(vehicle.worldPosition[2] - leftLaneZ) > 0.35;
+  if (changingLeft) {
+    const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
+    const leftLaneBusy = traffic.some((other) => {
+      if (other.id === vehicle.id) return false;
+      if (Math.abs(other.worldPosition[2] - leftLaneZ) >= FOLLOW_CORRIDOR) return false;
+      const ahead = (other.worldPosition[0] - vehicle.worldPosition[0]) * flow;
+      return ahead > -LANE_CHANGE_GAP_BEHIND && ahead < LANE_CHANGE_GAP_AHEAD;
+    });
+    if (leftLaneBusy) return { throttle: 0, gap: 0 };
+  }
+
   // Following distance is really a following *time*: a car travelling at
   // highway pace needs proportionally more room to shed that speed, and a gap
   // that is ample on the forecourt is nothing at all out on the road.
@@ -1371,9 +1425,10 @@ function followThrottle(
     return Math.abs(target[2] - laneZ) < 1 && away >= hold && away < MERGE_LOOKAHEAD;
   };
 
-  if (joining(block.roadLaneZ, MERGE_HOLD_LINE)) {
+  const rightLaneZ = highwayLaneZ(block, 'right');
+  if (joining(rightLaneZ, MERGE_HOLD_LINE)) {
     const flow = Math.sign(block.roadEndX - block.roadStartX);
-    const myAway = Math.abs(vehicle.worldPosition[2] - block.roadLaneZ);
+    const myAway = Math.abs(vehicle.worldPosition[2] - rightLaneZ);
 
     // İniş SERİLEŞTİRİLİR: aynı katılım noktasına inenlerden yalnız şeride en
     // yakın olan yola iner; diğerleri onunkini "kullanılan boşluk" sayar.
@@ -1385,7 +1440,7 @@ function followThrottle(
       if (other.id === vehicle.id) return false;
       const merging = other.targetWaypoint;
       if (!merging || merging[0] !== target[0] || merging[2] !== target[2]) return false;
-      const theirAway = Math.abs(other.worldPosition[2] - block.roadLaneZ);
+      const theirAway = Math.abs(other.worldPosition[2] - rightLaneZ);
       if (theirAway < myAway - 0.05) return true;
       return Math.abs(theirAway - myAway) <= 0.05 && other.id < vehicle.id;
     });
@@ -1400,7 +1455,7 @@ function followThrottle(
       descentBusy ||
       traffic.some((other) => {
         if (other.id === vehicle.id) return false;
-        if (Math.abs(other.worldPosition[2] - block.roadLaneZ) >= 1) return false;
+        if (Math.abs(other.worldPosition[2] - rightLaneZ) >= FOLLOW_CORRIDOR) return false;
         const behind = (target[0] - other.worldPosition[0]) * flow;
         return (
           behind > -CAR_CLEARANCE &&
@@ -1428,7 +1483,7 @@ function followThrottle(
   );
 
   let nearest = Infinity;
-  const onForecourt = pace <= 1 && Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) >= 1.5;
+  const onForecourt = pace <= 1;
   const softenCrossing = onForecourt && (vehicle.blockedSeconds ?? 0) >= FORECOURT_CROSSING_GRACE_SECONDS;
 
   for (const other of traffic) {
@@ -2489,7 +2544,8 @@ export function forecourtStaysOpen(state: GameState, side: DrivewaySide): boolea
 
   const entryX = drivewayLaneX(block.entry, 0);
   const exitX = drivewayLaneX(block.exit, 0);
-  const probe = { worldPosition: [entryX, 0, block.roadLaneZ] } as VehicleEntity;
+  const rightLaneZ = highwayLaneZ(block, 'right');
+  const probe = { worldPosition: [entryX, 0, rightLaneZ] } as VehicleEntity;
 
   // Şerit üzerinde bina olabilir (şerit zaten kaçabildiği kadar kaçmıştır);
   // ara noktalar duvarın içine düşmüşse kenara kaydırılır ki sınav "şu tek
@@ -2501,7 +2557,7 @@ export function forecourtStaysOpen(state: GameState, side: DrivewaySide): boolea
     [
       offWalls(state, block, [entryX, 0, block.laneZ]),
       offWalls(state, block, [exitX, 0, block.laneZ]),
-      [exitX, 0, block.roadLaneZ]
+      [exitX, 0, rightLaneZ]
     ],
     { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
     frontageKeepOut(block)
@@ -2521,6 +2577,7 @@ export function vehiclesCanStillLeave(state: GameState, side: DrivewaySide): boo
   if (!block) return true;
 
   const exitX = drivewayLaneX(block.exit, 0);
+  const rightLaneZ = highwayLaneZ(block, 'right');
   for (const vehicle of Object.values(state.vehicles)) {
     // Yolda akanlar arsanın konusu değil; yalnız beton üstündekiler sayılır.
     if (
@@ -2540,7 +2597,7 @@ export function vehiclesCanStillLeave(state: GameState, side: DrivewaySide): boo
       side,
       [
         [exitX, 0, block.laneZ],
-        [exitX, 0, block.roadLaneZ]
+        [exitX, 0, rightLaneZ]
       ],
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
@@ -2602,6 +2659,58 @@ function driveable(
   );
 }
 
+/** A normal departure joins the kerb lane; an impatient one then overtakes. */
+function roadDepartureTail(
+  block: BlockLayout,
+  laneX: number,
+  mergeLeft: boolean
+): Array<[number, number, number]> {
+  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
+  const rightLaneZ = highwayLaneZ(block, 'right');
+  if (!mergeLeft) {
+    return [
+      [laneX, 0, rightLaneZ],
+      [block.roadEndX, 0, rightLaneZ]
+    ];
+  }
+
+  return [
+    [laneX, 0, rightLaneZ],
+    [laneX + flow * 4, 0, rightLaneZ],
+    [laneX + flow * 10, 0, highwayLaneZ(block, 'left')],
+    [block.roadEndX, 0, highwayLaneZ(block, 'left')]
+  ];
+}
+
+/** A driver already on the road abandons the entry lane and continues left. */
+function continueInPassingLane(
+  block: BlockLayout,
+  vehicle: Pick<VehicleEntity, 'worldPosition'>
+): Array<[number, number, number]> {
+  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
+  const leftLaneZ = highwayLaneZ(block, 'left');
+  if (Math.abs(vehicle.worldPosition[2] - leftLaneZ) < 0.35) {
+    return [[block.roadEndX, 0, leftLaneZ]];
+  }
+
+  const startX = vehicle.worldPosition[0] + flow * 3;
+  return [
+    [startX, 0, highwayLaneZ(block, 'right')],
+    [startX + flow * 6, 0, leftLaneZ],
+    [block.roadEndX, 0, leftLaneZ]
+  ];
+}
+
+/** Some transit traffic approaches on the right, then passes before the gate. */
+function overtakingTransitRoute(block: BlockLayout): Array<[number, number, number]> {
+  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
+  return [
+    [block.entry.x - flow * 16, 0, highwayLaneZ(block, 'right')],
+    [block.entry.x - flow * 8, 0, highwayLaneZ(block, 'left')],
+    [block.roadEndX, 0, highwayLaneZ(block, 'left')]
+  ];
+}
+
 /** Highway -> entrance driveway -> circulation lane. */
 function approachRoute(
   state: GameState,
@@ -2614,7 +2723,7 @@ function approachRoute(
   );
 
   return driveable(state, vehicle, block, [
-    [laneX, 0, block.roadLaneZ],
+    [laneX, 0, highwayLaneZ(block, 'right')],
     [laneX, 0, block.laneZ]
   ]);
 }
@@ -2899,8 +3008,7 @@ function parkExitRoute(
     block.side,
     [
       offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
-      [laneX, 0, block.roadLaneZ],
-      [block.roadEndX, 0, block.roadLaneZ]
+      ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
     ],
     { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
     frontageKeepOut(block),
@@ -3024,14 +3132,13 @@ function exitRoute(
       // The last leg is the driveway itself. Buildings can be placed near a
       // mouth on old saves, so the fast bay-exit route must prove that leg is
       // open too instead of assuming the kerb opening is empty.
-      legIsClear(walls, [laneX, block.laneZ], [laneX, block.roadLaneZ]);
+      legIsClear(walls, [laneX, block.laneZ], [laneX, highwayLaneZ(block, 'right')]);
     if (clear) {
       const straight: Array<[number, number, number]> = [
         rollOut,
         ontoLane,
         [laneX, 0, block.laneZ],
-        [laneX, 0, block.roadLaneZ],
-        [block.roadEndX, 0, block.roadLaneZ]
+        ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
       ];
       if (routeBodyClear(state, from, block.side, from.worldPosition, straight)) return straight;
       candidates.push(straight);
@@ -3144,8 +3251,7 @@ function exitRoute(
       [
         offWalls(state, block, clampToApron(block, [start[0], 0, block.laneZ])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
-        [laneX, 0, block.roadLaneZ],
-        [block.roadEndX, 0, block.roadLaneZ]
+        ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
       ],
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
@@ -3167,8 +3273,7 @@ function exitRoute(
         offWalls(state, block, clampToApron(block, [start[0], 0, lane])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, lane])),
         // Leaving the plot down the exit driveway and away along the highway.
-        [laneX, 0, block.roadLaneZ],
-        [block.roadEndX, 0, block.roadLaneZ]
+        ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
       ],
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
@@ -4763,7 +4868,8 @@ function advanceTruck(
 ): boolean {
   const tank = truck.tankBuildingId ? state.buildings[truck.tankBuildingId] : null;
   const side = tank ? drivewaySideAt(tank.position[1]) : 'near';
-  const roadZ = blockLayout(state, side)?.roadLaneZ ?? -3;
+  const roadBlock = blockLayout(state, side) ?? blockLayout(state, 'near')!;
+  const roadZ = highwayLaneZ(roadBlock, 'right');
 
   if (!truckHeldUp(state, truck, roadZ)) {
     truck.blockedSeconds = 0;
@@ -4851,7 +4957,11 @@ function tankerApproach(
   if (!bay) return null;
 
   const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
-  const start: [number, number, number] = [block.roadStartX - flow * 8, 0, block.roadLaneZ];
+  const start: [number, number, number] = [
+    block.roadStartX - flow * 8,
+    0,
+    highwayLaneZ(block, 'right')
+  ];
   return { tank, block, bay, start, laneX: drivewayLaneX(block.entry, 0) };
 }
 
@@ -4901,7 +5011,7 @@ export function tankerRoute(
     carrier,
     block,
     [
-      [laneX, 0, block.roadLaneZ],
+      [laneX, 0, highwayLaneZ(block, 'right')],
       [laneX, 0, block.exitLaneZ],
       [bay[0], 0, block.exitLaneZ],
       bay
@@ -4916,7 +5026,7 @@ export function tankerRoute(
       state,
       carrier,
       block,
-      [[laneX, 0, block.roadLaneZ], [laneX, 0, block.laneZ], bay],
+      [[laneX, 0, highwayLaneZ(block, 'right')], [laneX, 0, block.laneZ], bay],
       undefined,
       hug,
       true
@@ -4941,7 +5051,7 @@ function dispatchTruck(state: GameState, order: FuelOrderEntity): void {
   // an overlap before either following rule gets a chance to brake.
   const spawnBusy = Object.values(state.vehicles).some(
     (vehicle) =>
-      Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < FOLLOW_CORRIDOR &&
+      Math.abs(vehicle.worldPosition[2] - highwayLaneZ(block, 'right')) < FOLLOW_CORRIDOR &&
       Math.abs(vehicle.worldPosition[0] - start[0]) < FOLLOW_DISTANCE * 1.5
   );
   if (spawnBusy) return;
@@ -5087,8 +5197,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
               [
                 [from[0], 0, block.exitLaneZ],
                 [laneX, 0, block.exitLaneZ],
-                [laneX, 0, block.roadLaneZ],
-                [block.roadEndX, 0, block.roadLaneZ]
+                ...roadDepartureTail(block, laneX, false)
               ],
               undefined,
               order.truck.tankBuildingId ?? undefined,
@@ -5101,8 +5210,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
               [
                 [from[0], 0, block.laneZ],
                 [laneX, 0, block.laneZ],
-                [laneX, 0, block.roadLaneZ],
-                [block.roadEndX, 0, block.roadLaneZ]
+                ...roadDepartureTail(block, laneX, false)
               ],
               undefined,
               order.truck.tankBuildingId ?? undefined,
@@ -5898,20 +6006,6 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     ? []
     : servableArchetypes(state, side, mods);
 
-  // A car cannot materialise where one already is. When the road is backed up
-  // to the edge of the map, the next driver simply has not arrived yet.
-  const spawnBlocked = Object.values(state.vehicles).some(
-    (v) =>
-      Math.abs(v.worldPosition[2] - block.roadLaneZ) < FOLLOW_CORRIDOR &&
-      Math.abs(v.worldPosition[0] - block.roadStartX) < FOLLOW_DISTANCE * 1.5
-  ) || state.fuelOrders.some(
-    (order) =>
-      !!order.truck &&
-      Math.abs(order.truck.worldPosition[2] - block.roadLaneZ) < FOLLOW_CORRIDOR &&
-      Math.abs(order.truck.worldPosition[0] - block.roadStartX) < FOLLOW_DISTANCE * 1.5
-  );
-  if (spawnBlocked) return;
-
   // Only a driver this station could actually serve is worth stopping — and
   // only one who could get in. A forecourt walled off by what the player has
   // built has no way through to the bays, and a driver reads that from the
@@ -5964,6 +6058,31 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   const modelVariants = conf.vehicleModels;
   const modelVariant = modelVariants[Math.abs(idHash) % modelVariants.length];
 
+  // Customers commit to the kerb lane before the station. Transit traffic
+  // normally uses the overtaking lane, but a stable minority approaches on
+  // the right and changes left before the entrance so the road does not look
+  // mechanically sorted into two unchanging streams.
+  const overtakesBeforeStation = !stops && Math.abs(idHash) % 100 < 24;
+  const spawnLane: HighwayLane = stops || overtakesBeforeStation ? 'right' : 'left';
+  const spawnZ = highwayLaneZ(block, spawnLane);
+
+  // A car cannot materialise on top of another road user. Each physical lane
+  // has its own entry capacity: a queue in the right lane must not suppress
+  // the free-flowing left lane, which is the whole value of the second lane.
+  const spawnBlocked =
+    Object.values(state.vehicles).some(
+      (v) =>
+        Math.abs(v.worldPosition[2] - spawnZ) < FOLLOW_CORRIDOR &&
+        Math.abs(v.worldPosition[0] - block.roadStartX) < FOLLOW_DISTANCE * 1.5
+    ) ||
+    state.fuelOrders.some(
+      (order) =>
+        !!order.truck &&
+        Math.abs(order.truck.worldPosition[2] - spawnZ) < FOLLOW_CORRIDOR &&
+        Math.abs(order.truck.worldPosition[0] - block.roadStartX) < FOLLOW_DISTANCE * 1.5
+    );
+  if (spawnBlocked) return;
+
   // Whether this driver wants the tank filled or names a sum is read off the
   // same id hash, for the same reason: no extra random roll. A charger has no
   // sum to name — a battery is charged to full.
@@ -5986,7 +6105,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     state: stops ? 'SPAWN' : 'PASSING',
     targetPumpId: null,
     assignedActor: null,
-    worldPosition: [block.roadStartX, 0, block.roadLaneZ],
+    worldPosition: [block.roadStartX, 0, spawnZ],
     targetWaypoint: null,
     route: [],
     // The far carriageway runs the other way, so its cars face the other way.
@@ -6006,10 +6125,15 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   }
 
   // Through traffic gets its whole route up front: down the carriageway and
-  // off the map. It never touches the forecourt, so nothing else has to know
-  // about it beyond driving it along.
+  // off the map. Most is already left; the minority born on the right makes a
+  // visible, gap-aware overtake before the entrance.
   if (!stops) {
-    setRoute(state.vehicles[id], [[block.roadEndX, 0, block.roadLaneZ]]);
+    setRoute(
+      state.vehicles[id],
+      overtakesBeforeStation
+        ? overtakingTransitRoute(block)
+        : [[block.roadEndX, 0, highwayLaneZ(block, 'left')]]
+    );
   }
 }
 
@@ -6107,7 +6231,7 @@ export function hasWayIn(state: GameState, block: BlockLayout, side: DrivewaySid
 
   return canReach(
     state,
-    { worldPosition: [block.roadStartX, 0, block.roadLaneZ] } as VehicleEntity,
+    { worldPosition: [block.roadStartX, 0, highwayLaneZ(block, 'right')] } as VehicleEntity,
     side,
     targets,
     { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
@@ -6409,6 +6533,7 @@ function turnAwayForNoManeuver(
     state.player.statistics.totalCustomersLost++;
   }
   notifyNoManeuverRoom(vehicle, effects, reputationPenalty);
+  vehicle.leaveViaPassingLane = true;
   sendAway(state, vehicle);
   turnAway(state);
 }
@@ -6422,13 +6547,15 @@ function turnAwayForNoManeuver(
 function continuePastStation(state: GameState, vehicle: VehicleEntity): void {
   const block = blockFor(state, vehicle);
   setVehicleState(vehicle, 'PASSING');
-  setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+  setRoute(vehicle, continueInPassingLane(block, vehicle));
+  vehicle.waitingTimeSeconds = 0;
+  vehicle.blockedSeconds = 0;
 }
 
 /** True while an arrival has not yet turned off its carriageway. */
 function arrivalStillOnRoad(state: GameState, vehicle: VehicleEntity): boolean {
   const block = blockFor(state, vehicle);
-  return Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1;
+  return onCarriageway(vehicle, block);
 }
 
 function loseCustomer(
@@ -6466,6 +6593,7 @@ function loseCustomer(
   vehicle.visitMode = null;
   vehicle.visitor = undefined;
   vehicle.assignedActor = null;
+  vehicle.leaveViaPassingLane = true;
   sendAway(state, vehicle);
 
   notify(effects, 'WARNING', 'Müşteri Kaybedildi!', `${reason} (-0.015 İtibar)`);
@@ -6745,8 +6873,7 @@ function tickVehicles(
 
         const approach = approachRoute(state, vehicle);
         if (!approach) {
-          setVehicleState(vehicle, 'PASSING');
-          setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+          continuePastStation(state, vehicle);
           turnAway(state);
           break;
         }
@@ -6775,7 +6902,7 @@ function tickVehicles(
         // the mouth. A driver who turns in and only then finds the forecourt
         // full blocks the entrance, and everything behind them stacks up on
         // the carriageway waiting for a gap that cannot open.
-        const stillOnRoad = Math.abs(vehicle.worldPosition[2] - block.roadLaneZ) < 1;
+        const stillOnRoad = onCarriageway(vehicle, block);
         if (!state.station.open && stillOnRoad) {
           continuePastStation(state, vehicle);
           turnAway(state);
@@ -6792,21 +6919,41 @@ function tickVehicles(
             : !findAvailablePump(state, vehicle.fuelType, mods, side) &&
               queued.length >= maxQueueLength(state, block))
         ) {
-          setVehicleState(vehicle, 'PASSING');
-          setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+          continuePastStation(state, vehicle);
           turnAway(state);
           break;
         }
 
+        const beforeRoadMove: [number, number, number] = [...vehicle.worldPosition];
         const arrived = driveInTraffic(state, vehicle, block, dt);
+        if (stillOnRoad && !arrived) {
+          const moved = Math.hypot(
+            vehicle.worldPosition[0] - beforeRoadMove[0],
+            vehicle.worldPosition[2] - beforeRoadMove[2]
+          );
+          if (moved < 0.02) {
+            vehicle.waitingTimeSeconds += dt;
+            vehicle.patience -= dt;
+          } else {
+            vehicle.waitingTimeSeconds = 0;
+          }
+
+          // A prospective customer held in the entry lane eventually gives
+          // up, waits for a left-lane gap, and overtakes the queue instead of
+          // blocking the kerb lane forever or disappearing in place.
+          if (vehicle.patience <= 0) {
+            continuePastStation(state, vehicle);
+            turnAway(state);
+            break;
+          }
+        }
         if (isWedged(vehicle) && stillOnRoad) {
           // Still on the carriageway, so nothing to release — carry on down
           // the road rather than standing in the entrance blocking it. Once
           // a car has crossed the kerb it must finish the visit it committed
           // to; converting it to PASSING there draws a road-bound diagonal
           // across the forecourt and looks like it entered only to leave.
-          setVehicleState(vehicle, 'PASSING');
-          setRoute(vehicle, [[block.roadEndX, 0, block.roadLaneZ]]);
+          continuePastStation(state, vehicle);
           turnAway(state);
           break;
         }

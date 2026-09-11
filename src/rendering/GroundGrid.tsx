@@ -302,9 +302,9 @@ const Driveway: React.FC<{
 };
 
 /**
- * One one-way carriageway: asphalt, a solid white line along each edge and a
- * dashed yellow line down the middle of the lane. Upgrading the road mirrors
- * this same piece across a landscaped median rather than widening it.
+ * One one-way, two-lane carriageway: asphalt, solid white edge lines and a
+ * dashed white divider between the kerb and overtaking lanes. Upgrading the
+ * road mirrors this same piece across a landscaped median.
  */
 const Carriageway: React.FC<{
   centreX: number;
@@ -389,11 +389,11 @@ const Carriageway: React.FC<{
         );
       })}
 
-      {/* Dashed yellow line down the middle of the lane */}
+      {/* Dashed white divider between two lanes moving the same way. */}
       {laneDashes.map((x) => (
         <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.02, 0]}>
           <planeGeometry args={[3.2, 0.24]} />
-          <meshBasicMaterial color="#e0b114" {...DECAL} />
+          <meshBasicMaterial color="#e8edf3" {...DECAL} />
         </mesh>
       ))}
     </group>
