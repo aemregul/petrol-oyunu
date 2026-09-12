@@ -42,6 +42,9 @@ function customerAtPump(id: string, state: ReturnType<typeof createInitialGameSt
 describe('Pump Attendant (Pompacı) System', () => {
   beforeEach(() => {
     const s = createInitialGameState();
+    // Hiring opens at level 3 (attendantHireLevel.test); these are about what
+    // an attendant does once hired.
+    s.player.level = 3;
     s.player.cash = 100_000;
     s.tanks.gasoline.stock = 1500;
     s.tanks.gasoline.capacity = 1500;

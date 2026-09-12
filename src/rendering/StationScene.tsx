@@ -11,6 +11,7 @@ import { BuildPreviewMesh } from './BuildPreviewMesh';
 import { SceneLighting } from './SceneLighting';
 import { SceneryProps } from './SceneryProps';
 import { RenderStatsProbe } from './RenderStatsProbe';
+import { LessonProbe } from './LessonProbe';
 import { BuildPlacementPlane } from './BuildPlacementPlane';
 import { LandParcelLayer } from './LandParcelLayer';
 import { useGameStore } from '../store/gameStore';
@@ -162,6 +163,7 @@ export const StationScene: React.FC = () => {
         <IsometricCamera />
         <SceneLighting />
         <RenderStatsProbe />
+        <LessonProbe />
 
         <GroundGrid />
         <SceneryProps />

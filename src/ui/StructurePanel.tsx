@@ -155,7 +155,7 @@ export const StructurePanel: React.FC = () => {
         <div className="p-5 flex flex-col gap-4 text-xs">
           <p className="text-ink/80 text-[12px] leading-relaxed font-semibold">{catalog.description}</p>
 
-          <div className="flex flex-col text-xs">
+          <div className="flex flex-col text-xs" data-tour="structure-rows">
             <div className="k-row">
               <span>Günlük bakım</span>
               <span className="text-kred">
@@ -300,7 +300,7 @@ export const StructurePanel: React.FC = () => {
             )}
           </div>
 
-          <div className="flex flex-col gap-2.5 pt-1">
+          <div className="flex flex-col gap-2.5 pt-1" data-tour="structure-actions">
             {isPost &&
               (attendant ? (
                 <button

@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { GameState, FuelType, VehicleArchetype, BuildingEntity, GameNotification, NotificationDraft } from '../domain/types/gameState';
 import { SaveManager } from '../domain/services/SaveManager';
 import { TransactionService } from '../domain/services/TransactionService';
-import { GAME_CONFIG, upgradePathFor, TANK_PACKAGE_LITERS } from '../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor, TANK_PACKAGE_LITERS, ATTENDANT_HIRE_LEVEL } from '../config/gameConfig';
 import {
   calculateEndOfDayReputation,
   calculateRepairCost,
@@ -50,6 +50,7 @@ import { unitPrice } from '../domain/services/catalogRules';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
 import { GAME_EVENTS } from '../config/eventConfig';
 import { TOUR_STEP_COUNT } from '../ui/tour/tourCount';
+import { firstLessonStep, lessonById, lessonClock, lessonView } from '../ui/lessons/lessons';
 import { cloudSaveAvailable, fetchCloudSave, followsAccount, pushCloudSave, reconcile } from '../services/cloudSave';
 import {
   managerDailyWage,
@@ -480,6 +481,26 @@ interface GameStore {
   nextTourStep: () => void;
   prevTourStep: () => void;
   endTour: () => void;
+  /**
+   * Lessons (Emre, 2026-09-11): one situation at a time, taught when it
+   * happens. UI state, not saved; which lessons are behind the player lives
+   * in settings.lessonsDone. The clock is held on every step that points at
+   * something and runs on the steps that wait on the world.
+   */
+  lesson: {
+    id: string | null;
+    step: number;
+    subject: string;
+    resumeSpeed: GameState['dayState']['timeSpeed'];
+    /** When the last lesson ended, so the next one does not follow straight on. */
+    endedAt: number;
+  };
+  startLesson: (id: string, subject: string) => void;
+  advanceLesson: () => void;
+  /** Done and skipped are remembered; a lesson that lost its subject is not. */
+  endLesson: (outcome: 'done' | 'skipped' | 'lost') => void;
+  /** Every lesson comes round again, from the start. */
+  resetLessons: () => void;
   selectVehicle: (id: string | null) => void;
   selectPump: (id: string | null) => void;
   selectBuilding: (id: string | null) => void;
@@ -810,6 +831,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   selectedBuildingId: null,
   officeTab: 'summary',
   tour: { active: false, step: 0, resumeSpeed: 1 },
+  lesson: { id: null, step: 0, subject: '', resumeSpeed: 1, endedAt: 0 },
   openOffice: (tab = 'summary') => set({ officeTab: tab, activeModal: 'OFFICE' }),
   fittingCanopy: false,
   buildMode: {
@@ -868,6 +890,70 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.dayState.timeSpeed = tour.resumeSpeed;
     SaveManager.saveGame(state);
     set({ gameState: state, tour: { active: false, step: 0, resumeSpeed: 1 } });
+  },
+
+  startLesson: (id, subject) => {
+    const { gameState, lesson: current, tour } = get();
+    const definition = lessonById(id);
+    if (!definition || current.id || tour.active || !gameState.dayState.isDayActive) return;
+    const first = firstLessonStep(definition, lessonView(get()), subject, 0);
+    if (first >= definition.steps.length) return;
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    const resumeSpeed = state.dayState.timeSpeed;
+    state.dayState.timeSpeed = lessonClock(definition.steps[first], resumeSpeed);
+    // A pump or building card left open would sit under the dimming, over
+    // whatever the lesson is about to point at — unless the card is the
+    // lesson.
+    const aboutACard =
+      definition.panel === 'PUMP_CARD' ||
+      definition.panel === 'FACILITY_CARD' ||
+      definition.panel === 'STRUCTURE_CARD';
+    set({
+      gameState: state,
+      ...(aboutACard ? {} : { selectedPumpId: null, selectedBuildingId: null }),
+      lesson: { id, step: first, subject, resumeSpeed, endedAt: current.endedAt }
+    });
+  },
+  advanceLesson: () => {
+    const { gameState, lesson: current } = get();
+    const definition = lessonById(current.id);
+    if (!definition) return;
+    const next = firstLessonStep(definition, lessonView(get()), current.subject, current.step + 1);
+    if (next >= definition.steps.length) {
+      get().endLesson('done');
+      return;
+    }
+    const speed = lessonClock(definition.steps[next], current.resumeSpeed);
+    if (!gameState.dayState.isDayActive || gameState.dayState.timeSpeed === speed) {
+      set({ lesson: { ...current, step: next } });
+      return;
+    }
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    state.dayState.timeSpeed = speed;
+    set({ gameState: state, lesson: { ...current, step: next } });
+  },
+  endLesson: (outcome) => {
+    const { gameState, lesson: current } = get();
+    if (!current.id) return;
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    if (outcome !== 'lost') {
+      const done = state.settings.lessonsDone ?? [];
+      const learnt = [current.id, ...(lessonById(current.id)?.covers ?? [])];
+      state.settings.lessonsDone = [...done, ...learnt.filter((l) => !done.includes(l))];
+    }
+    if (state.dayState.isDayActive) state.dayState.timeSpeed = current.resumeSpeed;
+    SaveManager.saveGame(state);
+    set({
+      gameState: state,
+      lesson: { id: null, step: 0, subject: '', resumeSpeed: 1, endedAt: Date.now() }
+    });
+  },
+  resetLessons: () => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    state.settings.lessonsDone = [];
+    state.settings.lessonsOff = false;
+    SaveManager.saveGame(state);
+    set({ gameState: state });
   },
 
   setActiveModal: (modal) => {
@@ -1791,8 +1877,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   setTimeSpeed: (speed) => {
-    const { gameState, tour } = get();
-    if (tour.active || !gameState.dayState.isDayActive) return;
+    const { gameState, tour, lesson } = get();
+    if (tour.active || lesson.id || !gameState.dayState.isDayActive) return;
     if (speed !== 0 && speed !== 0.5 && speed !== 1) return;
     sounds.playClick();
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
@@ -2979,6 +3065,16 @@ export const useGameStore = create<GameStore>((set, get) => {
   hirePumpAttendant: (pumpId?: string) => {
     const { gameState } = get();
     const conf = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
+    // Checked here, where every door to a hire leads, and not only on the
+    // Personel card: the pump's own card offered one from the first minute.
+    if (gameState.player.level < ATTENDANT_HIRE_LEVEL) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Seviye Gerekli',
+        message: `Pompacı Seviye ${ATTENDANT_HIRE_LEVEL}'te işe alınabilir.`
+      });
+      return false;
+    }
     if (gameState.player.cash < conf.hireCost) {
       get().addNotification({
         type: 'WARNING',

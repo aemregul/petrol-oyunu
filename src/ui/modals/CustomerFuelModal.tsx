@@ -144,7 +144,7 @@ export const CustomerFuelModal: React.FC = () => {
         </div>
 
         {/* The request */}
-        <div className="px-5 pt-4">
+        <div className="px-5 pt-4" data-tour="fuel-request">
           <div className="k-label">Müşteri İsteği</div>
           <div className="flex items-center gap-2 mt-1">
             <span
@@ -174,6 +174,7 @@ export const CustomerFuelModal: React.FC = () => {
               return (
                 <button
                   key={f}
+                  data-tour={`fuel-nozzle-${f}`}
                   disabled={!fitted || isFueling || isFinished}
                   onClick={() => {
                     sounds.playClick();
@@ -232,6 +233,7 @@ export const CustomerFuelModal: React.FC = () => {
                   className="flex-1 min-w-0 bg-board border-2 border-ink rounded-md px-3 py-2.5 text-sm font-mono font-bold text-ink placeholder:text-mute focus:outline-none focus:bg-paper"
                 />
                 <button
+                  data-tour="fuel-start"
                   disabled={!canStart}
                   onClick={() => start('MONEY', amount)}
                   className={`game-btn px-4 font-display text-sm tracking-wide ${
@@ -241,6 +243,7 @@ export const CustomerFuelModal: React.FC = () => {
                   BAŞLAT
                 </button>
                 <button
+                  data-tour="fuel-full"
                   disabled={!canFill}
                   title={wantsFull ? undefined : 'Bu müşteri depo istemiyor'}
                   onClick={() => start('FULL', demandLiters)}
@@ -274,6 +277,7 @@ export const CustomerFuelModal: React.FC = () => {
 
           {/* Squeegee */}
           <button
+            data-tour="fuel-squeegee"
             disabled={!!vehicle.windowsCleaned}
             onClick={() => cleanVehicleWindows(vehicle.id)}
             className={`w-full py-2.5 rounded-md font-display text-sm tracking-wide flex items-center justify-center gap-1.5 ${
@@ -289,6 +293,7 @@ export const CustomerFuelModal: React.FC = () => {
           {/* Hand over / send off */}
           {isFinished ? (
             <button
+              data-tour="fuel-handover"
               onClick={() => completeVehicleFueling(vehicle.id)}
               className="w-full py-3.5 font-display text-base uppercase tracking-wide game-btn bg-kgrn hover:bg-kgrn-dark text-white"
             >

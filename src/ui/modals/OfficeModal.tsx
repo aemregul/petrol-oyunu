@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor, ATTENDANT_HIRE_LEVEL } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
 import { calculateEndOfDayReputation, calculateRepairCost } from '../../domain/formulas/economy';
 import { solarCleanCost, solarCleanlinessOf } from '../../domain/services/energy';
@@ -11,6 +11,7 @@ import { pumpName } from '../../domain/services/pumpNames';
 import { FuelType, MissionEntity } from '../../domain/types/gameState';
 import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import { openTabs } from '../lessons/openTabs';
 
 type OfficeTab = 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance';
 
@@ -112,8 +113,8 @@ const Row: React.FC<{ label: string; value: React.ReactNode; tone?: string }> = 
   </div>
 );
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div>
+const Section: React.FC<{ title: string; children: React.ReactNode; tour?: string }> = ({ title, children, tour }) => (
+  <div data-tour={tour}>
     <div className="k-label text-[11px] pt-4 pb-1 border-b-2 border-ink">
       {title}
     </div>
@@ -195,6 +196,7 @@ const LoansPage: React.FC<{
         onClick={onBack}
         className="game-btn bg-card text-ink w-10 h-10 rounded-md flex items-center justify-center"
         aria-label="Muhasebeye dön"
+        data-tour="loans-back"
       >
         <ArrowLeft className="w-5 h-5" />
       </button>
@@ -232,7 +234,7 @@ const LoansPage: React.FC<{
       </Section>
     )}
 
-    <Section title="Kredi Paketleri">
+    <Section title="Kredi Paketleri" tour="loans-packages">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
         {GAME_CONFIG.loans.map((loan) => {
           const levelOk = level >= loan.minLevel;
@@ -308,6 +310,15 @@ export const OfficeModal: React.FC = () => {
   // A page inside a tab: the loans desk sits behind Muhasebe rather than
   // spilling into it as a list (Emre, 2026-09-07). Same card, one level in.
   const [loansOpen, setLoansOpen] = useState(false);
+  // The open tab and page, for a lesson that teaches each the first time it is shown.
+  useEffect(() => {
+    openTabs.office = tab;
+    openTabs.officeLoans = loansOpen;
+    return () => {
+      openTabs.office = null;
+      openTabs.officeLoans = false;
+    };
+  }, [tab, loansOpen]);
   // A door that asks for a tab gets it even if the card is already open.
   useEffect(() => {
     setTab(officeTab);
@@ -438,12 +449,13 @@ export const OfficeModal: React.FC = () => {
         </div>
 
         {/* Tabs */}
-        <div className="px-6 pt-5 flex flex-wrap gap-2.5 shrink-0">
+        <div className="px-6 pt-5 flex flex-wrap gap-2.5 shrink-0" data-tour="office-tabs">
           {tabs.map((item) => {
             const active = item.id === tab;
             return (
               <button
                 key={item.id}
+                data-tour={`office-tab-${item.id}`}
                 onClick={() => {
                   if (item.soon) return;
                   sounds.playClick();
@@ -485,14 +497,14 @@ export const OfficeModal: React.FC = () => {
             />
           ) : tab === 'summary' ? (
             <>
-              <Section title="Finansal Durum">
+              <Section title="Finansal Durum" tour="summary-finance">
                 <Row label="Aktif (varlık)" value={lira(figures.assets)} tone="text-kgrn" />
                 <Row label="İşletme Sermayesi (stok)" value={lira(figures.stockValue)} />
                 <Row label="Kasa" value={lira(figures.cash)} />
                 <Row label="Günlük gider (yovmiye+OPEX+kredi)" value={lira(figures.dailyExpenses)} tone="text-kred" />
               </Section>
 
-              <Section title="Müşteri & İtibar">
+              <Section title="Müşteri & İtibar" tour="summary-reputation">
                 <Row
                   label="Yakıt müşteri etkisi"
                   value={`${figures.customerEffect >= 0 ? '+' : ''}${figures.customerEffect}%`}
@@ -525,16 +537,18 @@ export const OfficeModal: React.FC = () => {
                 />
               </Section>
 
-              <div className="flex flex-col gap-3 pt-5">
+              <div className="flex flex-col gap-3 pt-5" data-tour="summary-actions">
                 <ActionButton
                   onClick={hireAll}
                   icon={Fuel}
                   label={
-                    figures.unmanned > 0
-                      ? `Tüm pompalara pompacı (${lira(figures.hireAllCost)})`
-                      : 'Her pompada pompacı var'
+                    player.level < ATTENDANT_HIRE_LEVEL
+                      ? `Pompacı — Seviye ${ATTENDANT_HIRE_LEVEL} Gerekli`
+                      : figures.unmanned > 0
+                        ? `Tüm pompalara pompacı (${lira(figures.hireAllCost)})`
+                        : 'Her pompada pompacı var'
                   }
-                  disabled={figures.unmanned === 0 || player.cash < figures.hireAllCost}
+                  disabled={player.level < ATTENDANT_HIRE_LEVEL || figures.unmanned === 0 || player.cash < figures.hireAllCost}
                 />
                 <ActionButton
                   onClick={() => {
@@ -551,7 +565,7 @@ export const OfficeModal: React.FC = () => {
             </>
           ) : tab === 'price' ? (
             <>
-              <Section title="Yakıt Satış Fiyatları">
+              <Section title="Yakıt Satış Fiyatları" tour="price-rows">
                 {FUELS.map((fuel) => {
                   const pricing = gameState.pricing[fuel];
                   const conf = GAME_CONFIG.fuels[fuel];
@@ -632,7 +646,7 @@ export const OfficeModal: React.FC = () => {
                     </div>
                   );
                 })}
-                <p className="text-[13px] font-bold text-kgrn text-center py-3 flex items-center justify-center gap-1.5">
+                <p className="text-[13px] font-bold text-kgrn text-center py-3 flex items-center justify-center gap-1.5" data-tour="price-flow">
                   <Users className="w-4 h-4" />
                   <span>Bu fiyatlarla müşteri akışı: %{customerFlow}</span>
                 </p>
@@ -644,7 +658,7 @@ export const OfficeModal: React.FC = () => {
               {/* The price board is a door into this tab, so its upgrade
                   lives here rather than on a card of its own. */}
               {priceSign && (
-                <Section title="Fiyat Tabelası">
+                <Section title="Fiyat Tabelası" tour="price-sign">
                   <Row label="Seviye" value={`Sv.${priceSign.level}`} />
                   {priceSignUpgrade ? (
                     <div className="pt-3">
@@ -671,7 +685,7 @@ export const OfficeModal: React.FC = () => {
             // needs and what that costs, so nothing has to be hunted for
             // out on the plot.
             <>
-              <Section title="Saha">
+              <Section title="Saha" tour="maint-site">
                 <div className="flex items-center gap-3 py-3">
                   <span className="text-[15px] font-display text-ink flex-1">Temizlik</span>
                   <span className="k-bar w-28 h-2.5"><i style={{ width: `${stationCleanlinessDisplay}%` }} className={station.cleanliness < 40 ? 'bg-kred' : 'bg-kgrn'} /></span>
@@ -687,7 +701,7 @@ export const OfficeModal: React.FC = () => {
                 <p className="text-[12px] font-semibold text-mute pb-2">Kirli saha müşteri memnuniyetini düşürür. Her temizlik +25 puan.</p>
               </Section>
 
-              <Section title="Pompalar">
+              <Section title="Pompalar" tour="maint-pumps">
                 {Object.values(gameState.pumps).map((pump) => {
                   const cost = calculateRepairCost(GAME_CONFIG.buildings.pump_standard.price, pump.health);
                   const broken = pump.state === 'BROKEN';
@@ -713,7 +727,7 @@ export const OfficeModal: React.FC = () => {
                 <p className="text-[12px] font-semibold text-mute py-2">Sağlığı %25 altına düşen pompa arızalanabilir; arızalı pompa müşteri kaybettirir.</p>
               </Section>
 
-              <Section title="Güneş Panelleri">
+              <Section title="Güneş Panelleri" tour="maint-solar">
                 {Object.values(gameState.pumps).filter((p) => p.hasCanopy && p.hasSolarCanopy).length === 0 ? (
                   <p className="text-[12px] font-semibold text-mute py-3">Güneşli sundurma yok. İnşaat → Enerji sekmesinden bir sundurmaya panel takılabilir.</p>
                 ) : (
@@ -746,7 +760,7 @@ export const OfficeModal: React.FC = () => {
             </>
           ) : tab === 'accounts' ? (
             <>
-              <Section title="Satış & Faaliyet Kârı">
+              <Section title="Satış & Faaliyet Kârı" tour="accounts-daily">
                 <div className="grid grid-cols-3 k-label text-[11px] pt-2 pb-1">
                   <span>Dönem</span>
                   <span className="text-right">Satış</span>
@@ -805,6 +819,7 @@ export const OfficeModal: React.FC = () => {
 
               <div className="pt-5">
                 <button
+                  data-tour="accounts-loans"
                   onClick={() => {
                     sounds.playClick();
                     setLoansOpen(true);
@@ -818,7 +833,7 @@ export const OfficeModal: React.FC = () => {
             </>
           ) : (
             <>
-              <Section title="Bugünün Görevleri">
+              <Section title="Bugünün Görevleri" tour="missions-list">
                 {dailies.length === 0 ? (
                   <p className="text-[14px] font-semibold text-mute py-3">Bugün için görev yok; yarın sabah yenileri gelir.</p>
                 ) : (

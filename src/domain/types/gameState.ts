@@ -724,6 +724,10 @@ export interface GameState {
     showTutorialTips: boolean;
     /** The first-run tour has been taken or skipped; absent means not yet. */
     tourSeen?: boolean;
+    /** Lessons finished or skipped, by id (Emre, 2026-09-11); absent means none yet. */
+    lessonsDone?: string[];
+    /** The player has turned lessons off in Ayarlar. */
+    lessonsOff?: boolean;
     /** Frame counter in the bottom-left corner, off unless the player asks (Settings > Grafik). */
     showFps?: boolean;
   };

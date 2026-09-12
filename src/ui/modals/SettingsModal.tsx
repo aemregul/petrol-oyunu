@@ -118,6 +118,7 @@ export const SettingsModal: React.FC = () => {
   const clearNotifications = useGameStore((s) => s.clearNotifications);
   const signOutAccount = useGameStore((s) => s.signOutAccount);
   const startTour = useGameStore((s) => s.startTour);
+  const resetLessons = useGameStore((s) => s.resetLessons);
   const cloudSync = useGameStore((s) => s.cloudSync);
   const pushCloudSaveNow = useGameStore((s) => s.pushCloudSaveNow);
 
@@ -244,6 +245,26 @@ export const SettingsModal: React.FC = () => {
                 >
                   <Play className="w-4 h-4" />
                   <span>Turu Yeniden Başlat</span>
+                </button>
+              </div>
+
+              <SectionTitle>Dersler</SectionTitle>
+              <Hint>Bir şey ilk kez gerektiğinde oyun onu adım adım gösterir. Daha önce yaptığın işler için ders çıkmaz.</Hint>
+              <Choice
+                options={[
+                  { id: 'on', label: 'Açık' },
+                  { id: 'off', label: 'Kapalı' }
+                ]}
+                value={settings.lessonsOff ? 'off' : 'on'}
+                onPick={(id) => updateSettings({ lessonsOff: id === 'off' })}
+              />
+              <div className="pt-3 pb-1">
+                <button
+                  onClick={() => { sounds.playClick(); resetLessons(); }}
+                  className="game-btn w-full py-3 rounded-md text-[14px] font-display tracking-wide bg-card hover:bg-board text-ink flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  <span>Atlanan Dersleri Geri Getir</span>
                 </button>
               </div>
 

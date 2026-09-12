@@ -121,6 +121,7 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
 
   return (
     <div
+      data-tour={`order-row-${fuelType}`}
       className={`bg-board border-2 border-ink border-l-[6px] rounded-md p-4 flex items-center gap-3 ${tone.edge}`}
     >
       {/* Yakıt ikonu */}
@@ -174,38 +175,42 @@ const FuelRow: React.FC<FuelRowProps> = ({ fuelType, supplierId, dealOn }) => {
         </div>
       ) : (
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => step(-FUEL_ORDER_STEP)}
-            disabled={clampedLiters <= 1}
-            className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
-          >
-            −
-          </button>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={typed ?? String(clampedLiters)}
-            onChange={(e) => setTyped(e.target.value.replace(/[^0-9]/g, ''))}
-            onBlur={commitTyped}
-            onKeyDown={(e) => { if (e.key === 'Enter') { commitTyped(); handleOrder(); } }}
-            title={`1–${maxLiters} L, istediğin rakamı yaz`}
-            className="w-20 text-center bg-paper border-2 border-ink rounded-md text-ink font-display text-sm px-2 py-1 focus:outline-none"
-          />
-          <button
-            onClick={() => step(FUEL_ORDER_STEP)}
-            disabled={clampedLiters >= maxLiters}
-            className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
-          >
-            +
-          </button>
-          <button
-            onClick={handleMax}
-            className="game-btn px-2.5 py-1.5 rounded-md bg-card hover:bg-board text-ink text-xs font-display tracking-wide"
-          >
-            MAX
-          </button>
+          {/* The amount controls as one piece, so a lesson can point at them apart from the price. */}
+          <div data-tour={`order-amount-${fuelType}`} className="flex items-center gap-1.5">
+            <button
+              onClick={() => step(-FUEL_ORDER_STEP)}
+              disabled={clampedLiters <= 1}
+              className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
+            >
+              −
+            </button>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={typed ?? String(clampedLiters)}
+              onChange={(e) => setTyped(e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={commitTyped}
+              onKeyDown={(e) => { if (e.key === 'Enter') { commitTyped(); handleOrder(); } }}
+              title={`1–${maxLiters} L, istediğin rakamı yaz`}
+              className="w-20 text-center bg-paper border-2 border-ink rounded-md text-ink font-display text-sm px-2 py-1 focus:outline-none"
+            />
+            <button
+              onClick={() => step(FUEL_ORDER_STEP)}
+              disabled={clampedLiters >= maxLiters}
+              className="game-btn w-8 h-8 rounded-md bg-card hover:bg-board text-ink disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm"
+            >
+              +
+            </button>
+            <button
+              onClick={handleMax}
+              className="game-btn px-2.5 py-1.5 rounded-md bg-card hover:bg-board text-ink text-xs font-display tracking-wide"
+            >
+              MAX
+            </button>
+          </div>
           {/* Sipariş butonu */}
           <button
+            data-tour={`order-buy-${fuelType}`}
             onClick={handleOrder}
             disabled={!canAfford}
             className={`game-btn px-4 py-2 rounded-md text-sm font-display tracking-wide tabular-nums ${
@@ -256,6 +261,7 @@ export const FuelOrderModal: React.FC = () => {
             <span className="font-display text-xl tracking-wide">Yakıt Siparişi</span>
           </div>
           <button
+            data-tour="order-close"
             onClick={() => { sounds.playClick(); setActiveModal('NONE'); }}
             className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
           >
@@ -274,7 +280,7 @@ export const FuelOrderModal: React.FC = () => {
           </div>
 
           {/* Tedarikçi seçimi */}
-          <div className="flex flex-col gap-3">
+          <div data-tour="order-suppliers" className="flex flex-col gap-3">
             <div className="flex items-center gap-1.5 k-label">
               <Truck className="w-3.5 h-3.5" />
               Tedarikçi
@@ -312,7 +318,7 @@ export const FuelOrderModal: React.FC = () => {
           </div>
 
           {/* Alım Defteri */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2" data-tour="order-ledger">
             <div className="flex items-center gap-1.5 k-label">
               <Calendar className="w-3.5 h-3.5" />
               Alım Defteri
