@@ -2862,11 +2862,7 @@ export const useGameStore = create<GameStore>((set, get) => {
   openFuelingPanelForVehicle: (vehicleId) => {
     const { gameState } = get();
     const vehicle = gameState.vehicles[vehicleId];
-    const waiting = vehicle?.state === 'AT_PUMP' || vehicle?.state === 'REQUEST';
-    const playerSession =
-      vehicle?.assignedActor === 'PLAYER' &&
-      (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT');
-    if (!vehicle || vehicle.chargingBuildingId || (!playerSession && (!waiting || vehicle.assignedActor))) return;
+    if (!atPlayersWindow(vehicle)) return;
 
     sounds.playPumpStart();
     set({
@@ -3685,6 +3681,30 @@ export const useGameStore = create<GameStore>((set, get) => {
     }));
   }
   };
+});
+
+/**
+ * Whether a car is the player's to serve at the fuel window: waiting at the
+ * bay with nobody on it, or in the player's own pour or hand-over. The test
+ * that lets the window open, and the one that keeps it open.
+ */
+export function atPlayersWindow(vehicle: GameState['vehicles'][string] | undefined): boolean {
+  if (!vehicle || vehicle.chargingBuildingId) return false;
+  const waiting = (vehicle.state === 'AT_PUMP' || vehicle.state === 'REQUEST') && !vehicle.assignedActor;
+  const playerSession =
+    vehicle.assignedActor === 'PLAYER' && (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT');
+  return waiting || playerSession;
+}
+
+// The fuel window closes itself once its car is no longer the player's to
+// serve — out of patience, sent off, taken by an attendant — rather than
+// standing open, still clickable, over a car that has gone (Emre,
+// 2026-09-12). Watched on every change, not on the tick, so it holds while
+// the clock is stopped and for every way a car can leave.
+useGameStore.subscribe((store) => {
+  if (store.activeModal !== 'CUSTOMER_FUEL' || !store.selectedVehicleId) return;
+  if (atPlayersWindow(store.gameState.vehicles[store.selectedVehicleId])) return;
+  useGameStore.setState({ activeModal: 'NONE', selectedVehicleId: null });
 });
 
 // Development aid: lets browser-driven tests inspect live store state.

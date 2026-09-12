@@ -3826,6 +3826,11 @@ export function beginFueling(
   actor: 'PLAYER' | 'EMPLOYEE',
   effects: SimEffects
 ): boolean {
+  // Only a driver standing at the bay can be served. A car that has left —
+  // out of patience, sent off — must not have a pour started on it from a
+  // window that was still open (Emre, 2026-09-12).
+  if (vehicle.state !== 'AT_PUMP' && vehicle.state !== 'REQUEST') return false;
+
   const unitPrice = state.pricing[vehicle.fuelType].playerPrice;
 
   let litersNeeded: number;
