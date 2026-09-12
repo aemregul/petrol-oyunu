@@ -345,7 +345,9 @@ export const OfficeModal: React.FC = () => {
     ac: Object.values(gameState.buildings).some((b) => b.type === 'ev_charger_ac'),
     dc: Object.values(gameState.buildings).some((b) => b.type === 'ev_charger_dc')
   };
-  // How the board pulls custom against a plain station at the regional price.
+  // Overall willingness to stop against a plain, regional-price station.
+  // Price is one input; reputation, facilities, rush hour and lighting also
+  // belong to stopChance, so the UI must not present this as price alone.
   const customerFlow = Math.max(0, Math.round((stopChance(gameState, 'near') / 0.3) * 100));
 
   const t = gameState.dayState.todayStats;
@@ -603,12 +605,20 @@ export const OfficeModal: React.FC = () => {
                     </div>
                   );
                 })}
-                <p className="text-[13px] font-bold text-kgrn text-center py-3 flex items-center justify-center gap-1.5" data-tour="price-flow">
-                  <Users className="w-4 h-4" />
-                  <span>Bu fiyatlarla müşteri akışı: %{customerFlow}</span>
-                </p>
+                <div className="py-3 text-center" data-tour="price-flow">
+                  <p className={`text-[13px] font-bold flex items-center justify-center gap-1.5 ${customerFlow >= 100 ? 'text-kgrn' : 'text-kred'}`}>
+                    <Users className="w-4 h-4" />
+                    <span>Tahmini müşteri ilgisi: %{customerFlow} · %100 normal</span>
+                  </p>
+                  <p className="text-[12px] font-black text-ink pt-2">
+                    Fiyat ↓ → daha çok müşteri, daha düşük marj · Fiyat ↑ → daha az müşteri, daha yüksek marj
+                  </p>
+                  <p className="text-[11px] font-semibold text-mute pt-1">
+                    Bu tahmin fiyatla birlikte itibar, tesisler, yoğun saat ve gece aydınlatmasından da etkilenir.
+                  </p>
+                </div>
                 <p className="text-[12px] font-semibold text-mute text-center pb-2">
-                  Alış fiyatının yanındaki ok, satış fiyatının bölge ortalamasına göre yerini gösterir.
+                  Küçük rakam alış maliyetidir; ok, satış fiyatının bölge ortalamasına göre ucuz veya pahalı olduğunu gösterir.
                 </p>
               </Section>
 

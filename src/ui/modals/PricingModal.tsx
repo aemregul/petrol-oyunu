@@ -61,6 +61,12 @@ export const PricingModal: React.FC = () => {
 
         {/* Pricing Cards */}
         <div className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[75vh]">
+          <div className="bg-board border-2 border-ink rounded-md p-3 text-center">
+            <p className="text-sm font-display text-ink">Fiyat ↓ → müşteri ↑ · Fiyat ↑ → müşteri ↓</p>
+            <p className="text-[11px] font-semibold text-mute pt-1">
+              Ucuz fiyat satış hacmini, pahalı fiyat litre başına kazancı artırır.
+            </p>
+          </div>
           {(['gasoline', 'diesel', 'lpg'] as FuelType[]).map((fType) => {
             const conf = GAME_CONFIG.fuels[fType];
             const pricing = gameState.pricing[fType];
@@ -148,7 +154,7 @@ export const PricingModal: React.FC = () => {
                         <TrendingDown className="w-3.5 h-3.5 text-kred" />
                       )}
                       <span>
-                        Talep: {attr.trafficModifierPercent > 0 ? `+${attr.trafficModifierPercent}%` : `${attr.trafficModifierPercent}%`}
+                        Fiyatın müşteri etkisi: {attr.trafficModifierPercent > 0 ? `+${attr.trafficModifierPercent}%` : `${attr.trafficModifierPercent}%`}
                       </span>
                     </div>
 

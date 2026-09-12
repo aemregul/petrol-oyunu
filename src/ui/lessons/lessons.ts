@@ -1065,9 +1065,10 @@ const officePrice: Lesson = {
     },
     {
       id: 'flow',
-      title: 'Ucuz mu, kârlı mı?',
+      title: 'Fiyat artarsa müşteri azalır',
       body: [
-        'Bölge ortalamasının altı daha çok müşteri çeker ama litre başına kazancı düşürür; üstü tersine. Bu satır fiyatlarının müşteri akışına etkisi.'
+        'Temel kural: fiyatı düşürmek durma ihtimalini artırır; fiyatı artırmak durma ihtimalini azaltır. Ucuz fiyat daha çok satış, pahalı fiyat araç başına daha yüksek marj demektir.',
+        'Gösterge %100 ise ilgi normaldir; %80 normalden yaklaşık %20 daha düşük, %120 yaklaşık %20 daha yüksektir. İtibar, tesisler, yoğun saat ve aydınlatma da bu yüzdeye katılır.'
       ],
       target: dom('price-flow'),
       advance: next
@@ -1476,7 +1477,7 @@ const guidePrice = guide({
       id: 'set',
       title: 'Fiyatı oynat',
       body: [
-        '−/+ fiyatı 10 kuruş oynatır. Bölge ortalamasının altı daha çok müşteri çeker, üstü litre başına daha çok kazandırır.',
+        '−/+ fiyatı 10 kuruş oynatır. Fiyatı düşürürsen daha çok araç durur ama litre başına kazancın azalır; artırırsan daha az araç durur ama marjın yükselir.',
         'Birine bas.'
       ],
       target: dom('price-rows'),

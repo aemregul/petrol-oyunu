@@ -180,7 +180,9 @@ function sections(): Section[] {
       title: 'Fiyat ve itibar',
       render: () => (
         <>
-          <P>Ofis → Fiyat'ta her yakıtın satış fiyatını ayarlarsın. Yanındaki küçük rakam alış fiyatı, ok bölge ortalamasına göre nerede olduğunu gösterir. Bölgenin altı müşteri çeker ama litre başına kazancı düşürür; üstü tersine.</P>
+          <P>Ofis → Fiyat'ta her yakıtın satış fiyatını ayarlarsın. Temel kural nettir: fiyatı düşürmek daha çok müşterinin durmasını, fiyatı artırmak daha az müşterinin durmasını sağlar. Düşük fiyat satış hacmini büyütür; yüksek fiyat litre başına marjı büyütür.</P>
+          <P>“Tahmini müşteri ilgisi” göstergesinde yüzde 100 normal seviyedir. Yüzde 80 yaklaşık yüzde 20 daha az, yüzde 120 yaklaşık yüzde 20 daha fazla ilgi demektir. Bu toplam tahmine fiyatın yanında itibar, tesisler, yoğun saat ve gece aydınlatması da girer.</P>
+          <P>Fiyat satırındaki küçük rakam alış maliyetidir. Ok ise satış fiyatının bölge ortalamasına göre ucuz mu pahalı mı olduğunu gösterir.</P>
           <P>Kimin sapacağı fiyata duyarlılığa göre değişir: kurye her kuruşa bakar, lüks araç bakmaz. Dizeli ucuz tutmak TIR çeker.</P>
           <H>İtibar</H>
           <P>Bir ile beş arasında. Üç, düz bir istasyon; beş, yoldan geçenin çok daha fazlasını çeker. Memnuniyet yükseltir, kaybedilen müşteri düşürür, kirli saha memnuniyeti yer. Müdür için {manager.minReputation.toFixed(2)} gerekir.</P>
