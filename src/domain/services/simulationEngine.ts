@@ -5440,14 +5440,21 @@ const RUSH_CHANCE_PER_SEC = 1 / 260;
 const RUSH_SECONDS = 60;
 
 /**
- * Once a day the supplier drops *their* price for a minute — this is a
- * discount on the fuel the player buys in, not on what they sell it for. The
- * board out front does not change; the tanker does. It lands at a different
- * hour each morning, so the only way to catch it is to be watching, which is
- * the point of it.
+ * Now and then the supplier drops *their* price for a minute — a discount on
+ * the fuel the player buys in, not on what they sell it for. The board out
+ * front does not change; the tanker does. It lands at a random hour, on some
+ * days and not others, so the only way to catch it is to be watching, which
+ * is the point of it.
  */
 const FUEL_DEAL_SECONDS = 60;
 export const FUEL_DEAL_DISCOUNT = 0.3;
+/**
+ * The share of quiet days — no refinery hike, no currency shock, no supplier
+ * campaign — that bring the deal (Emre, 2026-09-12: it opened every single
+ * day, and on a hike morning "prices up" and "discount now" stood side by
+ * side). About one day in four or five overall.
+ */
+export const FUEL_DEAL_DAY_CHANCE = 0.5;
 
 /** True while a burst of custom is running. */
 export function isRushHour(state: GameState): boolean {
@@ -5466,8 +5473,21 @@ export function wholesaleNow(state: GameState, fuelType: FuelType): number {
 }
 
 /**
- * Runs the day's one discounted window: picks an hour for it each morning,
- * opens it when the clock reaches that hour, and shuts it a minute later.
+ * Whether today brings the one-minute deal, and at what hour — asked once, in
+ * the morning. Never on a day the market moved either way, never two days
+ * running, and otherwise on FUEL_DEAL_DAY_CHANCE of the quiet days.
+ */
+export function rollFuelDeal(state: GameState): number | null {
+  const day = state.dayState;
+  const marketMoved = state.activeEvents.some((e) => (e.effects.wholesalePriceModifier ?? 0) !== 0);
+  if (marketMoved || day.fuelDealLastDay === day.currentDay - 1) return null;
+  if (Math.random() >= FUEL_DEAL_DAY_CHANCE) return null;
+  return 8 + Math.random() * 13;
+}
+
+/**
+ * Runs the day's discounted window, if it has one: decides in the morning,
+ * opens it when the clock reaches its hour, and shuts it a minute later.
  */
 function tickFuelDeal(state: GameState, dt: number, effects: SimEffects): void {
   const day = state.dayState;
@@ -5483,15 +5503,21 @@ function tickFuelDeal(state: GameState, dt: number, effects: SimEffects): void {
 
   if (day.fuelDealDoneToday) return;
 
-  // Drawn fresh each morning, and never in the small hours when nobody is
-  // looking — an offer the player cannot see is not an offer.
+  // Decided once each morning, at an hour when somebody is looking — an offer
+  // the player cannot see is not an offer. A day without one is done with it.
   if (day.fuelDealAtHour === undefined) {
-    day.fuelDealAtHour = 8 + Math.random() * 13;
+    const hour = rollFuelDeal(state);
+    if (hour === null) {
+      day.fuelDealDoneToday = true;
+      return;
+    }
+    day.fuelDealAtHour = hour;
   }
   if (hourOfDay(day.gameTime) < day.fuelDealAtHour || day.gameTime >= 24) return;
 
   day.fuelDealSecondsLeft = FUEL_DEAL_SECONDS;
   day.fuelDealDoneToday = true;
+  day.fuelDealLastDay = day.currentDay;
   playCue(effects, 'alert');
   notify(
     effects,

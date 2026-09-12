@@ -739,12 +739,15 @@ describe('simulationEngine - day boundary', () => {
     );
   });
 
-  it('opens one discounted fuel window a day, for a minute, at a fresh hour', () => {
+  it('opens a deal day’s discounted window once, for a minute, at a fresh hour', () => {
     const hours: number[] = [];
 
     for (let day = 0; day < 5; day++) {
       const state = createInitialGameState();
       state.dayState.timeSpeed = 1;
+      // A deal day with its hour drawn. Which days have one at all is pinned
+      // in fuelDealRhythm.test (Emre, 2026-09-12).
+      state.dayState.fuelDealAtHour = 9 + day * 2;
 
       let openFor = 0;
       let opened = 0;

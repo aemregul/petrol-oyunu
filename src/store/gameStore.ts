@@ -265,7 +265,7 @@ function beginNewDay(state: GameState, effects: ReturnType<typeof createEffects>
   state.dayState.currentDay++;
   state.dayState.gameTime = GAME_CONFIG.economy.dayStartHour;
   state.dayState.timeSpeed = 1;
-  // One discounted window a day, at an hour drawn fresh each morning.
+  // Whether today brings the one-minute deal is decided afresh each morning.
   state.dayState.fuelDealDoneToday = false;
   state.dayState.fuelDealSecondsLeft = 0;
   state.dayState.fuelDealAtHour = undefined;

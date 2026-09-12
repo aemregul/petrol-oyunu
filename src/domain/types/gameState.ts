@@ -539,13 +539,16 @@ export interface DayState {
   weather: 'SUNNY' | 'OVERCAST' | 'RAIN';
   /**
    * Seconds of controlled game time left on the day's discounted fuel window,
-   * and whether it has already been offered today. It pauses and slows with
-   * the rest of the forecourt so the player never loses an offer while paused.
+   * and whether today's has been offered — or today was decided to have none.
+   * It pauses and slows with the rest of the forecourt so the player never
+   * loses an offer while paused.
    */
   fuelDealSecondsLeft?: number;
   fuelDealDoneToday?: boolean;
-  /** Hour of the day the discount is due, drawn fresh each morning. */
+  /** Hour of the day the discount is due, when today has one. */
   fuelDealAtHour?: number;
+  /** The day the last deal opened, so two never come on consecutive days. */
+  fuelDealLastDay?: number;
   /**
    * A burst of custom, in game-seconds remaining. Traffic on the highway is
    * steady; what comes in waves is how many of those drivers decide to stop.
