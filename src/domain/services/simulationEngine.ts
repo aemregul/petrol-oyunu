@@ -2677,26 +2677,15 @@ function driveable(
   );
 }
 
-/** A normal departure joins the kerb lane; an impatient one then overtakes. */
+/** Every vehicle leaving the forecourt joins and stays in the kerb lane. */
 function roadDepartureTail(
   block: BlockLayout,
-  laneX: number,
-  mergeLeft: boolean
+  laneX: number
 ): Array<[number, number, number]> {
-  const flow = Math.sign(block.roadEndX - block.roadStartX) || 1;
   const rightLaneZ = highwayLaneZ(block, 'right');
-  if (!mergeLeft) {
-    return [
-      [laneX, 0, rightLaneZ],
-      [block.roadEndX, 0, rightLaneZ]
-    ];
-  }
-
   return [
     [laneX, 0, rightLaneZ],
-    [laneX + flow * 4, 0, rightLaneZ],
-    [laneX + flow * 10, 0, highwayLaneZ(block, 'left')],
-    [block.roadEndX, 0, highwayLaneZ(block, 'left')]
+    [block.roadEndX, 0, rightLaneZ]
   ];
 }
 
@@ -3075,7 +3064,7 @@ function parkExitRoute(
     block.side,
     [
       offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
-      ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
+      ...roadDepartureTail(block, laneX)
     ],
     { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
     frontageKeepOut(block),
@@ -3207,7 +3196,7 @@ function exitRoute(
         rollOut,
         ontoLane,
         [laneX, 0, block.laneZ],
-        ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
+        ...roadDepartureTail(block, laneX)
       ];
       if (routeBodyClear(state, from, block.side, from.worldPosition, straight)) return straight;
       candidates.push(straight);
@@ -3320,7 +3309,7 @@ function exitRoute(
       [
         offWalls(state, block, clampToApron(block, [start[0], 0, block.laneZ])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, block.laneZ])),
-        ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
+        ...roadDepartureTail(block, laneX)
       ],
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
@@ -3342,7 +3331,7 @@ function exitRoute(
         offWalls(state, block, clampToApron(block, [start[0], 0, lane])),
         offWalls(state, block, clampLaneToApron(block, [laneX, 0, lane])),
         // Leaving the plot down the exit driveway and away along the highway.
-        ...roadDepartureTail(block, laneX, !!from.leaveViaPassingLane)
+        ...roadDepartureTail(block, laneX)
       ],
       { minX: block.minX, minZ: block.minZ, maxX: block.maxX, maxZ: block.maxZ },
       frontageKeepOut(block),
@@ -5361,7 +5350,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
               [
                 [from[0], 0, block.exitLaneZ],
                 [laneX, 0, block.exitLaneZ],
-                ...roadDepartureTail(block, laneX, false)
+                ...roadDepartureTail(block, laneX)
               ],
               undefined,
               order.truck.tankBuildingId ?? undefined,
@@ -5374,7 +5363,7 @@ function tickFuelOrders(state: GameState, dt: number, effects: SimEffects): void
               [
                 [from[0], 0, block.laneZ],
                 [laneX, 0, block.laneZ],
-                ...roadDepartureTail(block, laneX, false)
+                ...roadDepartureTail(block, laneX)
               ],
               undefined,
               order.truck.tankBuildingId ?? undefined,
@@ -6697,7 +6686,6 @@ function turnAwayForNoManeuver(
     state.player.statistics.totalCustomersLost++;
   }
   notifyNoManeuverRoom(vehicle, effects, reputationPenalty);
-  vehicle.leaveViaPassingLane = true;
   sendAway(state, vehicle);
   turnAway(state);
 }
@@ -6757,7 +6745,6 @@ function loseCustomer(
   vehicle.visitMode = null;
   vehicle.visitor = undefined;
   vehicle.assignedActor = null;
-  vehicle.leaveViaPassingLane = true;
   sendAway(state, vehicle);
 
   notify(effects, 'WARNING', 'Müşteri Kaybedildi!', `${reason} (-0.015 İtibar)`);

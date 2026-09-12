@@ -171,6 +171,38 @@ describe('the highway lives on its own', () => {
     expect(state.vehicles.left_flow.worldPosition[0]).toBeGreaterThan(x);
   });
 
+  it('keeps a customer that entered the station in the right lane when leaving', () => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    const block = blockLayout(state, 'near')!;
+    const rightLaneZ = highwayLaneZ(block, 'right');
+    const leftLaneZ = highwayLaneZ(block, 'left');
+
+    // This customer is already inside the forecourt and loses patience there.
+    // That is different from a driver still waiting on the highway: after
+    // using the exit, every forecourt departure belongs in the kerb lane.
+    state.vehicles.forecourt_customer = {
+      id: 'forecourt_customer', archetype: 'commuter', fuelType: 'gasoline',
+      tankCapacity: 60, currentFuel: 20,
+      request: { mode: 'FULL', targetValue: 0, calculatedLiters: 40, calculatedPrice: 0, dispensedLiters: 0, isFinished: false },
+      patience: 0, maxPatience: 1, satisfaction: 100,
+      state: 'QUEUE', targetPumpId: null, assignedActor: null,
+      worldPosition: [block.entry.x, 0, block.laneZ],
+      targetWaypoint: null, route: [], heading: Math.PI / 2,
+      speed: 1, routeProgress: 0, waitingTimeSeconds: 0, shoppingIntent: false
+    };
+
+    runSimulationTick(state, 0.05, createEffects());
+
+    const driver = state.vehicles.forecourt_customer;
+    expect(driver.state).toBe('EXIT');
+    const roadPoints = [driver.targetWaypoint, ...driver.route].filter(
+      (point): point is [number, number, number] => point !== null
+    );
+    expect(roadPoints.some((point) => Math.abs(point[2] - rightLaneZ) < 0.15)).toBe(true);
+    expect(roadPoints.some((point) => Math.abs(point[2] - leftLaneZ) < 0.15)).toBe(false);
+  });
+
   it('spawns and despawns beyond the camera reach, never mid-screen', () => {
     // Emre'nin 2026-09-05 şikâyeti: araçlar yolun ortasında beliriyor ve
     // yolun ortasında buharlaşıyordu — roadMargin (42) kameranın gerçek
