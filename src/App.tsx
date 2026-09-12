@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StationScene } from './rendering/StationScene';
 import { HUD } from './ui/HUD';
 import { ModalContainer } from './ui/ModalContainer';
-import { TourOverlay } from './ui/TourOverlay';
+import { LessonOverlay } from './ui/LessonOverlay';
 import { FeedbackButton } from './ui/FeedbackButton';
 import { UnsupportedGraphics } from './ui/UnsupportedGraphics';
 import { probeWebGL2 } from './services/graphicsSupport';
@@ -86,16 +86,9 @@ export const App: React.FC = () => {
     sounds.toggleMute(sfxVolume <= 0);
   }, [masterVolume, sfxVolume]);
 
-  // The first-run tour (Emre, 2026-09-09): once the gate is through and the
-  // station is on screen, a player who has never taken it gets it. A moment's
-  // delay lets the scene draw first, so the spotlight has something to cut.
-  const tourSeen = useGameStore((s) => s.gameState.settings.tourSeen ?? false);
-  const startTour = useGameStore((s) => s.startTour);
-  useEffect(() => {
-    if (!gameVisible || tourSeen) return;
-    const id = window.setTimeout(startTour, 1500);
-    return () => window.clearTimeout(id);
-  }, [gameVisible, tourSeen, startTour]);
+  // There is no first-run tour any more (Emre, 2026-09-11/12: hardly anyone
+  // read it). Lessons teach one situation and one panel at a time instead,
+  // from the LessonOverlay mounted with the HUD below.
 
   // The palette is a data attribute on the root: every token in index.css
   // reads through it, so the whole HUD turns with one switch.
@@ -253,7 +246,7 @@ export const App: React.FC = () => {
           <HUD />
           <ModalContainer />
           <FeedbackButton />
-          <TourOverlay />
+          <LessonOverlay />
         </>
       )}
       {curtain !== 'on' && <WelcomeGate />}

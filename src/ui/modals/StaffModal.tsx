@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { GAME_CONFIG } from '../../config/gameConfig';
+import { GAME_CONFIG, ATTENDANT_HIRE_LEVEL } from '../../config/gameConfig';
 import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle, Trash2, Check, Lock } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import { openTabs } from '../lessons/openTabs';
 import {
   MANAGER_DUTIES,
   MANAGER_DUTY_SETTING,
@@ -43,6 +44,13 @@ export const StaffModal: React.FC = () => {
   const updateManagerSettings = useGameStore((s) => s.updateManagerSettings);
 
   const [activeTab, setActiveTab] = useState<'attendants' | 'manager'>('attendants');
+  // The open tab, for a lesson that teaches each tab the first time it is shown.
+  useEffect(() => {
+    openTabs.staff = activeTab;
+    return () => {
+      openTabs.staff = null;
+    };
+  }, [activeTab]);
 
   const attendants = Object.values(gameState.employees).filter((e) => e.role === 'PUMP_ATTENDANT');
   const managerConf = GAME_CONFIG.employees.manager;
@@ -84,7 +92,7 @@ export const StaffModal: React.FC = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b-2 border-ink p-2 gap-2 bg-board">
+        <div className="flex border-b-2 border-ink p-2 gap-2 bg-board" data-tour="staff-tabs">
           <button
             onClick={() => {
               sounds.playClick();
@@ -99,6 +107,7 @@ export const StaffModal: React.FC = () => {
           </button>
 
           <button
+            data-tour="staff-tab-manager"
             onClick={() => {
               sounds.playClick();
               setActiveTab('manager');
@@ -116,7 +125,7 @@ export const StaffModal: React.FC = () => {
         {activeTab === 'attendants' && (
           <div className="p-6 flex flex-col gap-4 overflow-y-auto flex-1">
             {/* Hire Action Card */}
-            <div className="bg-board border-2 border-ink rounded-md p-4 flex justify-between items-center">
+            <div data-tour="staff-hire" className="bg-board border-2 border-ink rounded-md p-4 flex justify-between items-center">
               <div>
                 <div className="font-display text-base text-ink">Yeni Pompacı İşe Al</div>
                 <div className="text-xs text-mute">
@@ -128,14 +137,16 @@ export const StaffModal: React.FC = () => {
               </div>
               <button
                 onClick={() => hirePumpAttendant()}
-                disabled={gameState.player.level < 3 || gameState.player.cash < recruit.hireCost}
+                disabled={gameState.player.level < ATTENDANT_HIRE_LEVEL || gameState.player.cash < recruit.hireCost}
                 className={`game-btn px-5 py-2.5 rounded-md font-display tracking-wide text-xs uppercase ${
-                  gameState.player.level < 3 || gameState.player.cash < recruit.hireCost
+                  gameState.player.level < ATTENDANT_HIRE_LEVEL || gameState.player.cash < recruit.hireCost
                     ? 'bg-card text-mute cursor-not-allowed'
                     : 'bg-kgrn hover:bg-kgrn-dark text-white'
                 }`}
               >
-                {gameState.player.level < 3 ? 'Seviye 3 Gerekli' : `İşe Al (₺${lira(recruit.hireCost)})`}
+                {gameState.player.level < ATTENDANT_HIRE_LEVEL
+                  ? `Seviye ${ATTENDANT_HIRE_LEVEL} Gerekli`
+                  : `İşe Al (₺${lira(recruit.hireCost)})`}
               </button>
             </div>
 
@@ -212,7 +223,7 @@ export const StaffModal: React.FC = () => {
                       {/* 3 — Where they stand: one chip per bay, the one they are on
                           lit, plus "Boşta". A native select looked like a form on a
                           card (Emre, 2026-09-09). */}
-                      <div className="flex items-center gap-3">
+                      <div data-tour="staff-post" className="flex items-center gap-3">
                         <span className="k-label w-20 shrink-0">Görev yeri</span>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <button
@@ -252,7 +263,7 @@ export const StaffModal: React.FC = () => {
                           next grade brings, how far along the attendant is, and the
                           one button that buys it. At the top grade the slot says so
                           instead of vanishing, so the cards keep one shape. */}
-                      <div className="flex items-center gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
+                      <div data-tour="staff-train" className="flex items-center gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
                         <span className="k-label w-20 shrink-0">
                           {nextTier ? `Seviye ${nextTier.level}` : 'Usta'}
                         </span>
@@ -364,7 +375,7 @@ export const StaffModal: React.FC = () => {
                       sipariş eder, pompacı atar, bakım yaptırır. Seviyesi yükseldikçe görevleri artar.
                     </div>
 
-                    <div className="bg-paper border-2 border-ink rounded-md px-3">
+                    <div data-tour="manager-requirements" className="bg-paper border-2 border-ink rounded-md px-3">
                       {rows.map((r) => (
                         <div key={r.label} className="k-row last:border-b-0">
                           <span className="flex items-center gap-2">
@@ -381,6 +392,7 @@ export const StaffModal: React.FC = () => {
                     </div>
 
                     <button
+                      data-tour="manager-hire"
                       onClick={hireManager}
                       disabled={!allMet}
                       title={allMet ? 'Müdürü göreve başlat' : 'Eksik şartlar kırmızı işaretli'}
@@ -521,7 +533,7 @@ export const StaffModal: React.FC = () => {
                         three labelled rows, chips in an even grid instead of a
                         wrap, and one line saying what the settings add up to. */}
                     <div className="bg-board border-2 border-ink rounded-md p-4 flex flex-col gap-3">
-                      <div className="flex items-start gap-3">
+                      <div data-tour="manager-duties" className="flex items-start gap-3">
                         <span className="k-label w-20 shrink-0 pt-2">Görevler</span>
                         <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {MANAGER_DUTIES.map((duty) => {
@@ -552,7 +564,7 @@ export const StaffModal: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-start gap-3">
+                      <div data-tour="manager-threshold" className="flex items-start gap-3">
                         <span className="k-label w-20 shrink-0 pt-2">Sipariş eşiği</span>
                         <div className="flex-1 flex flex-wrap gap-2">
                           {allThresholds.map((pct) => {
@@ -586,7 +598,7 @@ export const StaffModal: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-start gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
+                      <div data-tour="manager-summary" className="flex items-start gap-3 bg-paper border-2 border-ink rounded-md px-3 py-2">
                         <span className="k-label w-20 shrink-0 pt-0.5">Özet</span>
                         <div className="text-xs text-ink leading-relaxed">
                           Tank <b>%{settings.orderThresholdPercent}</b> altına inince <b>%{settings.orderTargetPercent}</b>'e kadar sipariş ·

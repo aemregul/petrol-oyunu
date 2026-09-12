@@ -56,7 +56,8 @@ export const HUD: React.FC = () => {
   const exitLandMode = useGameStore((s) => s.exitLandMode);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const setTimeSpeed = useGameStore((s) => s.setTimeSpeed);
-  const tourActive = useGameStore((s) => s.tour.active);
+  // A lesson holds the clock itself; the speed buttons would fight it.
+  const lessonActive = useGameStore((s) => s.lesson.id !== null);
   const editMode = useGameStore((s) => s.editMode);
   const toggleEditMode = useGameStore((s) => s.toggleEditMode);
   const canEdit = gameState.player.level >= EDIT_MODE_LEVEL;
@@ -194,7 +195,7 @@ export const HUD: React.FC = () => {
               <div className="k-label">Gün</div>
               <div className="font-display text-xl leading-tight text-kblu tabular-nums">{dayState.currentDay}</div>
             </div>
-            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[8.5rem]">
+            <div className="hud-tile bg-card border-2 border-ink rounded-md px-3 py-1 min-w-[8.5rem]" data-tour="cash">
               <div className="k-label">Kasa</div>
               <div className="font-display text-xl leading-tight text-kgrn tabular-nums">₺{player.cash.toLocaleString('tr-TR')}</div>
             </div>
@@ -244,7 +245,7 @@ export const HUD: React.FC = () => {
             >
               <button
                 onClick={() => setTimeSpeed(0)}
-                disabled={tourActive || !dayState.isDayActive}
+                disabled={lessonActive || !dayState.isDayActive}
                 aria-pressed={dayState.timeSpeed === 0}
                 title="Oyunu durdur"
                 className={`h-9 min-w-9 px-2 flex items-center justify-center border-r-2 border-ink transition-colors ${
@@ -255,7 +256,7 @@ export const HUD: React.FC = () => {
               </button>
               <button
                 onClick={() => setTimeSpeed(0.5)}
-                disabled={tourActive || !dayState.isDayActive}
+                disabled={lessonActive || !dayState.isDayActive}
                 aria-pressed={dayState.timeSpeed === 0.5}
                 title="Oyunu yavaşlat"
                 className={`h-9 min-w-[3.25rem] px-2 font-display text-xs border-r-2 border-ink transition-colors ${
@@ -266,7 +267,7 @@ export const HUD: React.FC = () => {
               </button>
               <button
                 onClick={() => setTimeSpeed(1)}
-                disabled={tourActive || !dayState.isDayActive}
+                disabled={lessonActive || !dayState.isDayActive}
                 aria-pressed={dayState.timeSpeed === 1}
                 title="Normal hızda devam et"
                 className={`h-9 min-w-9 px-2 flex items-center justify-center transition-colors ${
@@ -396,6 +397,7 @@ export const HUD: React.FC = () => {
               </span>
               <button
                 onClick={exitLandMode}
+                data-tour="land-exit"
                 className={`game-btn rounded-xl w-8 h-8 flex items-center justify-center ${TONE_BUTTON.red}`}
                 title="Bitti"
                 aria-label="Arsa işini bitir"
@@ -432,12 +434,12 @@ export const HUD: React.FC = () => {
         {buildMode.active && (
           <div ref={placementDockRef} className="hud-placement-dock fixed z-40 pointer-events-auto flex flex-col items-end gap-2 animate-fade-in">
             {!buildMode.pinned ? (
-              <div className="hud-placement-hint game-surface !border-kblu px-3 py-2 flex items-center gap-2 text-xs font-bold text-ink">
+              <div className="hud-placement-hint game-surface !border-kblu px-3 py-2 flex items-center gap-2 text-xs font-bold text-ink" data-tour="placement-hint">
                 <Target className="w-4 h-4 text-kblu" />
                 <span>Konumu sabitlemek için sahaya tıkla</span>
               </div>
             ) : (
-              <div className="game-surface !border-kblu p-1.5 grid grid-cols-3 gap-1">
+              <div className="game-surface !border-kblu p-1.5 grid grid-cols-3 gap-1" data-tour="placement-pad">
                 <span />
                 <button
                   onClick={() => nudgeBuildPreview('UP')}
@@ -488,6 +490,7 @@ export const HUD: React.FC = () => {
             <div className="flex items-center gap-2">
               {buildMode.pinned && (
                 <button
+                  data-tour="placement-place"
                   onClick={() => {
                     if (wouldAbsorb.length > 0) setConfirmMerge(true);
                     else confirmBuildPlacement();

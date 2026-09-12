@@ -153,7 +153,7 @@ export const FacilityPanel: React.FC = () => {
 
             {/* Where the custom comes from, so a park reads as a choice the
                 player can price rather than a toll they must pay. */}
-            <div className="k-row">
+            <div className="k-row" data-tour="facility-visits">
               <span>Ziyaret</span>
               <span>
                 <span className="text-ink">pompadan {fromPump}</span>
@@ -185,6 +185,7 @@ export const FacilityPanel: React.FC = () => {
             {/* The money the place has taken sits in its till until it is
                 fetched; this is the fetching. A manager does it on rounds. */}
             <button
+              data-tour="facility-till"
               onClick={() => collectTill(building.id)}
               disabled={till <= 0}
               className={`w-full py-3.5 game-btn font-display tracking-wide text-sm flex items-center justify-center gap-2 ${
@@ -197,6 +198,7 @@ export const FacilityPanel: React.FC = () => {
 
             {tariff && nextTariff && (
               <button
+                data-tour="facility-tariff"
                 onClick={() => cycleFacilityTariff(building.id)}
                 className="w-full py-3.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm"
               >
@@ -244,6 +246,7 @@ export const FacilityPanel: React.FC = () => {
             </button>
 
             <button
+              data-tour="facility-sell"
               onClick={() => sellStructure(building.id)}
               className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
             >

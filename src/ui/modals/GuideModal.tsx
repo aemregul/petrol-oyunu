@@ -3,12 +3,12 @@ import { useGameStore, EDIT_MODE_LEVEL } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { GAME_EVENTS } from '../../config/eventConfig';
 import { FUEL_DEAL_DISCOUNT, eventEffectSummary } from '../../domain/services/simulationEngine';
-import { X, BookOpen, Play } from 'lucide-react';
+import { X, BookOpen } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 
 /**
- * The guide (Emre, 2026-09-09): everything the tour says, at length, plus
- * what the tour cannot fit — why a thing is locked and when it opens, what
+ * The guide (Emre, 2026-09-09): everything the lessons say, at length, plus
+ * what a lesson card cannot fit — why a thing is locked and when it opens, what
  * each event on the road means, and how to grow faster. Figures are read
  * from the config so the book never drifts from the game.
  */
@@ -284,7 +284,6 @@ function sections(): Section[] {
 
 export const GuideModal: React.FC = () => {
   const setActiveModal = useGameStore((s) => s.setActiveModal);
-  const startTour = useGameStore((s) => s.startTour);
   const all = sections();
   const [active, setActive] = useState(all[0].id);
   const current = all.find((s) => s.id === active) ?? all[0];
@@ -319,14 +318,6 @@ export const GuideModal: React.FC = () => {
                 {s.title}
               </button>
             ))}
-            <span className="flex-1" />
-            <button
-              onClick={() => { sounds.playClick(); setActiveModal('NONE'); startTour(); }}
-              className="game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide bg-kyel text-ink flex items-center justify-center gap-1.5"
-            >
-              <Play className="w-3.5 h-3.5" />
-              Turu başlat
-            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-2">
             <div className="font-display text-xl text-ink">{current.title}</div>

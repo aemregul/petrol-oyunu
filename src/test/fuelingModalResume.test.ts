@@ -48,8 +48,7 @@ describe('manual fueling modal can be resumed', () => {
     useGameStore.setState({
       gameState: state,
       activeModal: 'NONE',
-      selectedVehicleId: null,
-      tour: { active: false, step: 0, resumeSpeed: 1 }
+      selectedVehicleId: null
     });
   });
 

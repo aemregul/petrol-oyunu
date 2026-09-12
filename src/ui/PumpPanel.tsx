@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor, ATTENDANT_HIRE_LEVEL } from '../config/gameConfig';
 import { calculateRepairCost } from '../domain/formulas/economy';
 import { Fuel, X, Wrench, Umbrella, Sun } from 'lucide-react';
 import { solarPrice, solarPeakKwhPerHour } from '../domain/services/energy';
@@ -120,7 +120,7 @@ export const PumpPanel: React.FC = () => {
           </p>
 
           {/* Stats Rows */}
-          <div className="flex flex-col text-xs">
+          <div className="flex flex-col text-xs" data-tour="pump-rows">
             <div className="k-row">
               <span>Durum</span>
               <span className={stateInfo.className}>{stateInfo.text}</span>
@@ -174,6 +174,7 @@ export const PumpPanel: React.FC = () => {
             {/* Pompacı Button (İşten çıkar or İşe Al) */}
             {attendant ? (
               <button
+                data-tour="pump-hire"
                 onClick={handleHireOrFire}
                 className="w-full py-3.5 game-btn bg-kred hover:bg-kred-dark text-white font-display tracking-wide text-sm"
               >
@@ -181,17 +182,25 @@ export const PumpPanel: React.FC = () => {
               </button>
             ) : (
               <button
+                data-tour="pump-hire"
                 onClick={handleHireOrFire}
-                disabled={!canAffordHire}
-                className="w-full py-3.5 game-btn bg-kgrn hover:bg-kgrn-dark text-white font-display tracking-wide text-sm"
+                disabled={!canAffordHire || gameState.player.level < ATTENDANT_HIRE_LEVEL}
+                className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
+                  gameState.player.level < ATTENDANT_HIRE_LEVEL
+                    ? 'bg-card text-mute cursor-not-allowed'
+                    : 'bg-kgrn hover:bg-kgrn-dark text-white'
+                }`}
               >
-                Pompacı Al — ₺{attendantConfig.hireCost.toLocaleString('tr-TR')}
+                {gameState.player.level < ATTENDANT_HIRE_LEVEL
+                  ? `Pompacı — Seviye ${ATTENDANT_HIRE_LEVEL} Gerekli`
+                  : `Pompacı Al — ₺${attendantConfig.hireCost.toLocaleString('tr-TR')}`}
               </button>
             )}
 
             {/* Upgrade Pump Button */}
             {upgrade ? (
               <button
+                data-tour="pump-upgrade"
                 onClick={handleUpgrade}
                 className="w-full py-3.5 game-btn bg-kgrn hover:bg-kgrn-dark text-white font-display tracking-wide text-sm"
               >
@@ -228,6 +237,7 @@ export const PumpPanel: React.FC = () => {
             {/* Extra modules (if not installed yet) */}
             {!pump.supportedFuels.includes('diesel') && (
               <button
+                data-tour="pump-modules"
                 onClick={() => addPumpFuel(pump.id, 'diesel')}
                 className="w-full py-2.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm"
               >
@@ -236,6 +246,7 @@ export const PumpPanel: React.FC = () => {
             )}
             {!pump.supportedFuels.includes('lpg') && (
               <button
+                data-tour="pump-modules"
                 onClick={() => addPumpFuel(pump.id, 'lpg')}
                 className="w-full py-2.5 game-btn bg-kblu hover:bg-kblu-dark text-white font-display tracking-wide text-sm"
               >
@@ -246,6 +257,7 @@ export const PumpPanel: React.FC = () => {
             {/* Panels on the roof: the sun into the block's bank. */}
             {pump.hasCanopy && !pump.hasSolarCanopy && (
               <button
+                data-tour="pump-solar"
                 onClick={() => fitSolarCanopy(pump.id)}
                 className="w-full py-2.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm flex items-center justify-center gap-1.5"
               >
@@ -288,6 +300,7 @@ export const PumpPanel: React.FC = () => {
               </button>
             ) : (
               <button
+                data-tour="pump-canopy"
                 onClick={() => fitCanopy(pump.id)}
                 disabled={gameState.player.cash < canopyPrice}
                 title={gameState.player.cash < canopyPrice ? 'Yetersiz bakiye' : 'Pompanın üstüne sundurma kur'}

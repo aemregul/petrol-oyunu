@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG, BuildingCatalogItem } from '../../config/gameConfig';
 import { GameState } from '../../domain/types/gameState';
@@ -7,6 +7,7 @@ import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../../domain/servi
 import { unitPrice, ownedCount, catalogLimitReason } from '../../domain/services/catalogRules';
 import { buyableParcels, parcelPrice, paveCost, parseParcelKey, LAND_BOUNDS, PARCEL } from '../../domain/services/land';
 import { sounds } from '../../audio/soundEffects';
+import { openTabs } from '../lessons/openTabs';
 import { CatalogPreview, CatalogPhotoBooth } from '../CatalogPreview';
 
 /*
@@ -101,6 +102,7 @@ const LandCards: React.FC<{
           geliştikçe artar. Arsa çitle gelir; inşaat için ayrıca beton dökülür.
         </div>
         <button
+          data-tour="land-buy"
           onClick={onBuyLand}
           disabled={forSale.length === 0}
           className={`${BUY} ${forSale.length === 0 ? BUY_OFF : BUY_ON}`}
@@ -123,6 +125,7 @@ const LandCards: React.FC<{
           {unpaved.length ? `${unpaved.length} betonsuz arsan var` : 'Betonsuz arsan yok'}
         </div>
         <button
+          data-tour="land-pave"
           onClick={onPave}
           disabled={unpaved.length === 0}
           className={`${BUY} ${unpaved.length === 0 ? BUY_OFF : BUY_ON}`}
@@ -262,7 +265,7 @@ const RoofCards: React.FC<{ level: number; onClose: () => void }> = ({ level, on
   return (
     <>
       {roofs.map((roof) => (
-        <div key={roof.key} className={CARD}>
+        <div key={roof.key} className={CARD} data-tour="roof-card">
           <div className={FRAME}>
             {roof.icon}
           </div>
@@ -306,6 +309,13 @@ export const BuildModal: React.FC = () => {
   const upgradeRoad = useGameStore((s) => s.upgradeRoad);
 
   const [category, setCategory] = useState<Category>('station');
+  // The open tab, for a lesson that teaches each tab the first time it is shown.
+  useEffect(() => {
+    openTabs.build = category;
+    return () => {
+      openTabs.build = null;
+    };
+  }, [category]);
 
   const items =
     category === 'land'
@@ -334,6 +344,7 @@ export const BuildModal: React.FC = () => {
           <span className="font-display text-xl tracking-wide">İnşaat & Yatırım</span>
           <button
             onClick={handleClose}
+            data-tour="build-close"
             className="game-btn bg-card text-ink w-9 h-9 rounded-md flex items-center justify-center"
             aria-label="Kapat"
           >
@@ -341,7 +352,7 @@ export const BuildModal: React.FC = () => {
           </button>
         </div>
 
-        <div className="px-6 pt-5 flex flex-wrap gap-2.5 shrink-0">
+        <div className="px-6 pt-5 flex flex-wrap gap-2.5 shrink-0" data-tour="build-tabs">
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -349,6 +360,7 @@ export const BuildModal: React.FC = () => {
                 sounds.playClick();
                 setCategory(tab.id);
               }}
+              data-tour={`build-tab-${tab.id}`}
               className={category === tab.id ? 'k-tab k-tab-on' : 'k-tab'}
             >
               {tab.name}
@@ -375,7 +387,7 @@ export const BuildModal: React.FC = () => {
             const owned = ownedCount(gameState, item.type);
 
             return (
-              <div key={item.type} className={CARD}>
+              <div key={item.type} className={CARD} data-tour={`build-card-${item.type}`}>
                 {/* What the thing actually looks like, before paying for it. */}
                 <CatalogPreview type={item.type} />
 
@@ -402,12 +414,13 @@ export const BuildModal: React.FC = () => {
                 {lock && <div className="text-kred font-black text-xs">{lock}</div>}
 
                 {lock ? (
-                  <div className={LOCKED}>
+                  <div className={LOCKED} data-tour="build-card-buy">
                     <Lock className="w-3.5 h-3.5" />
                     <span>KİLİTLİ</span>
                   </div>
                 ) : (
                   <button
+                    data-tour="build-card-buy"
                     onClick={() => enterBuildMode(item.type)}
                     disabled={!canAfford}
                     title={canAfford ? 'İnşa et' : 'Yetersiz bakiye'}

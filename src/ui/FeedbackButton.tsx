@@ -5,7 +5,7 @@ import { sounds } from '../audio/soundEffects';
 
 /**
  * The corner button that opens the feedback card (Emre, 2026-09-09). Bottom
- * right, clear of the bottom bar, under the tour's dim so a first-timer is
+ * right, clear of the bottom bar, under a lesson's dim so a first-timer is
  * not asked for an opinion before they have one.
  */
 export const FeedbackButton: React.FC = () => {

@@ -117,7 +117,7 @@ export const SettingsModal: React.FC = () => {
   const markNotificationsRead = useGameStore((s) => s.markNotificationsRead);
   const clearNotifications = useGameStore((s) => s.clearNotifications);
   const signOutAccount = useGameStore((s) => s.signOutAccount);
-  const startTour = useGameStore((s) => s.startTour);
+  const resetLessons = useGameStore((s) => s.resetLessons);
   const cloudSync = useGameStore((s) => s.cloudSync);
   const pushCloudSaveNow = useGameStore((s) => s.pushCloudSaveNow);
 
@@ -230,20 +230,33 @@ export const SettingsModal: React.FC = () => {
 
               <SectionTitle>Rehber</SectionTitle>
               <Hint>Neyin ne olduğu, neyin neden kilitli olduğu, olayların anlamı ve daha hızlı büyümenin yolları.</Hint>
-              <div className="grid grid-cols-2 gap-3 pb-1">
+              <div className="pb-1">
                 <button
                   onClick={() => { sounds.playClick(); setActiveModal('GUIDE'); }}
-                  className="game-btn py-3 rounded-md text-[14px] font-display tracking-wide bg-kvio text-white flex items-center justify-center gap-2"
+                  className="game-btn w-full py-3 rounded-md text-[14px] font-display tracking-wide bg-kvio text-white flex items-center justify-center gap-2"
                 >
                   <BookOpen className="w-4 h-4" />
                   <span>Rehberi Aç</span>
                 </button>
+              </div>
+
+              <SectionTitle>Dersler</SectionTitle>
+              <Hint>Bir şey ilk kez gerektiğinde oyun onu adım adım gösterir. Daha önce yaptığın işler için ders çıkmaz.</Hint>
+              <Choice
+                options={[
+                  { id: 'on', label: 'Açık' },
+                  { id: 'off', label: 'Kapalı' }
+                ]}
+                value={settings.lessonsOff ? 'off' : 'on'}
+                onPick={(id) => updateSettings({ lessonsOff: id === 'off' })}
+              />
+              <div className="pt-3 pb-1">
                 <button
-                  onClick={() => { sounds.playClick(); startTour(); }}
-                  className="game-btn py-3 rounded-md text-[14px] font-display tracking-wide bg-card hover:bg-board text-ink flex items-center justify-center gap-2"
+                  onClick={() => { sounds.playClick(); resetLessons(); }}
+                  className="game-btn w-full py-3 rounded-md text-[14px] font-display tracking-wide bg-card hover:bg-board text-ink flex items-center justify-center gap-2"
                 >
                   <Play className="w-4 h-4" />
-                  <span>Turu Yeniden Başlat</span>
+                  <span>Atlanan Dersleri Geri Getir</span>
                 </button>
               </div>
 

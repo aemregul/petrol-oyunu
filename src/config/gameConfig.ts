@@ -376,6 +376,14 @@ export function upgradePathFor(type: string): string {
 /** What one tank package holds at each level, in litres. */
 export const TANK_PACKAGE_LITERS: Record<number, number> = { 1: 1500, 2: 3000, 3: 6000 };
 
+/**
+ * The player level a pump attendant can first be hired at — the ladder's
+ * "Pompacı İşe Alma" rung. One number for every door to a hire: the Personel
+ * card had it written in, the pump's own card did not, and a new station
+ * could hire on its first morning (Emre, 2026-09-11).
+ */
+export const ATTENDANT_HIRE_LEVEL = 3;
+
 export const GAME_CONFIG: GameConfig = {
   version: '1.0.0',
   fuels: {
