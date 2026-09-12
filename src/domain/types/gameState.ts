@@ -121,6 +121,10 @@ export interface PlayerState {
     repairActionsCount: number;
     /** Net profit of the last three completed days, oldest first. */
     recentNetProfits?: number[];
+    /** Prices the player has set by hand, fuel or kWh. Absent on saves from before it was counted. */
+    priceChanges?: number;
+    /** Structures the player has picked up and put down somewhere else. */
+    structuresMoved?: number;
   };
   unlocks: string[];
 }
@@ -412,7 +416,7 @@ export type MissionMetric =
 export interface MissionEntity {
   id: string;
   templateId: string;
-  type: 'TUTORIAL' | 'DAILY_NORMAL' | 'DAILY_MAIN';
+  type: 'DAILY_NORMAL' | 'DAILY_MAIN';
   description: string;
   metric: MissionMetric;
   target: number;
@@ -705,6 +709,11 @@ export interface GameState {
   fuelPurchaseHistory: FuelPurchaseRecord[];
   loans: LoanEntity[];
   missions: MissionEntity[];
+  /**
+   * Where the player is on the main mission chain (missionChain.ts): the
+   * step on the board, and whether its goal being met has been announced.
+   */
+  missionChain: { step: number; announced: boolean };
   activeEvents: ActiveGameEvent[];
   /** Template ids already fired today, so one event cannot stack on itself. */
   todayEventIds: string[];

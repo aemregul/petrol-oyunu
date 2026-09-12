@@ -31,6 +31,8 @@ export interface LessonView {
   buildModeActive: boolean;
   /** The building being placed has been put down on a spot and awaits Yerleştir. */
   buildPinned: boolean;
+  /** Düzenle is on: a click on a structure picks it up. */
+  editMode: boolean;
   tabs: OpenTabs;
 }
 
@@ -47,7 +49,8 @@ export type LessonPanel =
   | 'PUMP_CARD'
   | 'FACILITY_CARD'
   | 'STRUCTURE_CARD'
-  | 'PLACEMENT';
+  | 'PLACEMENT'
+  | 'MISSIONS';
 
 /**
  * A box standing in the scene: centre and half-extents in simulation grid
@@ -123,6 +126,11 @@ export interface Lesson {
   title: string;
   /** Opens with this panel; see LessonPanel. */
   panel?: LessonPanel;
+  /**
+   * A guide: started only by a goal's Göster button, never offered on its
+   * own, and never put behind the player, so it can be asked for again.
+   */
+  guide?: boolean;
   /**
    * Lessons this one also teaches in full: finishing or skipping it puts them
    * behind the player too, so the same cards are not shown twice.

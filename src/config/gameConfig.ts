@@ -1,4 +1,4 @@
-import { MissionMetric, VehicleArchetype, VehicleModelVariant } from '../domain/types/gameState';
+import { VehicleArchetype, VehicleModelVariant } from '../domain/types/gameState';
 
 /**
  * Project Highway - Master Versioned Game Configuration (v1.0.0)
@@ -352,14 +352,6 @@ export interface GameConfig {
     expansionBDepth: number;
     cellSizeMeters: number; // 2.0
   };
-  tutorialTasks: Array<{
-    id: string;
-    description: string;
-    metric: MissionMetric;
-    target: number;
-    rewardCash: number;
-    rewardXp: number;
-  }>;
 }
 
 /**
@@ -383,6 +375,12 @@ export const TANK_PACKAGE_LITERS: Record<number, number> = { 1: 1500, 2: 3000, 3
  * could hire on its first morning (Emre, 2026-09-11).
  */
 export const ATTENDANT_HIRE_LEVEL = 3;
+
+/**
+ * The level Düzenle — picking up what is already built — unlocks at. Here
+ * beside the attendant's so the mission chain can read it without the store.
+ */
+export const EDIT_MODE_LEVEL = 5;
 
 export const GAME_CONFIG: GameConfig = {
   version: '1.0.0',
@@ -1601,14 +1599,5 @@ export const GAME_CONFIG: GameConfig = {
     expansionAWidth: 8,
     expansionBDepth: 8,
     cellSizeMeters: 2.0
-  },
-  tutorialTasks: [
-    { id: 'T1', description: 'İlk gelen araca benzin doldur ve ödemeyi al', metric: 'CUSTOMERS_SERVED', target: 1, rewardCash: 500, rewardXp: 50 },
-    { id: 'T2', description: '3 müşteriye eksiksiz hizmet vererek istasyonu işlet', metric: 'CUSTOMERS_SERVED', target: 3, rewardCash: 500, rewardXp: 50 },
-    { id: 'T3', description: 'Tedarik panelinden bir benzin tankeri siparişi ver', metric: 'ORDERS_PLACED', target: 1, rewardCash: 450, rewardXp: 75 },
-    { id: 'T4', description: 'Fiyatlandırma paneline girerek satış fiyatını ayarla', metric: 'PRICE_SET', target: 1, rewardCash: 500, rewardXp: 50 },
-    // Kardeşleriyle aynı ödül: "+₺0" yazan bir görev, ödülsüz değil bozuk görünür (Emre, 2026-09-09).
-    { id: 'T5', description: 'İnşaat modunda bir yapıyı taşı veya yeni bir tabela yerleştir', metric: 'BUILD_PLACED', target: 1, rewardCash: 500, rewardXp: 50 },
-    { id: 'T6', description: 'Günü tamamla ve Gün Sonu Faaliyet Raporunu incele', metric: 'DAYS_COMPLETED', target: 1, rewardCash: 1000, rewardXp: 100 }
-  ]
+  }
 };

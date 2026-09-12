@@ -7,6 +7,7 @@ import { GAME_CONFIG } from '../config/gameConfig';
 import { LESSONS, LOW_TANK_SHARE, firstLessonStep, lessonById, lessonClock, lessonToStart } from '../ui/lessons/lessons';
 import { resolveDyn, type LessonView } from '../ui/lessons/lessonTypes';
 import type { FuelType, GameState } from '../domain/types/gameState';
+import { MISSION_CHAIN } from '../domain/services/missionChain';
 
 /**
  * Emre, 2026-09-11: the first-run tour was too long and hardly anyone read
@@ -28,6 +29,7 @@ function view(state: GameState, extra: Partial<LessonView> = {}): LessonView {
     landMode: { active: false, intent: 'BUY' },
     buildModeActive: false,
     buildPinned: false,
+    editMode: false,
     tabs: { ...NO_TABS },
     ...extra
   };
@@ -113,7 +115,6 @@ describe('every lesson card', () => {
       ['office_summary', 'summary'],
       ['office_price', 'price'],
       ['office_accounts', 'accounts'],
-      ['office_missions', 'missions'],
       ['office_maintenance', 'maintenance']
     ] as const) {
       out.push({ lesson, view: view(station(), { activeModal: 'OFFICE', tabs: { ...NO_TABS, office: tab } }), subject: tab });
@@ -129,6 +130,12 @@ describe('every lesson card', () => {
       view: view(withBuilding(station(), 'pole', 'light_pole', [3, 3], [1, 1]), { selectedBuildingId: 'pole' }),
       subject: 'pole'
     });
+    out.push({ lesson: 'missions_panel', view: view(station(), { activeModal: 'MISSIONS' }), subject: 'missions' });
+    // Each Göster guide, about what it would start about on a new station.
+    for (const guide of LESSONS.filter((l) => l.guide)) {
+      const guideView = view(station());
+      out.push({ lesson: guide.id, view: guideView, subject: guide.subject(guideView)! });
+    }
     return out;
   }
 
@@ -166,7 +173,7 @@ describe('every lesson card', () => {
     const floating: string[] = [];
     for (const c of cases()) {
       // The concrete step comes after a parcel has been bought and left bare.
-      if (c.lesson === 'buy_land') c.view.state.station.plots.ownedParcels.push('0,2');
+      if (c.lesson === 'buy_land' || c.lesson === 'guide_land') c.view.state.station.plots.ownedParcels.push('0,2');
       for (const step of lessonById(c.lesson)!.steps) {
         if (resolveDyn(step.target, c.view, c.subject) === null) floating.push(`${c.lesson}#${step.id}`);
       }
@@ -372,7 +379,6 @@ describe('panel lessons', () => {
     expect(office('accounts')?.id).toBe('office_accounts');
     // The loans page is taught from inside the Muhasebe lesson, not on its own.
     expect(office('accounts', true)).toBeNull();
-    expect(office('missions')?.id).toBe('office_missions');
     expect(office('maintenance')?.id).toBe('office_maintenance');
   });
 
@@ -437,5 +443,58 @@ describe('panel lessons', () => {
     const backOnAccounts = view(state, { activeModal: 'OFFICE', tabs: { ...NO_TABS, office: 'accounts', officeLoans: false } });
     expect(done(onLoans, 'accounts')).toBe(false);
     expect(done(backOnAccounts, 'accounts')).toBe(true);
+  });
+});
+
+/**
+ * Emre, 2026-09-12: the goals got a Göster that walks the player to the thing
+ * to press. A guide is asked for, so it never offers itself; and it says why
+ * rather than lighting a button that will not work.
+ */
+describe('goal guides', () => {
+  it('stand behind every goal on the chain, and behind the level a locked goal waits on', () => {
+    for (const step of MISSION_CHAIN) expect(lessonById(step.guide)?.guide, step.id).toBe(true);
+    expect(lessonById('guide_level')?.guide).toBe(true);
+  });
+
+  it('never offer themselves, in any panel, even with every lesson behind the player', () => {
+    const state = createInitialGameState();
+    state.settings.lessonsDone = LESSONS.filter((l) => !l.guide).map((l) => l.id);
+    const screens: Partial<LessonView>[] = [
+      {},
+      { activeModal: 'BUILD', tabs: { ...NO_TABS, build: 'station' } },
+      { activeModal: 'OFFICE', tabs: { ...NO_TABS, office: 'price' } },
+      { activeModal: 'STAFF', tabs: { ...NO_TABS, staff: 'attendants' } },
+      { activeModal: 'MISSIONS' },
+      { selectedPumpId: 'pump_1' }
+    ];
+    for (const screen of screens) expect(lessonToStart(view(state, screen))).toBeNull();
+  });
+
+  it('teach the goals panel the first time it opens, until a few goals are behind the player', () => {
+    const state = createInitialGameState();
+    expect(lessonToStart(view(state, { activeModal: 'MISSIONS' }))).toEqual({ id: 'missions_panel', subject: 'missions' });
+    state.missionChain.step = 3;
+    expect(lessonToStart(view(state, { activeModal: 'MISSIONS' }))).toBeNull();
+  });
+
+  it('say why instead of lighting a button that will not work', () => {
+    const lesson = lessonById('guide_build_trash_can')!;
+    const state = createInitialGameState();
+    const category = GAME_CONFIG.buildings.trash_can.category;
+    const tab = category === 'service' || category === 'energy' ? category : 'station';
+    const inPanel = view(state, { activeModal: 'BUILD', tabs: { ...NO_TABS, build: tab } });
+    const firstShown = () => {
+      const subject = lesson.subject(inPanel)!;
+      const step = lesson.steps[firstLessonStep(lesson, inPanel, subject, 0)];
+      return { id: step.id, body: resolveDyn(step.body, inPanel, subject).join(' ') };
+    };
+
+    // A new station is level 1; the bin opens at level 2.
+    expect(firstShown()).toEqual({ id: 'blocked', body: expect.stringContaining('Seviye 2') });
+    state.player.level = 2;
+    expect(firstShown().id).toBe('buy');
+    state.player.cash = 1000;
+    expect(firstShown()).toEqual({ id: 'blocked', body: expect.stringContaining('₺1.300') });
   });
 });

@@ -28,6 +28,7 @@ import {
   ActiveGameEvent
 } from '../types/gameState';
 import { GAME_CONFIG } from '../../config/gameConfig';
+import { chainStatus } from './missionChain';
 import {
   routeAround,
   routeAroundOrNull,
@@ -3471,8 +3472,8 @@ function advanceMission(mission: MissionEntity, amount: number, effects: SimEffe
 }
 
 /**
- * Advances every open mission watching this metric. Tutorial and daily
- * missions share the counter, so one sale can move several goals at once.
+ * Advances every open daily goal watching this metric; they share the
+ * counter, so one sale can move several goals at once.
  */
 export function trackMissionMetric(
   state: GameState,
@@ -3484,6 +3485,20 @@ export function trackMissionMetric(
   for (const mission of state.missions) {
     if (mission.metric === metric) advanceMission(mission, amount, effects);
   }
+}
+
+/**
+ * Says once that the main goal on the board has been met, so its reward is
+ * not left waiting unseen. The goal card shows it all along; this marks the
+ * moment it happens.
+ */
+export function announceMissionChain(state: GameState, effects: SimEffects): void {
+  if (!state.missionChain || state.missionChain.announced) return;
+  const status = chainStatus(state);
+  if (!status?.complete) return;
+  state.missionChain.announced = true;
+  playCue(effects, 'levelUp');
+  notify(effects, 'REWARD', 'Ana Görev Tamamlandı!', `${status.step.title} — ödülün Görevler'de seni bekliyor.`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -3701,14 +3716,23 @@ export function eventEffectSummary(effects: GameEventEffects): string {
 /* Daily missions                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The daily goals this station can actually meet: its level, and anything a
+ * goal needs standing — no market-sales goal without a shop (Emre, 2026-09-12).
+ */
+export function dailyTemplatesFor(state: GameState) {
+  const standing = new Set(Object.values(state.buildings).map((b) => b.type));
+  return DAILY_MISSION_TEMPLATES.filter(
+    (t) => t.minLevel <= state.player.level && (!t.needs || t.needs.some((type) => standing.has(type)))
+  );
+}
+
 /** Replaces yesterday's daily goals with a fresh set for the new day. */
 export function generateDailyMissions(state: GameState): void {
-  // Keep tutorials and anything still waiting to be claimed.
-  state.missions = state.missions.filter(
-    (m) => m.type === 'TUTORIAL' || (m.completed && !m.claimed)
-  );
+  // Keep anything still waiting to be claimed.
+  state.missions = state.missions.filter((m) => m.completed && !m.claimed);
 
-  const eligible = DAILY_MISSION_TEMPLATES.filter((t) => t.minLevel <= state.player.level);
+  const eligible = dailyTemplatesFor(state);
   if (eligible.length === 0) return;
 
   const pool = [...eligible];
@@ -8338,4 +8362,5 @@ export function runSimulationTick(
   tickEnergy(state, dt);
   tickStationCondition(state, dt, effects);
   tickManagerAutomation(state, dt, effects);
+  announceMissionChain(state, effects);
 }

@@ -8,6 +8,8 @@ import { drivewaySideAt, hourOfDay } from '../domain/services/simulationEngine';
 import { ActiveEventsBar } from './ActiveEventsBar';
 import { TankerStatusBar } from './TankerStatusBar';
 import { StockStrip } from './StockStrip';
+import { GoalCard } from './GoalCard';
+import { chainStatus } from '../domain/services/missionChain';
 import { PumpPanel } from './PumpPanel';
 import { FacilityPanel } from './FacilityPanel';
 import { StructurePanel } from './StructurePanel';
@@ -103,7 +105,9 @@ export const HUD: React.FC = () => {
       ? absorbedByRestComplex(gameState, drivewaySideAt(buildMode.position[1]))
       : [];
 
-  const claimableMissions = gameState.missions.filter((m) => m.completed && !m.claimed).length;
+  // The day's goals waiting to be paid, and the main goal if it is met.
+  const claimableMissions =
+    gameState.missions.filter((m) => m.completed && !m.claimed).length + (chainStatus(gameState)?.complete ? 1 : 0);
   const unreadNotifications = gameState.notifications.filter((n) => !n.read).length;
 
   // The button wears the view it is currently in, and names the one it would
@@ -142,7 +146,7 @@ export const HUD: React.FC = () => {
     isOn: (modal: typeof activeModal, tab: typeof officeTab) => boolean;
   };
   const NAV: Door[] = [
-    { key: 'office', label: 'Ofis', title: 'Ofis', dot: 'bg-kyel', badge: 0, open: () => openOffice('summary'), isOn: (m, t) => m === 'OFFICE' && t !== 'missions' },
+    { key: 'office', label: 'Ofis', title: 'Ofis', dot: 'bg-kyel', badge: 0, open: () => openOffice('summary'), isOn: (m) => m === 'OFFICE' },
     { key: 'build', label: 'İnşaat', title: 'İnşaat & Yatırım', dot: 'bg-kblu', badge: 0, open: () => setActiveModal('BUILD'), isOn: (m) => m === 'BUILD' },
     { key: 'fuel', label: 'Tedarik', title: 'Yakıt Siparişi', dot: 'bg-kgrn', badge: 0, open: () => setActiveModal('FUEL_ORDER'), isOn: (m) => m === 'FUEL_ORDER' },
     { key: 'staff', label: 'Personel', title: 'Personel & Müdür', dot: 'bg-kred', badge: 0, open: () => setActiveModal('STAFF'), isOn: (m) => m === 'STAFF' }
@@ -158,7 +162,7 @@ export const HUD: React.FC = () => {
 
   const ICONS: Array<Door & { icon: React.ElementType; badgeTone: string }> = [
     { key: 'maintenance', label: '', title: 'Bakım', dot: '', badge: attention, badgeTone: 'bg-kred', icon: Wrench, open: () => openOffice('maintenance'), isOn: (m, t) => m === 'OFFICE' && t === 'maintenance' },
-    { key: 'missions', label: '', title: 'Görevler', dot: '', badge: claimableMissions, badgeTone: 'bg-kgrn', icon: ClipboardList, open: () => openOffice('missions'), isOn: (m, t) => m === 'OFFICE' && t === 'missions' },
+    { key: 'missions', label: '', title: 'Görevler', dot: '', badge: claimableMissions, badgeTone: 'bg-kgrn', icon: ClipboardList, open: () => setActiveModal('MISSIONS'), isOn: (m) => m === 'MISSIONS' },
     { key: 'account', label: '', title: 'Hesabım', dot: '', badge: 0, badgeTone: '', icon: UserRound, open: () => setActiveModal('ACCOUNT'), isOn: (m) => m === 'ACCOUNT' },
     { key: 'bell', label: '', title: 'Bildirimler', dot: '', badge: unreadNotifications, badgeTone: 'bg-kred', icon: Bell, open: () => setActiveModal('NOTIFICATIONS'), isOn: (m) => m === 'NOTIFICATIONS' },
     { key: 'settings', label: '', title: 'Ayarlar', dot: '', badge: 0, badgeTone: '', icon: SettingsIcon, open: () => setActiveModal('SETTINGS'), isOn: (m) => m === 'SETTINGS' },
@@ -308,7 +312,10 @@ export const HUD: React.FC = () => {
             showing — a flex row with a fixed left spacer slid them right the
             moment the card went away (Emre, 2026-09-08). */}
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2">
-          <div />
+          {/* The main goal, always in view (Emre, 2026-09-12). */}
+          <div className="min-w-0">
+            <GoalCard />
+          </div>
           <div data-tour="stock"><StockStrip /></div>
           <div className="hud-events justify-self-end">
             <ActiveEventsBar />

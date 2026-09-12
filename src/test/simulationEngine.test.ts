@@ -13,6 +13,8 @@ import {
   getEventModifiers,
   generateDailyMissions,
   trackMissionMetric,
+  announceMissionChain,
+  dailyTemplatesFor,
   queueSlotPosition,
   getLayout,
   drivewayMouths,
@@ -37,6 +39,7 @@ import {
 import { GAME_EVENTS } from '../config/eventConfig';
 import { GameState, VehicleEntity, VehicleState } from '../domain/types/gameState';
 import { GAME_CONFIG } from '../config/gameConfig';
+import { MISSION_CHAIN, chainStatus } from '../domain/services/missionChain';
 
 /**
  * Vehicle spawning is a per-tick dice roll, so tests that wait for a car to
@@ -633,23 +636,26 @@ describe('simulationEngine - attendants', () => {
 });
 
 describe('simulationEngine - missions', () => {
-  it('advances the supply-order mission when fuel is ordered', () => {
+  it('meets the main goal that asks for a fuel order once one is placed', () => {
     const state = createInitialGameState();
     state.player.cash = 100000;
+    state.missionChain.step = MISSION_CHAIN.findIndex((s) => s.id === 'order_fuel');
     const effects = createEffects();
 
-    const mission = state.missions.find((m) => m.templateId === 'T3')!;
-    expect(mission.progress).toBe(0);
-
+    expect(chainStatus(state)?.complete).toBe(false);
     placeFuelOrder(state, 'gasoline', 500, effects);
-    expect(mission.progress).toBe(1);
-    expect(mission.completed).toBe(true);
+    expect(chainStatus(state)?.complete).toBe(true);
   });
 
-  it('takes three served customers to finish the T2 mission', () => {
+  it('announces a met main goal once, not on every tick', () => {
     const state = createInitialGameState();
-    const mission = state.missions.find((m) => m.templateId === 'T2')!;
-    expect(mission.target).toBe(3);
+    state.player.statistics.totalCustomersServed = 1;
+    const effects = createEffects();
+
+    announceMissionChain(state, effects);
+    announceMissionChain(state, effects);
+    expect(effects.notifications.filter((n) => n.title === 'Ana Görev Tamamlandı!')).toHaveLength(1);
+    expect(state.missionChain.announced).toBe(true);
   });
 });
 
@@ -939,10 +945,9 @@ describe('simulationEngine - daily missions', () => {
 
     generateDailyMissions(state);
 
-    const dailies = state.missions.filter((m) => m.type !== 'TUTORIAL');
+    const dailies = state.missions;
     expect(dailies.length).toBeGreaterThan(0);
     expect(dailies.filter((m) => m.type === 'DAILY_MAIN')).toHaveLength(1);
-    expect(state.missions.filter((m) => m.type === 'TUTORIAL')).toHaveLength(6);
 
     for (const mission of dailies) {
       expect(mission.target).toBeGreaterThan(0);
@@ -954,14 +959,27 @@ describe('simulationEngine - daily missions', () => {
   it('advances every mission watching the same metric at once', () => {
     const state = createInitialGameState();
     const effects = createEffects();
+    const goal = (id: string, target: number) => ({
+      id,
+      templateId: id,
+      type: 'DAILY_NORMAL' as const,
+      description: id,
+      metric: 'CUSTOMERS_SERVED' as const,
+      target,
+      progress: 0,
+      rewardCash: 100,
+      rewardXp: 10,
+      completed: false,
+      claimed: false,
+      issuedOnDay: 1
+    });
+    state.missions = [goal('one', 1), goal('three', 3)];
 
     trackMissionMetric(state, 'CUSTOMERS_SERVED', 1, effects);
 
-    const t1 = state.missions.find((m) => m.templateId === 'T1')!;
-    const t2 = state.missions.find((m) => m.templateId === 'T2')!;
-    expect(t1.completed).toBe(true);
-    expect(t2.progress).toBe(1);
-    expect(t2.completed).toBe(false);
+    expect(state.missions[0].completed).toBe(true);
+    expect(state.missions[1].progress).toBe(1);
+    expect(state.missions[1].completed).toBe(false);
   });
 
   it('keeps unclaimed goals when the next day is generated', () => {
@@ -969,7 +987,7 @@ describe('simulationEngine - daily missions', () => {
     state.player.level = 8;
     generateDailyMissions(state);
 
-    const earned = state.missions.find((m) => m.type !== 'TUTORIAL')!;
+    const earned = state.missions[0];
     earned.completed = true;
     earned.progress = earned.target;
 
@@ -977,6 +995,16 @@ describe('simulationEngine - daily missions', () => {
     generateDailyMissions(state);
 
     expect(state.missions.some((m) => m.id === earned.id)).toBe(true);
+  });
+
+  // Emre, 2026-09-12: goals are picked by what the station has, not only its level.
+  it('posts no market-sales goal on a station with no shop to sell from', () => {
+    const state = createInitialGameState();
+    state.player.level = 8;
+    expect(dailyTemplatesFor(state).map((t) => t.id)).not.toContain('D_MARKET');
+
+    state.buildings.shop = { ...Object.values(state.buildings)[0], id: 'shop', type: 'mini_market' };
+    expect(dailyTemplatesFor(state).map((t) => t.id)).toContain('D_MARKET');
   });
 });
 

@@ -1,7 +1,11 @@
-import { ATTENDANT_HIRE_LEVEL, GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
+import { ATTENDANT_HIRE_LEVEL, EDIT_MODE_LEVEL, GAME_CONFIG, upgradePathFor } from '../../config/gameConfig';
 import type { FuelType, GameState, VehicleEntity } from '../../domain/types/gameState';
 import { vehicleBodyHalfExtents } from '../../domain/services/vehicleBody';
 import { facilityTariff, isFacility, nextTariffIndex } from '../../domain/services/facilities';
+import { unitPrice } from '../../domain/services/catalogRules';
+import { drivewaySideAt, energyCapacityOn } from '../../domain/services/simulationEngine';
+import { solarPrice } from '../../domain/services/energy';
+import { LEVEL_DATIVE, MISSION_CHAIN, chainStatus, levelXp } from '../../domain/services/missionChain';
 import {
   STARTING_PARCELS,
   buyableParcels,
@@ -12,8 +16,10 @@ import {
   parseParcelKey
 } from '../../domain/services/land';
 import { openTabs } from './openTabs';
+import { resolveDyn } from './lessonTypes';
 import type {
   Lesson,
+  LessonAbandon,
   LessonPanel,
   LessonStep,
   LessonTarget,
@@ -991,7 +997,7 @@ const officePanel: Lesson = {
       id: 'tabs',
       title: 'Ofis',
       body: [
-        'İstasyonun masası: Özet genel durum, Fiyat satış fiyatları, Muhasebe gelir-gider ve kredi, Görevler günlük hedefler, Bakım pompa ve saha.',
+        'İstasyonun masası: Özet genel durum, Fiyat satış fiyatları, Muhasebe gelir-gider ve kredi, Bakım pompa ve saha.',
         'Her sekmeyi ilk açtığında ayrıca anlatacağım.'
       ],
       target: dom('office-tabs'),
@@ -1122,21 +1128,33 @@ const officeAccounts: Lesson = {
   ]
 };
 
-const officeMissions: Lesson = {
-  id: 'office_missions',
+/** Görevler, its own panel since the goals left the office (Emre, 2026-09-12). */
+const missionsPanel: Lesson = {
+  id: 'missions_panel',
   title: 'Görevler',
-  panel: 'OFFICE',
-  known: (state) => state.missions.some((m) => m.claimed),
-  subject: (view) => (officeOn(view, 'missions') ? 'missions' : null),
+  panel: 'MISSIONS',
+  // A player a few goals in has already found the goals.
+  known: (state) => (state.missionChain?.step ?? 0) >= 3,
+  subject: () => 'missions',
   steps: [
     {
-      id: 'list',
-      title: 'Görevler',
+      id: 'chain',
+      title: 'Ana görev',
       body: [
-        'Her sabah yeni günlük görevler gelir. Tamamlanan görevin yanında yeşil ödül düğmesi çıkar; bas, para kasana geçsin.',
+        'Ana görev oyunun akışını izler: ödülünü alınca sıradaki gelir.',
+        "Nereden yapılacağını bulamazsan Göster'e bas; seni oraya götürüp neye basacağını gösteririm."
+      ],
+      target: dom('missions-chain'),
+      advance: next
+    },
+    {
+      id: 'daily',
+      title: 'Günlük görevler',
+      body: [
+        'Her sabah yenilenir. Tamamlananın yeşil düğmesine bas, ödülü kasana geçsin.',
         'Alt çubuktaki pano düğmesinin yeşil sayısı alınmayı bekleyen ödülleri sayar.'
       ],
-      target: dom('missions-list'),
+      target: dom('missions-daily'),
       advance: next
     }
   ]
@@ -1331,6 +1349,512 @@ const structureCard: Lesson = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Göster: görevlerin rehberleri                                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A goal's Göster (Emre, 2026-09-12: a player could not find where to move a
+ * building for the goal that asked for it). A guide walks from the HUD to the
+ * thing to press — the door, the tab, the button — and waits for the press.
+ * When the thing cannot be done yet it says why, rather than lighting a
+ * button that will not work. Guides are asked for, so they are never offered
+ * on their own and never put behind the player.
+ */
+
+/** A guide that found the thing cannot be done yet carries this on its subject. */
+const BLOCKED = 'blocked:';
+const isBlocked = (subject: string) => subject.startsWith(BLOCKED);
+const unblocked = (subject: string) => (isBlocked(subject) ? subject.slice(BLOCKED.length) : subject);
+
+interface GuideSpec {
+  id: string;
+  title: string;
+  /** The HUD door to the panel the thing is in, and the panel it opens. */
+  door?: { anchor: string; modal: string; body: string };
+  /** The tab inside that panel. */
+  tab?: { anchor: string; on: (view: LessonView) => boolean; body: string };
+  /** The doing. */
+  steps: LessonStep[];
+  /** Why it cannot be done right now, or null when it can. Asked when the guide starts. */
+  blocked?: (view: LessonView) => string | null;
+  /** What the steps measure against, taken when the guide starts. */
+  subject?: (view: LessonView) => string;
+  /** Has the player walked away from it, by step id? By default: shut the door's panel. */
+  abandon?: (view: LessonView, subject: string, stepId: string | undefined) => LessonAbandon;
+}
+
+function guide(spec: GuideSpec): Lesson {
+  const reason = (view: LessonView) => spec.blocked?.(view) ?? null;
+  const steps: LessonStep[] = [];
+  if (spec.door) {
+    const { anchor, modal, body } = spec.door;
+    steps.push({
+      id: 'door',
+      title: spec.title,
+      body: [body],
+      target: dom(anchor),
+      advance: { kind: 'until', done: (view) => view.activeModal === modal },
+      skip: (view) => view.activeModal === modal
+    });
+  }
+  if (spec.tab) {
+    const { anchor, on, body } = spec.tab;
+    steps.push({ id: 'tab', title: spec.title, body: [body], target: dom(anchor), advance: { kind: 'until', done: on }, skip: on });
+  }
+  for (const step of spec.steps) {
+    steps.push({ ...step, skip: (view, subject) => isBlocked(subject) || !!step.skip?.(view, subject) });
+  }
+  const first = spec.steps[0];
+  steps.push({
+    id: 'blocked',
+    title: 'Şimdilik olmaz',
+    body: (view) => [reason(view) ?? 'Şu an yapılamıyor.'],
+    target: (view, subject) => resolveDyn(first.target, view, unblocked(subject)),
+    advance: next,
+    skip: (_view, subject) => !isBlocked(subject)
+  });
+
+  const modal = spec.door?.modal;
+  const leftPanel = (view: LessonView, _subject: string, stepId: string | undefined): LessonAbandon =>
+    modal && stepId !== 'door' && view.activeModal !== modal && !view.buildModeActive && !view.landMode.active
+      ? 'skip'
+      : null;
+  const abandon = spec.abandon ?? leftPanel;
+
+  return {
+    id: spec.id,
+    title: spec.title,
+    guide: true,
+    known: () => false,
+    subject: (view) => {
+      const subject = spec.subject?.(view) ?? spec.id;
+      return reason(view) === null ? subject : BLOCKED + subject;
+    },
+    abandon: (view, subject, step) => abandon(view, subject, steps[step]?.id),
+    steps
+  };
+}
+
+/** Short of the money, in the card's words. */
+const shortOf = (what: string, price: number, cash: number) =>
+  `${what} ${lira(price)}; kasada ${lira(cash)} var. Biraz daha kazanınca Göster'e yeniden bas.`;
+
+const firstPump = (state: GameState) => Object.keys(state.pumps)[0] ?? null;
+
+const guideServe = guide({
+  id: 'guide_serve',
+  title: 'Müşteri',
+  steps: [
+    {
+      id: 'pump',
+      title: 'Müşteriye hizmet',
+      body: [
+        'Yoldan gelen araç pompaya yanaşır. Araca tıkla, yakıtını doldur, parasını al.',
+        'Her hizmet para ve XP getirir; pompacı alınca bu işi o yapar.'
+      ],
+      target: (view) => world(pumpBox(view.state, firstPump(view.state))) ?? dom('stats'),
+      advance: next
+    }
+  ]
+});
+
+const priceChanges = (view: LessonView) => view.state.player.statistics.priceChanges ?? 0;
+
+const guidePrice = guide({
+  id: 'guide_price',
+  title: 'Satış fiyatı',
+  door: { anchor: 'office', modal: 'OFFICE', body: "Fiyatlar Ofis'te ayarlanır. Tıkla." },
+  tab: { anchor: 'office-tab-price', on: (view) => officeOn(view, 'price'), body: 'Fiyat sekmesine tıkla.' },
+  subject: (view) => String(priceChanges(view)),
+  steps: [
+    {
+      id: 'set',
+      title: 'Fiyatı oynat',
+      body: [
+        '−/+ fiyatı 10 kuruş oynatır. Bölge ortalamasının altı daha çok müşteri çeker, üstü litre başına daha çok kazandırır.',
+        'Birine bas.'
+      ],
+      target: dom('price-rows'),
+      advance: { kind: 'until', done: (view, before) => priceChanges(view) > Number(before) }
+    }
+  ]
+});
+
+const guideOrder = guide({
+  id: 'guide_order',
+  title: 'Yakıt siparişi',
+  door: { anchor: 'fuel', modal: 'FUEL_ORDER', body: "Yakıt Tedarik'ten gelir. Tıkla." },
+  subject: (view) => firstSoldFuel(view.state),
+  // Fifty litres and the delivery, as the low-tank lesson reckons the smallest order.
+  blocked: (view) => {
+    const fuel = firstSoldFuel(view.state);
+    const conf = GAME_CONFIG.fuels[fuel];
+    const least = conf.deliveryFee + (view.state.pricing[fuel]?.todayWholesaleCost ?? conf.baseWholesale) * 50;
+    return view.state.player.cash < least ? shortOf('En küçük sipariş nakliyesiyle', least, view.state.player.cash) : null;
+  },
+  steps: [
+    {
+      id: 'buy',
+      title: 'Siparişi ver',
+      body: (_view, fuel) => [
+        `Düğmedeki tutar yakıt artı ${lira(GAME_CONFIG.fuels[fuelOf(fuel)].deliveryFee)} nakliye. Bas, tanker yola çıksın.`
+      ],
+      target: (_view, fuel) => dom(`order-buy-${fuel}`),
+      advance: { kind: 'until', done: (view, fuel) => view.state.fuelOrders.some((o) => o.fuelType === fuel) }
+    }
+  ]
+});
+
+const BUILD_TAB_NAMES: Record<string, string> = { station: 'İstasyon', service: 'Tesisler', energy: 'Enerji' };
+
+/** To a catalogue card, and its buy button. */
+function buildGuide(type: string): Lesson {
+  const item = GAME_CONFIG.buildings[type];
+  const tab = item.category === 'service' || item.category === 'energy' ? item.category : 'station';
+  return guide({
+    id: `guide_build_${type}`,
+    title: item.name,
+    door: { anchor: 'build', modal: 'BUILD', body: "Yapılar İnşaat'tan alınır. Tıkla." },
+    tab: { anchor: `build-tab-${tab}`, on: (view) => view.tabs.build === tab, body: `${BUILD_TAB_NAMES[tab]} sekmesine tıkla.` },
+    blocked: (view) => {
+      const { player } = view.state;
+      if (player.level < item.unlockLevel) return `${item.name} için Seviye ${item.unlockLevel} gerekiyor.`;
+      const price = unitPrice(view.state, type);
+      return player.cash < price ? shortOf(item.name, price, player.cash) : null;
+    },
+    steps: [
+      {
+        id: 'buy',
+        title: item.name,
+        body: (view) => [
+          `Kartın altındaki ${lira(unitPrice(view.state, type))} düğmesine bas; yapı imlecine takılır, sonra sahada yerini seçersin.`
+        ],
+        target: dom(`build-card-${type}`),
+        advance: { kind: 'until', done: (view) => view.buildModeActive }
+      }
+    ]
+  });
+}
+
+const hourText = (hour: number) => `${String(hour % 24).padStart(2, '0')}:00`;
+
+const guideDay = guide({
+  id: 'guide_day',
+  title: 'Gün',
+  steps: [
+    {
+      id: 'clock',
+      title: 'Günün saati',
+      body: [
+        `Gün sabah ${hourText(GAME_CONFIG.economy.dayStartHour)}'da başlar, ertesi sabah aynı saatte biter; saat burada akar.`,
+        'Yandaki düğmelerle oyunu durdurur ya da yarı hıza alırsın. Her yeni sabah yeni günlük görevler getirir.'
+      ],
+      target: dom('clock'),
+      advance: next
+    }
+  ]
+});
+
+const cleanCost = GAME_CONFIG.economy.siteCleanCost;
+
+const guideClean = guide({
+  id: 'guide_clean',
+  title: 'Saha temizliği',
+  door: { anchor: 'maintenance', modal: 'OFFICE', body: 'Anahtar düğmesi Bakım masasını açar. Tıkla.' },
+  tab: { anchor: 'office-tab-maintenance', on: (view) => officeOn(view, 'maintenance'), body: 'Bakım sekmesine tıkla.' },
+  subject: (view) => String(view.state.player.statistics.cleanActionsCount),
+  blocked: (view) =>
+    Math.round(view.state.station.cleanliness) >= 100
+      ? 'Saha şu an tertemiz. Müşteri geldikçe kirlenir; o zaman buradan temizlersin.'
+      : view.state.player.cash < cleanCost
+        ? shortOf('Temizlik', cleanCost, view.state.player.cash)
+        : null,
+  steps: [
+    {
+      id: 'clean',
+      title: 'Temizle',
+      body: [`Temizle'ye bas: ${lira(cleanCost)}, saha +25 puan temizlenir. Kirli saha müşteri memnuniyetini düşürür.`],
+      target: dom('maint-site'),
+      advance: {
+        kind: 'until',
+        done: (view, before) => view.state.player.statistics.cleanActionsCount > Number(before)
+      }
+    }
+  ]
+});
+
+const guideAttendant = guide({
+  id: 'guide_attendant',
+  title: 'Pompacı',
+  door: { anchor: 'staff', modal: 'STAFF', body: "Pompacı Personel'den alınır. Tıkla." },
+  blocked: (view) =>
+    view.state.player.level < ATTENDANT_LEVEL
+      ? `Pompacı için Seviye ${ATTENDANT_LEVEL} gerekiyor.`
+      : view.state.player.cash < recruit.hireCost
+        ? shortOf('İşe alım', recruit.hireCost, view.state.player.cash)
+        : null,
+  steps: [
+    {
+      id: 'hire',
+      title: 'İşe al',
+      body: [
+        `İşe Al'a bas: bir kerelik ${lira(recruit.hireCost)}, günde ${lira(recruit.dailyWage)} maaş. Sonra ona bir pompa ver.`
+      ],
+      target: dom('staff-hire'),
+      advance: { kind: 'until', done: (view) => hasAttendant(view.state) }
+    }
+  ]
+});
+
+/** Something on the plot to light as the example to pick up: the smallest loose thing, else a pump. */
+function exampleToMove(state: GameState): string | null {
+  const loose = Object.values(state.buildings)
+    .filter((b) => !GAME_CONFIG.buildings[b.type]?.fixed && b.type !== 'price_sign' && b.type !== 'pylon_sign')
+    .sort((a, b) => a.size[0] * a.size[1] - b.size[0] * b.size[1]);
+  return loose[0]?.id ?? firstPump(state);
+}
+
+/** A building or a pump, as a box to light. */
+function structureBox(state: GameState, id: string | null): WorldBox | null {
+  const building = id ? state.buildings[id] : undefined;
+  if (!building) return pumpBox(state, id);
+  const turned = building.rotation === 90 || building.rotation === 270;
+  const [w, d] = building.size;
+  return {
+    x: building.position[0],
+    z: building.position[1],
+    halfX: (turned ? d : w) / 2 + 0.3,
+    halfZ: (turned ? w : d) / 2 + 0.3,
+    top: 3
+  };
+}
+
+const moveFeePercent = Math.round(GAME_CONFIG.economy.moveFeeRatio * 100);
+
+/** The lesson the feedback asked for: where Düzenle is, and a move from start to finish. */
+const guideMove = guide({
+  id: 'guide_move',
+  title: 'Yapı taşıma',
+  subject: (view) => String(view.state.player.statistics.structuresMoved ?? 0),
+  blocked: (view) =>
+    view.state.player.level < EDIT_MODE_LEVEL
+      ? `Taşıma için Seviye ${EDIT_MODE_LEVEL} gerekiyor.`
+      : exampleToMove(view.state) === null
+        ? "Taşınacak bir yapın yok; önce İnşaat'tan bir şey kur."
+        : null,
+  // Düzenle switched off before anything was picked up: the player changed their mind.
+  abandon: (view, _subject, stepId) => (stepId === 'pick' && !view.editMode ? 'skip' : null),
+  steps: [
+    {
+      id: 'edit',
+      title: 'Düzenle',
+      body: ['Yapılar bu düğmeyle taşınır. Bas, Düzenle açılsın.'],
+      target: dom('edit'),
+      advance: { kind: 'until', done: (view) => view.editMode },
+      skip: (view) => view.editMode || view.buildModeActive
+    },
+    {
+      id: 'pick',
+      title: 'Yapıyı seç',
+      body: [
+        'Taşımak istediğin yapıya tıkla; ışıklı olan bir örnek.',
+        `Taşıma ücreti: yapının bedeli × %${moveFeePercent}.`
+      ],
+      target: (view) => world(structureBox(view.state, exampleToMove(view.state))),
+      advance: { kind: 'until', done: (view) => view.buildModeActive },
+      open: true,
+      skip: (view) => view.buildModeActive
+    },
+    {
+      id: 'pin',
+      title: 'Yeni yeri',
+      body: ['Yapı imlecine takıldı. Koymak istediğin yere tıkla. Kırmızı taralı yerler araç yolu; oraya yapı gelmez.'],
+      target: dom('placement-hint'),
+      advance: { kind: 'until', done: (view) => view.buildPinned || !view.buildModeActive },
+      open: true,
+      skip: (view) => !view.buildModeActive
+    },
+    {
+      id: 'place',
+      title: 'Yerleştir',
+      body: ["Oklarla kaydırır, ortadaki düğmeyle döndürürsün. Yerleştir'e basınca yapı yeni yerinde; kırmızı X onu eski yerine koyar."],
+      target: dom('placement-place'),
+      advance: { kind: 'until', done: (view) => !view.buildModeActive },
+      open: true,
+      skip: (view) => !view.buildModeActive
+    },
+    {
+      id: 'off',
+      title: 'Bitti',
+      body: ["İşin bitince Düzenle'yi kapat: açıkken bir yapıya tıklamak onu yerinden kaldırır."],
+      target: dom('edit'),
+      advance: { kind: 'until', done: (view) => !view.editMode },
+      skip: (view) => !view.editMode
+    }
+  ]
+});
+
+const guideCanopy = guide({
+  id: 'guide_canopy',
+  title: 'Sundurma',
+  blocked: (view) => {
+    const { player } = view.state;
+    if (player.level < canopy.unlockLevel) return `Sundurma için Seviye ${canopy.unlockLevel} gerekiyor.`;
+    if (!bareRoofPump(view.state)) return 'Bütün pompalarının sundurması var.';
+    return player.cash < canopy.price ? shortOf('Sundurma', canopy.price, player.cash) : null;
+  },
+  abandon: (view, _subject, stepId) => (stepId === 'canopy' && !openPump(view) ? 'skip' : null),
+  steps: [
+    {
+      id: 'pick-pump',
+      title: 'Pompayı seç',
+      body: ['Sundurma bir pompanın üstüne kurulur. Işıklı pompaya tıkla, kartı açılsın.'],
+      target: (view) => world(pumpBox(view.state, bareRoofPump(view.state) ?? firstPump(view.state))),
+      advance: { kind: 'until', done: (view) => !!openPump(view) && !openPump(view)!.hasCanopy },
+      press: (actions, view) => {
+        const id = bareRoofPump(view.state);
+        if (id) actions.selectPump(id);
+      },
+      skip: (view) => !!openPump(view) && !openPump(view)!.hasCanopy
+    },
+    {
+      id: 'canopy',
+      title: 'Sundurma Ekle',
+      body: [
+        `"+ Sundurma Ekle"ye bas: ${lira(canopy.price)}, günde ${lira(canopy.dailyUpkeep)} bakım. O pompada dolum %5 hızlanır, saha daha az kirlenir.`
+      ],
+      target: dom('pump-canopy'),
+      advance: { kind: 'until', done: (view) => !!openPump(view)?.hasCanopy }
+    }
+  ]
+});
+
+/** The pump panels would go on next: roofed, bare of panels. */
+const panelReadyPump = (state: GameState) =>
+  Object.values(state.pumps).find((p) => p.hasCanopy && !p.hasSolarCanopy)?.id ?? null;
+const readyForPanels = (view: LessonView) => !!openPump(view)?.hasCanopy && !openPump(view)?.hasSolarCanopy;
+
+const guideSolar = guide({
+  id: 'guide_solar',
+  title: 'Güneş paneli',
+  blocked: (view) => {
+    const { state } = view;
+    if (state.player.level < solarLevel) return `Güneş paneli için Seviye ${solarLevel} gerekiyor.`;
+    const id = panelReadyPump(state);
+    if (!id) return 'Paneller sundurmanın üstüne takılır; önce bir pompaya sundurma tak.';
+    if (energyCapacityOn(state, drivewaySideAt(state.pumps[id].position[1])) <= 0) {
+      return "Panelin ürettiğini tutacak bir Enerji Depolama o pompanın bloğunda olmalı; İnşaat'ın Enerji sekmesinde.";
+    }
+    const price = solarPrice(canopy.size);
+    return state.player.cash < price ? shortOf('Paneller', price, state.player.cash) : null;
+  },
+  abandon: (view, _subject, stepId) => (stepId === 'panels' && !openPump(view) ? 'skip' : null),
+  steps: [
+    {
+      id: 'pick-pump',
+      title: 'Pompayı seç',
+      body: ['Işıklı pompanın sundurması panele hazır. Tıkla, kartı açılsın.'],
+      target: (view) => world(pumpBox(view.state, panelReadyPump(view.state) ?? firstPump(view.state))),
+      advance: { kind: 'until', done: readyForPanels },
+      press: (actions, view) => {
+        const id = panelReadyPump(view.state);
+        if (id) actions.selectPump(id);
+      },
+      skip: readyForPanels
+    },
+    {
+      id: 'panels',
+      title: 'Güneşli Sundurma',
+      body: [`"Güneşli Sundurma"ya bas: ${lira(solarPrice(canopy.size))}. Gündüz panelden bataryaya elektrik akar.`],
+      target: dom('pump-solar'),
+      advance: { kind: 'until', done: (view) => !!openPump(view)?.hasSolarCanopy }
+    }
+  ]
+});
+
+const guideLand = guide({
+  id: 'guide_land',
+  title: 'Arsa',
+  door: { anchor: 'build', modal: 'BUILD', body: "Arsa İnşaat'tan alınır. Tıkla." },
+  tab: { anchor: 'build-tab-land', on: (view) => view.tabs.build === 'land', body: 'Arsa sekmesine tıkla.' },
+  subject: (view) => String(view.state.station.plots.ownedParcels.length),
+  blocked: (view) => {
+    const cheapest = cheapestForSale(view.state);
+    if (!cheapest) return 'Satılık arsa kalmadı.';
+    const cost = readyCost(view.state.station.plots.ownedParcels, parseParcelKey(cheapest).row);
+    return view.state.player.cash < cost ? shortOf('En ucuz arsa betonuyla', cost, view.state.player.cash) : null;
+  },
+  // The walk leaves İnşaat for the map and comes back, so only a card left
+  // without its panel, or the map shut mid-way, is the player walking off.
+  abandon: (view, _subject, stepId) => {
+    if (!stepId) return null;
+    if ((stepId === 'card' || stepId === 'pave-card') && view.activeModal !== 'BUILD' && !view.landMode.active) return 'skip';
+    return LAND_MAP_STEPS.has(stepId) && !view.landMode.active ? 'skip' : null;
+  },
+  steps: BUY_LAND_STEPS.filter((s) => s.id !== 'door' && s.id !== 'tab')
+});
+
+const guideManager = guide({
+  id: 'guide_manager',
+  title: 'İstasyon müdürü',
+  door: { anchor: 'staff', modal: 'STAFF', body: "Müdür Personel'den alınır. Tıkla." },
+  tab: { anchor: 'staff-tab-manager', on: (view) => view.tabs.staff === 'manager', body: 'İstasyon Müdürü sekmesine tıkla.' },
+  blocked: (view) =>
+    view.state.player.level < manager.minLevel ? `Müdür için Seviye ${manager.minLevel} gerekiyor.` : null,
+  steps: [
+    {
+      id: 'requirements',
+      title: 'Şartlar',
+      body: [
+        `İtibar en az ${manager.minReputation.toFixed(1)}, en az ${manager.minActiveAttendants} pompacı ve son 3 günden en az ${manager.minProfitableDaysInLast3} kârlı gün.`,
+        `Hepsi tamamsa İşe Al: ${lira(manager.hireCost)}, günde ${lira(manager.dailyWage)} maaş.`
+      ],
+      target: dom('manager-requirements'),
+      advance: next
+    }
+  ]
+});
+
+/** For a goal the game still locks: the level it waits on, and where XP comes from. */
+const guideLevel = guide({
+  id: 'guide_level',
+  title: 'Seviye',
+  subject: (view) => String(chainStatus(view.state)?.step.level ?? view.state.player.level + 1),
+  steps: [
+    {
+      id: 'xp',
+      title: 'Seviye nasıl atlanır',
+      body: (view, level) => {
+        const left = Math.max(0, levelXp(Number(level)) - view.state.player.xp);
+        return [
+          `Sıradaki görev Seviye ${level}${LEVEL_DATIVE[Number(level)] ?? ''} ulaşınca açılır; ${left.toLocaleString('tr-TR')} XP kaldı.`,
+          'XP her hizmetten, her yeni yapıdan ve görev ödüllerinden gelir. Günlük görevler en hızlısı.'
+        ];
+      },
+      target: dom('level'),
+      advance: next
+    }
+  ]
+});
+
+/** Every guide a goal's Göster can start: one per kind of goal, and one per thing the chain builds. */
+export const GUIDES: Lesson[] = [
+  guideServe,
+  guidePrice,
+  guideOrder,
+  guideDay,
+  guideClean,
+  guideAttendant,
+  guideMove,
+  guideCanopy,
+  guideSolar,
+  guideLand,
+  guideManager,
+  guideLevel,
+  ...[...new Set(MISSION_CHAIN.filter((s) => s.guide === `guide_build_${s.builds}`).map((s) => s.builds!))].map(buildGuide)
+];
+
+/* ------------------------------------------------------------------ */
 
 export const LESSONS: Lesson[] = [
   firstCustomer,
@@ -1349,11 +1873,12 @@ export const LESSONS: Lesson[] = [
   officeSummary,
   officePrice,
   officeAccounts,
-  officeMissions,
   officeMaintenance,
+  missionsPanel,
   pumpCard,
   facilityCard,
-  structureCard
+  structureCard,
+  ...GUIDES
 ];
 
 export function lessonById(id: string | null): Lesson | null {
@@ -1388,6 +1913,7 @@ export interface LessonViewSource {
   selectedBuildingId: string | null;
   landMode: { active: boolean; intent: 'BUY' | 'PAVE' };
   buildMode: { active: boolean; pinned: boolean };
+  editMode: boolean;
 }
 
 export function lessonView(source: LessonViewSource): LessonView {
@@ -1400,6 +1926,7 @@ export function lessonView(source: LessonViewSource): LessonView {
     landMode: { active: source.landMode.active, intent: source.landMode.intent },
     buildModeActive: source.buildMode.active,
     buildPinned: source.buildMode.pinned,
+    editMode: source.editMode,
     tabs: { ...openTabs }
   };
 }
@@ -1411,7 +1938,7 @@ const CARDLESS = ['office', 'price_sign', 'pylon_sign'];
 export function openPanel(view: LessonView): LessonPanel | null {
   if (view.buildModeActive) return 'PLACEMENT';
   if (view.activeModal !== 'NONE') {
-    return ['BUILD', 'OFFICE', 'STAFF', 'FUEL_ORDER'].includes(view.activeModal)
+    return ['BUILD', 'OFFICE', 'STAFF', 'FUEL_ORDER', 'MISSIONS'].includes(view.activeModal)
       ? (view.activeModal as LessonPanel)
       : null;
   }
@@ -1445,7 +1972,7 @@ export function lessonToStart(
   const done = settings.lessonsDone ?? [];
 
   for (const lesson of lessons) {
-    if (done.includes(lesson.id) || lesson.known(view.state)) continue;
+    if (lesson.guide || done.includes(lesson.id) || lesson.known(view.state)) continue;
     if (lesson.panel ? lesson.panel !== panel : options.panelsOnly || screenBusy) continue;
     const subject = lesson.subject(view);
     if (subject !== null) return { id: lesson.id, subject };

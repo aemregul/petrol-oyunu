@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { GameState, FuelType, VehicleArchetype, BuildingEntity, GameNotification, NotificationDraft } from '../domain/types/gameState';
 import { SaveManager } from '../domain/services/SaveManager';
 import { TransactionService } from '../domain/services/TransactionService';
-import { GAME_CONFIG, upgradePathFor, TANK_PACKAGE_LITERS, ATTENDANT_HIRE_LEVEL } from '../config/gameConfig';
+import { GAME_CONFIG, upgradePathFor, TANK_PACKAGE_LITERS, ATTENDANT_HIRE_LEVEL, EDIT_MODE_LEVEL } from '../config/gameConfig';
 import {
   calculateEndOfDayReputation,
   calculateRepairCost,
@@ -47,6 +47,7 @@ import {
 } from '../domain/services/simulationEngine';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import { unitPrice } from '../domain/services/catalogRules';
+import { chainStatus } from '../domain/services/missionChain';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
 import { GAME_EVENTS } from '../config/eventConfig';
 import { firstLessonStep, lessonById, lessonClock, lessonView } from '../ui/lessons/lessons';
@@ -200,8 +201,9 @@ function flushEffects(state: GameState, effects: SimEffects): void {
   }
 }
 
-/** The level at which rearranging what is already built unlocks. */
-export const EDIT_MODE_LEVEL = 5;
+// The level rearranging unlocks at lives in the config now, beside the
+// attendant's, so the mission chain can read it; the HUD still takes it here.
+export { EDIT_MODE_LEVEL };
 
 /**
  * The yaw the station is framed from when the game opens, and the one every
@@ -420,8 +422,8 @@ interface GameStore {
    * Fiyat tab: one card, many doors, never a second card with a different
    * face (Emre, 2026-09-07).
    */
-  officeTab: 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance';
-  openOffice: (tab?: 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance') => void;
+  officeTab: 'summary' | 'price' | 'accounts' | 'maintenance';
+  openOffice: (tab?: 'summary' | 'price' | 'accounts' | 'maintenance') => void;
   buildMode: BuildModeState;
   /** Set while a lifted building is being carried to its new spot. */
   relocating: {
@@ -490,6 +492,12 @@ interface GameStore {
   endLesson: (outcome: 'done' | 'skipped' | 'lost') => void;
   /** Every lesson comes round again, from the start. */
   resetLessons: () => void;
+  /**
+   * A goal's Göster button: shuts the panel it was pressed in and walks the
+   * player to the thing to press. Never put behind the player like a lesson,
+   * so it can be asked for again. False when it could not start.
+   */
+  showGuide: (id: string) => boolean;
   selectVehicle: (id: string | null) => void;
   selectPump: (id: string | null) => void;
   selectBuilding: (id: string | null) => void;
@@ -606,6 +614,8 @@ interface GameStore {
   simulationTick: (deltaSeconds: number) => void;
   endDayAndShowReport: () => void;
   claimMissionReward: (missionId: string) => boolean;
+  /** Pays the main goal on the board, once it is met, and puts up the next. */
+  claimChainReward: () => boolean;
   resetGameSave: () => void;
   updatePerfMetrics: (metrics: Partial<PerformanceMetrics>) => void;
 }
@@ -781,7 +791,7 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
   }
 
   // Day one should open with its daily goals already posted.
-  if (!loaded.missions.some((m) => m.type !== 'TUTORIAL')) {
+  if (loaded.missions.length === 0) {
     generateDailyMissions(loaded);
   }
 
@@ -893,7 +903,8 @@ export const useGameStore = create<GameStore>((set, get) => {
     const { gameState, lesson: current } = get();
     if (!current.id) return;
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    if (outcome !== 'lost') {
+    // A guide is asked for, not taught once: it never goes behind the player.
+    if (outcome !== 'lost' && !lessonById(current.id)?.guide) {
       const done = state.settings.lessonsDone ?? [];
       const learnt = [current.id, ...(lessonById(current.id)?.covers ?? [])];
       state.settings.lessonsDone = [...done, ...learnt.filter((l) => !done.includes(l))];
@@ -911,6 +922,19 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.settings.lessonsOff = false;
     SaveManager.saveGame(state);
     set({ gameState: state });
+  },
+  showGuide: (id) => {
+    const definition = lessonById(id);
+    const { lesson, buildMode, landMode, gameState } = get();
+    if (!definition?.guide || lesson.id || buildMode.active || landMode.active || !gameState.dayState.isDayActive) {
+      return false;
+    }
+    // A guide walks from the HUD: the panel the button sat in, and any card, go first.
+    set({ activeModal: 'NONE', selectedPumpId: null, selectedBuildingId: null });
+    const subject = definition.subject(lessonView(get()));
+    if (subject === null) return false;
+    get().startLesson(id, subject);
+    return get().lesson.id === id;
   },
 
   setActiveModal: (modal) => {
@@ -1428,6 +1452,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     // not, so a move earns nothing.
     const xpReward = carried ? 0 : Math.min(150, Math.round((catalog.price / 1000) * 3));
     state.player.xp += xpReward;
+    if (carried) {
+      state.player.statistics.structuresMoved = (state.player.statistics.structuresMoved ?? 0) + 1;
+    }
 
     const effects = createEffects();
     applyLevelProgression(state, effects);
@@ -2932,6 +2959,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     pricing.playerPrice = Number(price.toFixed(2));
     pricing.priceStrategy = strategy;
+    state.player.statistics.priceChanges = (state.player.statistics.priceChanges ?? 0) + 1;
 
     const effects = createEffects();
     trackMissionMetric(state, 'PRICE_SET', 1, effects);
@@ -2949,6 +2977,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       dc: evPricePerKwh(state, 'dc'),
       [kind]: Number(Math.max(1, price).toFixed(2))
     };
+    state.player.statistics.priceChanges = (state.player.statistics.priceChanges ?? 0) + 1;
 
     const effects = createEffects();
     trackMissionMetric(state, 'PRICE_SET', 1, effects);
@@ -3562,6 +3591,39 @@ export const useGameStore = create<GameStore>((set, get) => {
       type: 'REWARD',
       title: 'Görev Ödülü Alındı',
       message: `+${mission.rewardCash.toLocaleString('tr-TR')} TL, +${mission.rewardXp} XP`
+    });
+    return true;
+  },
+
+  claimChainReward: () => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const status = chainStatus(state);
+    if (!status?.complete) return false;
+    const { step } = status;
+
+    state.missionChain = { step: status.index + 1, announced: false };
+    if (step.rewardCash > 0) {
+      TransactionService.executeCashTransaction(state, {
+        type: 'MISSION_REWARD',
+        amount: step.rewardCash,
+        description: `Ana görev ödülü: ${step.title}`
+      });
+    }
+    state.player.xp += step.rewardXp;
+
+    const effects = createEffects();
+    applyLevelProgression(state, effects);
+    flushEffects(state, effects);
+
+    sounds.playCashSound();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+
+    get().addNotification({
+      type: 'REWARD',
+      title: 'Görev Ödülü Alındı',
+      message:
+        `+${step.rewardCash.toLocaleString('tr-TR')} TL` + (step.rewardXp > 0 ? `, +${step.rewardXp} XP` : '')
     });
     return true;
   },

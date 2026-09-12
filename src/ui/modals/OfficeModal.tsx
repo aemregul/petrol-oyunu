@@ -8,19 +8,16 @@ import { Wrench, Droplets, Sun as SunIcon } from 'lucide-react';
 import { stopChance, evPricePerKwh } from '../../domain/services/simulationEngine';
 import { managerDailyWage } from '../../domain/services/managerDuties';
 import { pumpName } from '../../domain/services/pumpNames';
-import { FuelType, MissionEntity } from '../../domain/types/gameState';
-import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, CalendarDays, Star, Gift, ArrowLeft, CreditCard, Tag } from 'lucide-react';
+import { FuelType } from '../../domain/types/gameState';
+import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, ArrowLeft, CreditCard, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { openTabs } from '../lessons/openTabs';
 
-type OfficeTab = 'summary' | 'price' | 'accounts' | 'missions' | 'maintenance';
+// The goals moved out to their own panel behind the HUD's pano door (Emre, 2026-09-12).
+type OfficeTab = 'summary' | 'price' | 'accounts' | 'maintenance';
 
 const FUELS: FuelType[] = ['gasoline', 'diesel', 'lpg'];
 const EV_KINDS: Array<'ac' | 'dc'> = ['ac', 'dc'];
-
-function formatTarget(value: number): string {
-  return value >= 1000 ? value.toLocaleString('tr-TR') : `${Math.round(value * 10) / 10}`;
-}
 
 /**
  * The office's books, in the figures the summary card shows. Kept as pure
@@ -145,37 +142,6 @@ const ActionButton: React.FC<{
   </button>
 );
 
-const MissionRow: React.FC<{
-  mission: MissionEntity;
-  icon: React.ElementType;
-  onClaim: () => void;
-}> = ({ mission, icon: Icon, onClaim }) => (
-  <div className="flex items-center gap-3 py-3 border-b-2 border-dotted border-mute/60">
-    <Icon className={`w-5 h-5 shrink-0 ${mission.completed ? 'text-kgrn' : 'text-mute'}`} />
-    <div className="flex-1 min-w-0">
-      <div className="text-[15px] font-extrabold text-ink truncate">{mission.description}</div>
-      <div className="text-[13px] font-bold text-mute font-mono tabular-nums">
-        {formatTarget(Math.min(mission.progress, mission.target))} / {formatTarget(mission.target)}
-      </div>
-    </div>
-    {mission.completed ? (
-      <button
-        onClick={() => {
-          sounds.playClick();
-          onClaim();
-        }}
-        className="game-btn px-3.5 py-2 bg-kgrn hover:bg-kgrn-dark text-white text-[13px] font-display tracking-wide flex items-center gap-1.5 shrink-0"
-      >
-        <Gift className="w-4 h-4" />
-        <span>+{lira(mission.rewardCash)}</span>
-      </button>
-    ) : (
-      <span className="text-[15px] font-display tabular-nums text-kgrn shrink-0">
-        +{lira(mission.rewardCash)}
-      </span>
-    )}
-  </div>
-);
 
 /**
  * The loans desk: a page of its own inside the office card. Open loans on
@@ -302,7 +268,6 @@ export const OfficeModal: React.FC = () => {
   const upgradeBuilding = useGameStore((s) => s.upgradeBuilding);
   const setFuelPrice = useGameStore((s) => s.setFuelPrice);
   const setEvPrice = useGameStore((s) => s.setEvPrice);
-  const claimMissionReward = useGameStore((s) => s.claimMissionReward);
 
   const officeTab = useGameStore((s) => s.officeTab);
   const takeLoan = useGameStore((s) => s.takeLoan);
@@ -364,7 +329,6 @@ export const OfficeModal: React.FC = () => {
     { id: 'price', label: 'Fiyat', onPick: () => setTab('price') },
     { id: 'accounts', label: 'Muhasebe', onPick: () => setTab('accounts') },
     { id: 'tenders', label: 'İhaleler', onPick: () => undefined, soon: true },
-    { id: 'missions', label: 'Görevler', onPick: () => setTab('missions') },
     { id: 'maintenance', label: 'Bakım', onPick: () => setTab('maintenance') },
     { id: 'branches', label: 'Şubeler', onPick: () => undefined, soon: true }
   ];
@@ -389,10 +353,6 @@ export const OfficeModal: React.FC = () => {
   const purchases = [...(gameState.fuelPurchaseHistory ?? [])].reverse().slice(0, 6);
   const activeLoans = gameState.loans.filter((l) => l.state === 'ACTIVE');
 
-  const pending = gameState.missions.filter((m) => !m.claimed);
-  const dailies = pending.filter((m) => m.type !== 'TUTORIAL');
-  const goals = pending.filter((m) => m.type === 'TUTORIAL');
-  const claimable = pending.filter((m) => m.completed).length;
 
   const quietDay = figures.served < 3;
   const reputationNote = quietDay
@@ -469,11 +429,6 @@ export const OfficeModal: React.FC = () => {
                 }
               >
                 {item.label}
-                {item.id === 'missions' && claimable > 0 && (
-                  <span className="ml-1.5 inline-flex w-4 h-4 rounded-full bg-kgrn border border-ink text-white text-[10px] font-sans font-black items-center justify-center align-middle">
-                    {claimable}
-                  </span>
-                )}
               </button>
             );
           })}
@@ -758,7 +713,7 @@ export const OfficeModal: React.FC = () => {
                 </p>
               </Section>
             </>
-          ) : tab === 'accounts' ? (
+          ) : (
             <>
               <Section title="Satış & Faaliyet Kârı" tour="accounts-daily">
                 <div className="grid grid-cols-3 k-label text-[11px] pt-2 pb-1">
@@ -830,24 +785,6 @@ export const OfficeModal: React.FC = () => {
                   <span>Krediler{activeLoans.length > 0 ? ` (${activeLoans.length} açık)` : ''}</span>
                 </button>
               </div>
-            </>
-          ) : (
-            <>
-              <Section title="Bugünün Görevleri" tour="missions-list">
-                {dailies.length === 0 ? (
-                  <p className="text-[14px] font-semibold text-mute py-3">Bugün için görev yok; yarın sabah yenileri gelir.</p>
-                ) : (
-                  dailies.map((mission) => <MissionRow key={mission.id} mission={mission} icon={CalendarDays} onClaim={() => claimMissionReward(mission.id)} />)
-                )}
-                <p className="text-[13px] font-semibold text-mute py-3">
-                  Görevler her gün yenilenir. Ödül tamamlandığı anda kasaya geçer.
-                </p>
-              </Section>
-              {goals.length > 0 && (
-                <Section title="Sıradaki Hedefler">
-                  {goals.map((mission) => <MissionRow key={mission.id} mission={mission} icon={Star} onClaim={() => claimMissionReward(mission.id)} />)}
-                </Section>
-              )}
             </>
           )}
         </div>

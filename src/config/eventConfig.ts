@@ -210,6 +210,12 @@ export interface DailyMissionTemplate {
   rewardCashPerUnit: number;
   rewardXp: number;
   minLevel: number;
+  /**
+   * Building types the station needs one of before the goal can be met: a
+   * market-sales goal on a station with no shop could never be done
+   * (Emre, 2026-09-12).
+   */
+  needs?: string[];
 }
 
 export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
@@ -266,7 +272,8 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     step: 1,
     rewardCashPerUnit: 200,
     rewardXp: 70,
-    minLevel: 6
+    minLevel: 6,
+    needs: ['mini_market', 'rest_complex']
   },
   {
     id: 'D_CLEAN',

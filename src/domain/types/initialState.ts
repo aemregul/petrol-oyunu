@@ -169,20 +169,10 @@ export function createInitialGameState(): GameState {
     fuelOrders: [],
     fuelPurchaseHistory: [],
     loans: [],
-    missions: GAME_CONFIG.tutorialTasks.map((task) => ({
-      id: 'mission_' + task.id,
-      templateId: task.id,
-      type: 'TUTORIAL',
-      description: task.description,
-      metric: task.metric,
-      target: task.target,
-      progress: 0,
-      rewardCash: task.rewardCash,
-      rewardXp: task.rewardXp,
-      completed: false,
-      claimed: false,
-      issuedOnDay: 1
-    })),
+    // The day's goals are posted when the store opens the save. The main goals
+    // are the chain, which reads its progress from the station.
+    missions: [],
+    missionChain: { step: 0, announced: false },
     activeEvents: [],
     todayEventIds: [],
     dayState: {

@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useGameStore } from '../store/gameStore';
 import { createInitialGameState } from '../domain/types/initialState';
 import { lessonById } from '../ui/lessons/lessons';
+import { openTabs } from '../ui/lessons/openTabs';
 import type { LessonView } from '../ui/lessons/lessonTypes';
+import { MISSION_CHAIN, chainStatus } from '../domain/services/missionChain';
 import type { VehicleEntity } from '../domain/types/gameState';
 
 /**
@@ -59,7 +61,9 @@ function viewNow(): LessonView {
     landMode: { active: s.landMode.active, intent: s.landMode.intent },
     buildModeActive: s.buildMode.active,
     buildPinned: s.buildMode.pinned,
-    tabs: { build: null, staff: null, office: null, officeLoans: false }
+    editMode: s.editMode,
+    // The panels report their tabs here; nothing is mounted in a test, so a test sets them.
+    tabs: { ...openTabs }
   };
 }
 
@@ -254,5 +258,104 @@ describe('lessons in the store', () => {
     useGameStore.setState({ gameState: state, selectedPumpId: 'pump_1', lesson: { id: null, step: 0, subject: '', resumeSpeed: 1, endedAt: 0 } });
     store().startLesson('pump_card', 'pump_1');
     expect(shown()).toEqual(['rows', 'hire', 'upgrade']);
+  });
+});
+
+/**
+ * Emre, 2026-09-12: a player could not find where to move a building for the
+ * goal that asked them to. A goal's Göster walks them there; these play two
+ * guides through with the store's own actions.
+ */
+describe('a goal’s Göster, played through', () => {
+  beforeEach(() => {
+    const state = createInitialGameState();
+    state.dayState.timeSpeed = 1;
+    state.player.level = 5;
+    state.player.cash = 100000;
+    useGameStore.setState({
+      gameState: state,
+      activeModal: 'MISSIONS',
+      selectedPumpId: null,
+      selectedBuildingId: null,
+      editMode: false,
+      lesson: { id: null, step: 0, subject: '', resumeSpeed: 1, endedAt: 0 }
+    });
+  });
+
+  afterEach(() => {
+    openTabs.office = null;
+    useGameStore.setState({ editMode: false, relocating: null, buildMode: { ...store().buildMode, active: false } });
+  });
+
+  it('walks from the goals panel to the price rows, waits for a price, and can be asked for again', () => {
+    expect(store().showGuide('guide_price')).toBe(true);
+    expect(store().activeModal).toBe('NONE');
+    expect(stepId()).toBe('door');
+
+    store().openOffice('summary');
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(stepId()).toBe('tab');
+    openTabs.office = 'price';
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(stepId()).toBe('set');
+    expect(stepDone()).toBe(false);
+    store().setFuelPrice('gasoline', store().gameState.pricing.gasoline.playerPrice + 0.1);
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(store().lesson.id).toBeNull();
+    expect(store().gameState.player.statistics.priceChanges).toBe(1);
+    expect(store().gameState.settings.lessonsDone ?? []).toEqual([]);
+    expect(store().showGuide('guide_price')).toBe(true);
+  });
+
+  it('shows Düzenle, the pick-up, the new spot and switching it off — and the move goal is met', () => {
+    const state = JSON.parse(JSON.stringify(store().gameState));
+    state.missionChain = { step: MISSION_CHAIN.findIndex((s) => s.id === 'move_structure'), announced: false };
+    useGameStore.setState({ gameState: state });
+    expect(chainStatus(store().gameState)?.complete).toBe(false);
+
+    expect(store().showGuide('guide_move')).toBe(true);
+    expect(stepId()).toBe('edit');
+    store().toggleEditMode();
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(stepId()).toBe('pick');
+    // What a click on a structure does while Düzenle is on.
+    expect(store().relocateStructure('pump_1')).toBe(true);
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(stepId()).toBe('pin');
+    expect(store().confirmBuildPlacement()).toBe(true);
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(stepId()).toBe('off');
+    store().toggleEditMode();
+    expect(stepDone()).toBe(true);
+    store().advanceLesson();
+
+    expect(store().lesson.id).toBeNull();
+    expect(store().gameState.player.statistics.structuresMoved).toBe(1);
+    expect(chainStatus(store().gameState)?.complete).toBe(true);
+    expect(store().gameState.settings.lessonsDone ?? []).toEqual([]);
+  });
+
+  it('starts only guides, and waits behind a running lesson or a building being placed', () => {
+    expect(store().showGuide('first_customer')).toBe(false);
+    expect(store().showGuide('guide_day')).toBe(true);
+    expect(store().showGuide('guide_price')).toBe(false);
+    expect(store().lesson.id).toBe('guide_day');
+    store().advanceLesson();
+    expect(store().lesson.id).toBeNull();
+
+    useGameStore.setState({ buildMode: { ...store().buildMode, active: true } });
+    expect(store().showGuide('guide_day')).toBe(false);
   });
 });

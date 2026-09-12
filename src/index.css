@@ -252,6 +252,11 @@
     .hud-events .game-glass {
       width: min(12rem, calc(100vw - 0.75rem));
     }
+
+    /* No room beside the tanks on a phone: the pano door's count carries it. */
+    .hud-goal {
+      display: none;
+    }
   }
 
   @media (max-height: 699px) {

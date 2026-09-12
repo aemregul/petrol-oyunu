@@ -6,6 +6,7 @@
 import { GameState, GameNotification } from '../types/gameState';
 import { createInitialGameState } from '../types/initialState';
 import { reconcileFuelReservations } from './TransactionService';
+import { chainCatchUp } from './missionChain';
 
 const PRIMARY_SAVE_KEY = 'project_highway_v1_save';
 const BACKUP_SAVE_KEYS = [
@@ -123,7 +124,7 @@ export class SaveManager {
       fuelOrders: rawState.fuelOrders || [],
       fuelPurchaseHistory: rawState.fuelPurchaseHistory || [],
       loans: rawState.loans || [],
-      missions: this.migrateMissions(rawState.missions, defaultState.missions),
+      missions: this.migrateMissions(rawState.missions),
       activeEvents: rawState.activeEvents || [],
       todayEventIds: rawState.todayEventIds || [],
       dayState: {
@@ -167,38 +168,38 @@ export class SaveManager {
     // with visible fuel behave as though it were empty.
     reconcileFuelReservations(state);
 
+    // The tutorial list gave way to the main mission chain (Emre, 2026-09-12).
+    // A save from before it joins the chain where the station really stands:
+    // past every step it has already done, with nothing paid for them. The two
+    // things the station itself does not record are read from the old
+    // tutorial's price goal and from anything the player has moved.
+    if (!rawState.missionChain) {
+      const stats = state.player.statistics;
+      const oldGoals: any[] = Array.isArray(rawState.missions) ? rawState.missions : [];
+      const pricedByHand =
+        oldGoals.some((m) => m?.templateId === 'T4' && (m.claimed || m.progress > 0)) ||
+        Object.values(state.pricing).some((p) => p.priceStrategy === 'CUSTOM');
+      if (pricedByHand) stats.priceChanges = Math.max(1, stats.priceChanges ?? 0);
+      if (Object.values(state.buildings).some((b) => b.movedByPlayer)) {
+        stats.structuresMoved = Math.max(1, stats.structuresMoved ?? 0);
+      }
+      state.missionChain = { step: chainCatchUp(state), announced: false };
+    }
+
     return state;
   }
 
   /**
-   * Keeps a save's mission progress while re-syncing the definitions (targets,
-   * descriptions, rewards) with the current config.
+   * The day's goals carry over as they are; they are generated at runtime.
+   * The old tutorial goals are dropped: the main mission chain took their
+   * place (Emre, 2026-09-12).
    */
-  private static migrateMissions(
-    saved: any,
-    defaults: GameState['missions']
-  ): GameState['missions'] {
-    if (!Array.isArray(saved) || saved.length === 0) return defaults;
-
-    const tutorials = defaults.map((definition) => {
-      const previous = saved.find((m: any) => m?.templateId === definition.templateId);
-      if (!previous) return definition;
-
-      const progress = Math.min(definition.target, previous.progress ?? 0);
-      return {
-        ...definition,
-        progress,
-        completed: previous.claimed ? true : progress >= definition.target,
-        claimed: Boolean(previous.claimed)
-      };
-    });
-
-    // Daily missions are generated at runtime, so carry them over as they are.
-    const dailies = saved.filter(
-      (m: any) => m && m.type !== 'TUTORIAL' && typeof m.metric === 'string'
+  private static migrateMissions(saved: any): GameState['missions'] {
+    if (!Array.isArray(saved)) return [];
+    return saved.filter(
+      (m: any) =>
+        m && (m.type === 'DAILY_NORMAL' || m.type === 'DAILY_MAIN') && typeof m.metric === 'string'
     );
-
-    return [...tutorials, ...dailies];
   }
 
   /**
