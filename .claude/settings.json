@@ -511,7 +511,9 @@
       "Bash(grep -i \"vite-node\\\\|tsx$\")",
       "Bash(awk 'NR>=1075 && NR<=1300 && \\(/^    [a-z_]+: \\\\{/ || /basePatienceSeconds/ || /specialBehavior/ || /spawnWeight|weight:/\\)' src/config/gameConfig.ts)",
       "Bash(mkdir -p gauge-shots)",
-      "Bash(node fuelGaugeWalk.mjs gauge-shots)"
+      "Bash(node fuelGaugeWalk.mjs gauge-shots)",
+      "Bash(git -C /Users/emre/petrol-oyunu status --short)",
+      "Bash(git -C /Users/emre/petrol-oyunu log --oneline -1)"
     ],
     "additionalDirectories": [
       "/private/tmp",

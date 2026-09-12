@@ -43,7 +43,8 @@ import {
   dailyPriceReputationDelta,
   dismissVehicle,
   DRIVEWAY_Z,
-  energyCapacityOn
+  energyCapacityOn,
+  SQUEEGEE_SATISFACTION
 } from '../domain/services/simulationEngine';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import { unitPrice } from '../domain/services/catalogRules';
@@ -2521,6 +2522,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     vehicle.windowsCleaned = true;
     sounds.playClick();
     set({ gameState: state });
+    // A press that shows nothing reads as a press that did nothing (Emre,
+    // 2026-09-12). The tip itself is only known at the hand-over.
+    get().addNotification({
+      type: 'INFO',
+      title: 'Camlar Temizlendi',
+      message: `Müşteri memnuniyeti +${SQUEEGEE_SATISFACTION}. Bahşiş bırakırsa teslimde görürsün.`
+    });
   },
 
   dismissCustomer: (vehicleId) => {
@@ -2897,7 +2905,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!vehicle) return;
 
     const effects = createEffects();
-    finalizeSale(state, vehicle, effects);
+    const { sale, tip } = finalizeSale(state, vehicle, effects);
     flushEffects(state, effects);
 
     SaveManager.saveGame(state);
@@ -2905,6 +2913,19 @@ export const useGameStore = create<GameStore>((set, get) => {
       gameState: state,
       selectedVehicleId: null,
       activeModal: 'NONE'
+    });
+
+    // What the hand-over put in the till, spelled out: a sale cannot be worked
+    // out from the cash tile (Emre, 2026-09-12). Only the player's hand-over
+    // says it; an attendant's sales would bury the corner.
+    const lira = (n: number) => `₺${n.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
+    get().addNotification({
+      type: tip > 0 ? 'REWARD' : 'INFO',
+      title: 'Satış Tamamlandı',
+      message:
+        tip > 0
+          ? `${lira(sale)} yakıt + ${lira(tip)} bahşiş = ${lira(sale + tip)} kasaya girdi.`
+          : `${lira(sale)} kasaya girdi; bu müşteri bahşiş bırakmadı.`
     });
   },
 

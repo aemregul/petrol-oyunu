@@ -3878,6 +3878,9 @@ export function beginFueling(
   return true;
 }
 
+/** What a wiped windscreen adds to the driver's satisfaction at the till. */
+export const SQUEEGEE_SATISFACTION = 8;
+
 /** What a roof over the island is worth: faster fills, and less weathering. */
 const CANOPY_FLOW_BONUS = 0.05;
 const CANOPY_GRIME_RELIEF = 0.7;
@@ -4113,7 +4116,7 @@ export function finalizeSale(
   state: GameState,
   vehicle: VehicleEntity,
   effects: SimEffects
-): void {
+): { sale: number; tip: number } {
   const dispensed = vehicle.request.dispensedLiters;
   const unitPrice = state.pricing[vehicle.fuelType].playerPrice;
   const totalSale = Number((dispensed * unitPrice).toFixed(2));
@@ -4133,7 +4136,7 @@ export function finalizeSale(
   const accuracy = vehicle.request.isFinished ? 100 : 80;
   const facilities = blockFacilities(state, vehicleSide(vehicle));
   // A wiped windscreen is the cheapest goodwill on the forecourt.
-  const squeegee = vehicle.windowsCleaned ? 8 : 0;
+  const squeegee = vehicle.windowsCleaned ? SQUEEGEE_SATISFACTION : 0;
   const serviceScore = clamp(
     calculateServiceScore(speedRatio, accuracy, state.station.cleanliness) +
       facilities.satisfaction +
@@ -4212,6 +4215,9 @@ export function finalizeSale(
   trackMissionMetric(state, 'FUEL_REVENUE', totalSale, effects);
   trackMissionMetric(state, 'TIPS_EARNED', tip, effects);
   if (served >= 1) playCue(effects, 'cash');
+
+  // What went into the till, for a hand-over that wants to say so.
+  return { sale: totalSale, tip };
 }
 
 /* ------------------------------------------------------------------ */
