@@ -18,6 +18,8 @@ import { useGameStore } from '../store/gameStore';
 
 /** Drag has to exceed this many pixels before it counts as a pan, not a click. */
 const DRAG_THRESHOLD_PX = 4;
+/** Pointer panning is deliberately gentler than keyboard camera steps. */
+const DRAG_PAN_SPEED = 0.3;
 
 /**
  * Zoom steps per pixel of wheel travel, and the most any single event may move.
@@ -81,7 +83,11 @@ export const StationScene: React.FC = () => {
       }
 
       if (pointerState.current.dragged) {
-        panCamera(e.clientX - lastPointer.current.x, e.clientY - lastPointer.current.y);
+        panCamera(
+          e.clientX - lastPointer.current.x,
+          e.clientY - lastPointer.current.y,
+          DRAG_PAN_SPEED
+        );
       }
 
       lastPointer.current = { x: e.clientX, y: e.clientY };

@@ -96,6 +96,21 @@ describe('two-stage build placement controls', () => {
     }
   });
 
+  it('can slow pointer dragging without slowing the default keyboard pan', () => {
+    const start: [number, number] = [16, 12];
+    useGameStore.setState({ cameraAngle: 0, cameraZoom: 4, cameraTarget: start });
+
+    useGameStore.getState().panCamera(10, 0);
+    const keyboardDistance = start[0] - useGameStore.getState().cameraTarget[0];
+
+    useGameStore.setState({ cameraTarget: start });
+    useGameStore.getState().panCamera(10, 0, 0.3);
+    const dragDistance = start[0] - useGameStore.getState().cameraTarget[0];
+
+    expect(dragDistance).toBeCloseTo(keyboardDistance * 0.3);
+    expect(useGameStore.getState().cameraTarget[1]).toBe(start[1]);
+  });
+
   it('sends a structure the way the arrow points however the camera is turned', () => {
     // Emre, 2026-09-10: "arka kamera açısında sola basınca sağa gidiyor" —
     // the keys were calibrated to the default framing and never turned with

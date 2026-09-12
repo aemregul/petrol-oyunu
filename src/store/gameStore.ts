@@ -507,7 +507,7 @@ interface GameStore {
   cycleCameraView: () => void;
   setCameraZoom: (zoom: number | ((prev: number) => number)) => void;
   /** Pans the camera by a screen-space delta, rotated into world space. */
-  panCamera: (screenDeltaX: number, screenDeltaY: number) => void;
+  panCamera: (screenDeltaX: number, screenDeltaY: number, speedScale?: number) => void;
   resetCamera: () => void;
   addNotification: (notif: NotificationDraft) => void;
   /** Clears the bell's badge; the log itself stays. */
@@ -968,7 +968,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     });
   },
 
-  panCamera: (screenDeltaX, screenDeltaY) => {
+  panCamera: (screenDeltaX, screenDeltaY, speedScale = 1) => {
     set((state) => {
       // Drag should move the ground under the cursor whichever way the
       // camera is facing, so rotate the screen delta by the camera yaw.
@@ -977,7 +977,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const cos = Math.cos(rad);
 
       // Panning further per pixel when zoomed out keeps the feel constant.
-      const scale = 0.055 * (8 - state.cameraZoom);
+      const scale = 0.055 * (8 - state.cameraZoom) * speedScale;
 
       const worldX = (screenDeltaX * cos + screenDeltaY * sin) * scale;
       const worldZ = (-screenDeltaX * sin + screenDeltaY * cos) * scale;
