@@ -227,14 +227,16 @@ describe('pump upgrades and repair', () => {
 
   it('sells nozzles for money, gated only by the promised levels', () => {
     const state = useGameStore.getState().gameState;
-    state.player.level = 2;
+    state.player.level = 4;
     useGameStore.setState({ gameState: { ...state } });
 
-    // Diesel opens at level 3; below it the module is not for sale.
+    // Diesel opens at level 5; below it the module is not for sale. It was 3,
+    // but the nozzle and its first 500 L cost a level-3 till ten times over
+    // (Emre, 2026-09-12).
     expect(useGameStore.getState().addPumpFuel('pump_1', 'diesel')).toBe(false);
 
     const ready = useGameStore.getState().gameState;
-    ready.player.level = 3;
+    ready.player.level = 5;
     useGameStore.setState({ gameState: { ...ready } });
 
     const cashBefore = useGameStore.getState().gameState.player.cash;
