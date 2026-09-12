@@ -12,6 +12,7 @@ import { FuelType } from '../../domain/types/gameState';
 import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, ArrowLeft, CreditCard, Tag } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { openTabs } from '../lessons/openTabs';
+import { siteCleaningCost } from '../../domain/services/maintenance';
 
 // The goals moved out to their own panel behind the HUD's pano door (Emre, 2026-09-12).
 type OfficeTab = 'summary' | 'price' | 'accounts' | 'maintenance';
@@ -293,7 +294,8 @@ export const OfficeModal: React.FC = () => {
 
   const { player, station } = gameState;
   const stationCleanlinessDisplay = Math.round(station.cleanliness);
-  const cleaningDisabled = stationCleanlinessDisplay >= 100 || player.cash < GAME_CONFIG.economy.siteCleanCost;
+  const stationCleaningCost = siteCleaningCost(station.cleanliness);
+  const cleaningDisabled = stationCleaningCost === 0 || player.cash < stationCleaningCost;
   const figures = officeFigures(gameState);
   const office = Object.values(gameState.buildings).find((b) => b.type === 'office');
   const priceSign = Object.values(gameState.buildings).find((b) => b.type === 'price_sign');
@@ -650,10 +652,10 @@ export const OfficeModal: React.FC = () => {
                     disabled={cleaningDisabled}
                     className={`game-btn px-3 py-2 rounded-md font-display text-xs uppercase tracking-wide ${cleaningDisabled ? 'bg-card text-mute' : 'bg-kgrn text-white'}`}
                   >
-                    Temizle · {lira(GAME_CONFIG.economy.siteCleanCost)}
+                    {stationCleaningCost === 0 ? 'Tertemiz' : `Tamamla · ${lira(stationCleaningCost)}`}
                   </button>
                 </div>
-                <p className="text-[12px] font-semibold text-mute pb-2">Kirli saha müşteri memnuniyetini düşürür. Her temizlik +25 puan.</p>
+                <p className="text-[12px] font-semibold text-mute pb-2">Kirli saha müşteri memnuniyetini düşürür. Her eksik 25 puan {lira(GAME_CONFIG.economy.siteCleanCost)}; toplam bedel tek seferde sahayı %100 yapar.</p>
               </Section>
 
               <Section title="Pompalar" tour="maint-pumps">

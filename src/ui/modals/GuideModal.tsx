@@ -216,7 +216,7 @@ function sections(): Section[] {
           <P>Alt çubuktaki anahtar Bakım masasını açar; üstündeki kırmızı sayı ilgi bekleyenleri sayar.</P>
           <UL items={[
             'Pompa sağlığı zamanla düşer. Yüzde 25 altında arızalanabilir; arızalı pompa müşteriyi geri çevirir. Bakım ucuz, tamir pahalıdır.',
-            `Saha kirlenir; kirli saha memnuniyeti düşürür. Temizlik ${lira(GAME_CONFIG.economy.siteCleanCost)}, +25 puan.`,
+            `Saha kirlenir; kirli saha memnuniyeti düşürür. Her eksik 25 puan ${lira(GAME_CONFIG.economy.siteCleanCost)}; düğmedeki toplam bedel sahayı tek seferde yüzde 100 yapar.`,
             `Güneş paneli camı tozlanır. Sıfır temizlikte üretim yüzde ${Math.round((1 - solar.minGrimeFactor) * 100)} düşer. Yağmur kısmen yıkar; çatı yıkama ${lira(solar.cleanCostPerCell * 15)}.`,
             'Sv.1 müdür bakımı, Sv.2 müdür tamiri ve temizliği devralır.'
           ]} />

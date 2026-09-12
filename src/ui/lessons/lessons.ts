@@ -5,6 +5,7 @@ import { facilityTariff, isFacility, nextTariffIndex } from '../../domain/servic
 import { unitPrice } from '../../domain/services/catalogRules';
 import { drivewaySideAt, energyCapacityOn } from '../../domain/services/simulationEngine';
 import { solarPrice } from '../../domain/services/energy';
+import { siteCleaningCost } from '../../domain/services/maintenance';
 import { LEVEL_DATIVE, MISSION_CHAIN, chainStatus, levelXp } from '../../domain/services/missionChain';
 import {
   STARTING_PARCELS,
@@ -1176,7 +1177,7 @@ const officeMaintenance: Lesson = {
       id: 'site',
       title: 'Saha temizliği',
       body: [
-        `Saha zamanla kirlenir, kirli saha müşteri memnuniyetini düşürür. Temizlik ${lira(GAME_CONFIG.economy.siteCleanCost)}, +25 puan.`
+        `Saha zamanla kirlenir, kirli saha müşteri memnuniyetini düşürür. Her eksik 25 puan ${lira(GAME_CONFIG.economy.siteCleanCost)}; toplam bedel tek seferde sahayı %100 yapar.`
       ],
       target: dom('maint-site'),
       advance: next
@@ -1559,25 +1560,25 @@ const guideDay = guide({
   ]
 });
 
-const cleanCost = GAME_CONFIG.economy.siteCleanCost;
-
 const guideClean = guide({
   id: 'guide_clean',
   title: 'Saha temizliği',
   door: { anchor: 'maintenance', modal: 'OFFICE', body: 'Anahtar düğmesi Bakım masasını açar. Tıkla.' },
   tab: { anchor: 'office-tab-maintenance', on: (view) => officeOn(view, 'maintenance'), body: 'Bakım sekmesine tıkla.' },
   subject: (view) => String(view.state.player.statistics.cleanActionsCount),
-  blocked: (view) =>
-    Math.round(view.state.station.cleanliness) >= 100
+  blocked: (view) => {
+    const cleanCost = siteCleaningCost(view.state.station.cleanliness);
+    return cleanCost === 0
       ? 'Saha şu an tertemiz. Müşteri geldikçe kirlenir; o zaman buradan temizlersin.'
       : view.state.player.cash < cleanCost
         ? shortOf('Temizlik', cleanCost, view.state.player.cash)
-        : null,
+        : null;
+  },
   steps: [
     {
       id: 'clean',
       title: 'Temizle',
-      body: [`Temizle'ye bas: ${lira(cleanCost)}, saha +25 puan temizlenir. Kirli saha müşteri memnuniyetini düşürür.`],
+      body: [`Düğme kalan temizliğin toplam bedelini gösterir. Basınca saha tek ödemeyle %100 olur; kirli saha müşteri memnuniyetini düşürür.`],
       target: dom('maint-site'),
       advance: {
         kind: 'until',

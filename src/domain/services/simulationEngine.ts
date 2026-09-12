@@ -86,6 +86,7 @@ import { dutyActive, managerDailyWage, managerTier, MANAGER_CLEAN_BELOW } from '
 import { pumpName } from './pumpNames';
 import { FAR_SIDE_FRONT, farSideBounds, onKerbLine, unpavedHoles } from './land';
 import { vehicleBodyHalfExtents } from './vehicleBody';
+import { siteCleaningCost } from './maintenance';
 import {
   dieselForGenerator,
   generatorWants,
@@ -8205,7 +8206,7 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
   // is one of the cheaper things the manager pays for, so it waits on the
   // reserve like the rest.
   if (dutyActive(state, 'cleanStation') && state.station.cleanliness < MANAGER_CLEAN_BELOW) {
-    const cost = GAME_CONFIG.economy.siteCleanCost;
+    const cost = siteCleaningCost(state.station.cleanliness);
     if (cost > budget) {
       const last = state.managerLogs.find((l) => l.category === 'MAINTENANCE' && l.reason.includes('temizli'));
       if (last?.result !== 'SKIPPED_RESERVE') {
@@ -8215,14 +8216,14 @@ function tickManagerAutomation(state: GameState, dt: number, effects: SimEffects
       const tx = TransactionService.executeCashTransaction(state, {
         type: 'CLEAN',
         amount: -cost,
-        description: 'Saha temizliği (müdür)'
+        description: 'Saha tam temizliği (müdür)'
       });
       if (tx.success) {
         budget -= cost;
-        state.station.cleanliness = Math.min(100, state.station.cleanliness + 25);
+        state.station.cleanliness = 100;
         state.player.statistics.cleanActionsCount++;
         trackMissionMetric(state, 'STATION_CLEANED', 1, effects);
-        logAction('MAINTENANCE', `Saha temizlendi (%${Math.round(state.station.cleanliness)}).`, 'SUCCESS', cost);
+        logAction('MAINTENANCE', 'Saha tek seferde %100 temizlendi.', 'SUCCESS', cost);
       }
     }
   }

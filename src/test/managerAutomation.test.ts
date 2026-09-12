@@ -145,7 +145,7 @@ describe('manager automation audit', () => {
 
     expect(state.pumps.pump_1.state).toBe('IDLE');
     expect(state.pumps.pump_1.health).toBe(100);
-    expect(state.station.cleanliness).toBeCloseTo(45, 2);
+    expect(state.station.cleanliness).toBe(100);
   });
 
   it('enforces the current grade when an old save carries senior order controls', () => {

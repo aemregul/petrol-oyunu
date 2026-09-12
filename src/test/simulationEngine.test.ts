@@ -2159,8 +2159,10 @@ describe('the manager', () => {
     const senior = withManager(2);
     senior.station.cleanliness = 30;
     advance(senior, 1);
-    expect(senior.station.cleanliness).toBeGreaterThan(50);
-    expect(senior.player.cash).toBe(300000 - GAME_CONFIG.economy.siteCleanCost);
+    // The sweep reaches 100, then the rest of this simulated second starts
+    // the normal fractional decay again; the maintenance desk still reads 100.
+    expect(Math.round(senior.station.cleanliness)).toBe(100);
+    expect(senior.player.cash).toBe(300000 - GAME_CONFIG.economy.siteCleanCost * 3);
   });
 
   it('fills the tanks when the supplier discount opens, at the top grade only', () => {

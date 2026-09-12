@@ -73,6 +73,34 @@ describe('station cleaning', () => {
     expect(after.station.cleanliness).toBe(100);
     expect(after.player.cash).toBe(cashBefore - GAME_CONFIG.economy.siteCleanCost);
   });
+
+  it('charges all missing blocks once and completes a dirty station to 100%', () => {
+    const state = useGameStore.getState().gameState;
+    state.station.cleanliness = 20;
+    const cashBefore = state.player.cash;
+    const cleanActionsBefore = state.player.statistics.cleanActionsCount;
+    useGameStore.setState({ gameState: { ...state } });
+
+    expect(useGameStore.getState().cleanStation()).toBe(true);
+
+    const after = useGameStore.getState().gameState;
+    expect(after.station.cleanliness).toBe(100);
+    expect(after.player.cash).toBe(cashBefore - GAME_CONFIG.economy.siteCleanCost * 4);
+    expect(after.player.statistics.cleanActionsCount).toBe(cleanActionsBefore + 1);
+  });
+
+  it('does not start full cleaning when the till cannot cover the total', () => {
+    const state = useGameStore.getState().gameState;
+    state.station.cleanliness = 20;
+    state.player.cash = GAME_CONFIG.economy.siteCleanCost * 4 - 1;
+    useGameStore.setState({ gameState: { ...state } });
+
+    expect(useGameStore.getState().cleanStation()).toBe(false);
+
+    const after = useGameStore.getState().gameState;
+    expect(after.station.cleanliness).toBe(20);
+    expect(after.player.cash).toBe(GAME_CONFIG.economy.siteCleanCost * 4 - 1);
+  });
 });
 
 describe('tank packages', () => {

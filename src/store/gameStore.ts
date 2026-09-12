@@ -94,6 +94,7 @@ import {
   type AccountProfile
 } from '../services/account';
 import { zoomToFit, CAMERA_VIEWS } from '../rendering/cameraFrame';
+import { siteCleaningCost } from '../domain/services/maintenance';
 
 const SOUND_PLAYERS: Record<SoundCue, () => void> = {
   click: () => sounds.playClick(),
@@ -2686,19 +2687,19 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   cleanStation: () => {
     const { gameState } = get();
-    const cost = GAME_CONFIG.economy.siteCleanCost; // 300 TL
+    const cost = siteCleaningCost(gameState.station.cleanliness);
 
     // Cleanliness decays in fractions, while the maintenance desk shows a
     // rounded percentage. Treat anything displayed as 100% as already clean,
     // and guard it here as well as in the UI so repeated/direct calls cannot
     // charge the till for work that has no visible effect.
-    if (Math.round(gameState.station.cleanliness) >= 100) return false;
+    if (cost === 0) return false;
 
     if (gameState.player.cash < cost) {
       get().addNotification({
         type: 'WARNING',
         title: 'Yetersiz Bakiye',
-        message: `Saha temizliği için ${cost} TL gerekiyor.`
+        message: `Sahayı %100 temizlemek için ${cost.toLocaleString('tr-TR')} TL gerekiyor.`
       });
       return false;
     }
@@ -2707,12 +2708,12 @@ export const useGameStore = create<GameStore>((set, get) => {
     const tx = TransactionService.executeCashTransaction(state, {
       type: 'CLEAN',
       amount: -cost,
-      description: 'İstasyon sahası ve cam temizliği'
+      description: 'İstasyon sahası tam temizliği'
     });
 
     if (!tx.success) return false;
 
-    state.station.cleanliness = Math.min(100, state.station.cleanliness + 25);
+    state.station.cleanliness = 100;
     state.player.statistics.cleanActionsCount++;
 
     const cleanEffects = createEffects();
@@ -2725,7 +2726,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     get().addNotification({
       type: 'INFO',
       title: 'Saha Temizlendi',
-      message: `İstasyon temizlik puanı: %${Math.round(state.station.cleanliness)}`
+      message: `İstasyon temizlik puanı %100'e çıkarıldı · ₺${cost.toLocaleString('tr-TR')}`
     });
     return true;
   },
