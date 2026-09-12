@@ -1388,7 +1388,6 @@ export interface LessonViewSource {
   selectedBuildingId: string | null;
   landMode: { active: boolean; intent: 'BUY' | 'PAVE' };
   buildMode: { active: boolean; pinned: boolean };
-  tour: { active: boolean };
 }
 
 export function lessonView(source: LessonViewSource): LessonView {
@@ -1401,7 +1400,6 @@ export function lessonView(source: LessonViewSource): LessonView {
     landMode: { active: source.landMode.active, intent: source.landMode.intent },
     buildModeActive: source.buildMode.active,
     buildPinned: source.buildMode.pinned,
-    tourActive: source.tour.active,
     tabs: { ...openTabs }
   };
 }
@@ -1440,7 +1438,7 @@ export function lessonToStart(
   options: { panelsOnly?: boolean } = {}
 ): { id: string; subject: string } | null {
   const { settings, dayState } = view.state;
-  if (settings.lessonsOff || view.tourActive || !dayState.isDayActive || view.landMode.active) return null;
+  if (settings.lessonsOff || !dayState.isDayActive || view.landMode.active) return null;
 
   const panel = openPanel(view);
   const screenBusy = view.activeModal !== 'NONE' || view.buildModeActive;

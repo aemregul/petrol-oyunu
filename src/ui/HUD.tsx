@@ -56,7 +56,6 @@ export const HUD: React.FC = () => {
   const exitLandMode = useGameStore((s) => s.exitLandMode);
   const toggleStationOpen = useGameStore((s) => s.toggleStationOpen);
   const setTimeSpeed = useGameStore((s) => s.setTimeSpeed);
-  const tourActive = useGameStore((s) => s.tour.active);
   // A lesson holds the clock itself; the speed buttons would fight it.
   const lessonActive = useGameStore((s) => s.lesson.id !== null);
   const editMode = useGameStore((s) => s.editMode);
@@ -246,7 +245,7 @@ export const HUD: React.FC = () => {
             >
               <button
                 onClick={() => setTimeSpeed(0)}
-                disabled={tourActive || lessonActive || !dayState.isDayActive}
+                disabled={lessonActive || !dayState.isDayActive}
                 aria-pressed={dayState.timeSpeed === 0}
                 title="Oyunu durdur"
                 className={`h-9 min-w-9 px-2 flex items-center justify-center border-r-2 border-ink transition-colors ${
@@ -257,7 +256,7 @@ export const HUD: React.FC = () => {
               </button>
               <button
                 onClick={() => setTimeSpeed(0.5)}
-                disabled={tourActive || lessonActive || !dayState.isDayActive}
+                disabled={lessonActive || !dayState.isDayActive}
                 aria-pressed={dayState.timeSpeed === 0.5}
                 title="Oyunu yavaşlat"
                 className={`h-9 min-w-[3.25rem] px-2 font-display text-xs border-r-2 border-ink transition-colors ${
@@ -268,7 +267,7 @@ export const HUD: React.FC = () => {
               </button>
               <button
                 onClick={() => setTimeSpeed(1)}
-                disabled={tourActive || lessonActive || !dayState.isDayActive}
+                disabled={lessonActive || !dayState.isDayActive}
                 aria-pressed={dayState.timeSpeed === 1}
                 title="Normal hızda devam et"
                 className={`h-9 min-w-9 px-2 flex items-center justify-center transition-colors ${

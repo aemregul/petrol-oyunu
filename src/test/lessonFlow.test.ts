@@ -59,7 +59,6 @@ function viewNow(): LessonView {
     landMode: { active: s.landMode.active, intent: s.landMode.intent },
     buildModeActive: s.buildMode.active,
     buildPinned: s.buildMode.pinned,
-    tourActive: s.tour.active,
     tabs: { build: null, staff: null, office: null, officeLoans: false }
   };
 }
@@ -95,7 +94,6 @@ beforeEach(() => {
     activeModal: 'NONE',
     selectedVehicleId: null,
     selectedPumpId: null,
-    tour: { active: false, step: 0, resumeSpeed: 1 },
     lesson: { id: null, step: 0, subject: '', resumeSpeed: 1, endedAt: 0 }
   });
 });
@@ -216,16 +214,13 @@ describe('lessons in the store', () => {
     expect(store().gameState.dayState.timeSpeed).toBe(0.5);
   });
 
-  it('never starts over a running lesson or the old tour, and clears a pump card before pointing', () => {
+  it('never starts over a running lesson, and clears a pump card before pointing', () => {
     useGameStore.setState({ selectedPumpId: 'pump_1' });
     store().startLesson('first_customer', 'manual_customer');
     expect(store().selectedPumpId).toBeNull();
     store().startLesson('fuel_order', 'gasoline');
     expect(store().lesson.id).toBe('first_customer');
     store().endLesson('lost');
-
-    useGameStore.setState({ tour: { active: true, step: 0, resumeSpeed: 1 } });
-    store().startLesson('fuel_order', 'gasoline');
     expect(store().lesson.id).toBeNull();
   });
 

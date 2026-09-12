@@ -28,7 +28,6 @@ function view(state: GameState, extra: Partial<LessonView> = {}): LessonView {
     landMode: { active: false, intent: 'BUY' },
     buildModeActive: false,
     buildPinned: false,
-    tourActive: false,
     tabs: { ...NO_TABS },
     ...extra
   };
@@ -215,7 +214,7 @@ describe('when a lesson offers itself', () => {
     }
   });
 
-  it('stays out of the way: an open menu teaches only itself, and nothing starts over the land map, the old tour, or with lessons off', () => {
+  it('stays out of the way: an open menu teaches only itself, and nothing starts over the land map or with lessons off', () => {
     const state = createInitialGameState();
     state.tanks.gasoline.stock = 0;
     expect(lessonToStart(view(state))?.id).toBe('fuel_order');
@@ -225,7 +224,6 @@ describe('when a lesson offers itself', () => {
     // A menu no lesson teaches holds everything back.
     expect(lessonToStart(view(state, { activeModal: 'SETTINGS' }))).toBeNull();
     expect(lessonToStart(view(state, { landMode: { active: true, intent: 'BUY' } }))).toBeNull();
-    expect(lessonToStart(view(state, { tourActive: true }))).toBeNull();
     state.settings.lessonsOff = true;
     expect(lessonToStart(view(state))).toBeNull();
   });

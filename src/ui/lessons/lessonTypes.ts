@@ -31,7 +31,6 @@ export interface LessonView {
   buildModeActive: boolean;
   /** The building being placed has been put down on a spot and awaits Yerleştir. */
   buildPinned: boolean;
-  tourActive: boolean;
   tabs: OpenTabs;
 }
 

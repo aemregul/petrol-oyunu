@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StationScene } from './rendering/StationScene';
 import { HUD } from './ui/HUD';
 import { ModalContainer } from './ui/ModalContainer';
-import { TourOverlay } from './ui/TourOverlay';
 import { LessonOverlay } from './ui/LessonOverlay';
 import { FeedbackButton } from './ui/FeedbackButton';
 import { UnsupportedGraphics } from './ui/UnsupportedGraphics';
@@ -87,9 +86,9 @@ export const App: React.FC = () => {
     sounds.toggleMute(sfxVolume <= 0);
   }, [masterVolume, sfxVolume]);
 
-  // The first-run tour no longer starts on its own (Emre, 2026-09-11): hardly
-  // anyone read it. Lessons teach one situation at a time instead, from the
-  // LessonOverlay mounted with the HUD below.
+  // There is no first-run tour any more (Emre, 2026-09-11/12: hardly anyone
+  // read it). Lessons teach one situation and one panel at a time instead,
+  // from the LessonOverlay mounted with the HUD below.
 
   // The palette is a data attribute on the root: every token in index.css
   // reads through it, so the whole HUD turns with one switch.
@@ -247,7 +246,6 @@ export const App: React.FC = () => {
           <HUD />
           <ModalContainer />
           <FeedbackButton />
-          <TourOverlay />
           <LessonOverlay />
         </>
       )}

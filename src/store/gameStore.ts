@@ -49,7 +49,6 @@ import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services
 import { unitPrice } from '../domain/services/catalogRules';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
 import { GAME_EVENTS } from '../config/eventConfig';
-import { TOUR_STEP_COUNT } from '../ui/tour/tourCount';
 import { firstLessonStep, lessonById, lessonClock, lessonView } from '../ui/lessons/lessons';
 import { cloudSaveAvailable, fetchCloudSave, followsAccount, pushCloudSave, reconcile } from '../services/cloudSave';
 import {
@@ -472,16 +471,6 @@ interface GameStore {
   // UI / Modal Actions
   setActiveModal: (modal: ActiveModalType) => void;
   /**
-   * The first-run tour (Emre, 2026-09-09). UI state, not saved; whether it
-   * has been taken lives in settings.tourSeen. The clock is stopped while
-   * it is up and put back to what it was.
-   */
-  tour: { active: boolean; step: number; resumeSpeed: GameState['dayState']['timeSpeed'] };
-  startTour: () => void;
-  nextTourStep: () => void;
-  prevTourStep: () => void;
-  endTour: () => void;
-  /**
    * Lessons (Emre, 2026-09-11): one situation at a time, taught when it
    * happens. UI state, not saved; which lessons are behind the player lives
    * in settings.lessonsDone. The clock is held on every step that points at
@@ -830,7 +819,6 @@ export const useGameStore = create<GameStore>((set, get) => {
   selectedPumpId: null,
   selectedBuildingId: null,
   officeTab: 'summary',
-  tour: { active: false, step: 0, resumeSpeed: 1 },
   lesson: { id: null, step: 0, subject: '', resumeSpeed: 1, endedAt: 0 },
   openOffice: (tab = 'summary') => set({ officeTab: tab, activeModal: 'OFFICE' }),
   fittingCanopy: false,
@@ -861,41 +849,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     simTickMs: 0.5
   },
 
-  startTour: () => {
-    const { gameState, tour } = get();
-    const resumeSpeed: GameState['dayState']['timeSpeed'] = tour.active ? tour.resumeSpeed : gameState.dayState.timeSpeed;
-    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    state.dayState.timeSpeed = 0;
-    set({ gameState: state, activeModal: 'NONE', tour: { active: true, step: 0, resumeSpeed } });
-  },
-  nextTourStep: () => {
-    const { tour } = get();
-    if (!tour.active) return;
-    if (tour.step >= TOUR_STEP_COUNT - 1) {
-      get().endTour();
-      return;
-    }
-    set({ tour: { ...tour, step: tour.step + 1 } });
-  },
-  prevTourStep: () => {
-    const { tour } = get();
-    if (!tour.active || tour.step === 0) return;
-    set({ tour: { ...tour, step: tour.step - 1 } });
-  },
-  endTour: () => {
-    const { gameState, tour } = get();
-    if (!tour.active) return;
-    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
-    state.settings.tourSeen = true;
-    state.dayState.timeSpeed = tour.resumeSpeed;
-    SaveManager.saveGame(state);
-    set({ gameState: state, tour: { active: false, step: 0, resumeSpeed: 1 } });
-  },
-
   startLesson: (id, subject) => {
-    const { gameState, lesson: current, tour } = get();
+    const { gameState, lesson: current } = get();
     const definition = lessonById(id);
-    if (!definition || current.id || tour.active || !gameState.dayState.isDayActive) return;
+    if (!definition || current.id || !gameState.dayState.isDayActive) return;
     const first = firstLessonStep(definition, lessonView(get()), subject, 0);
     if (first >= definition.steps.length) return;
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
@@ -1877,8 +1834,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   setTimeSpeed: (speed) => {
-    const { gameState, tour, lesson } = get();
-    if (tour.active || lesson.id || !gameState.dayState.isDayActive) return;
+    const { gameState, lesson } = get();
+    if (lesson.id || !gameState.dayState.isDayActive) return;
     if (speed !== 0 && speed !== 0.5 && speed !== 1) return;
     sounds.playClick();
     const state = JSON.parse(JSON.stringify(gameState)) as GameState;
