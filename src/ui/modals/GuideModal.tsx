@@ -83,7 +83,7 @@ function sections(): Section[] {
           <H>Sabır</H>
           <P>Her müşterinin sabrı var; kuyrukta ve pompada erir. Sabrı biten gider, kaybedilen her müşteri itibardan 0,015 düşürür. Tank boşsa ya da pompa arızalıysa müşteri bakar ve hemen gider.</P>
           <H>Pompacı</H>
-          <P>Seviye 3'te işe alınır, {lira(attendant.hireCost)} işe alım ve günde {lira(attendant.dailyWage)} maaş. Pompayı senin yerine işletir. Hizmet sayısı arttıkça eğitilir: daha hızlı dolum, daha kısa tepki. Bir pompacı bir pompaya bakar.</P>
+          <P>Seviye 3'te işe alınır, {lira(attendant.hireCost)} işe alım ve günde {lira(attendant.dailyWage)} maaş. Pompayı senin yerine işletir. Hizmet sayısı arttıkça eğitilir: daha hızlı dolum, daha kısa tepki. Bir pompacı bir pompaya bakar; Personel kartındaki kalemle adını değiştirebilirsin.</P>
         </>
       )
     },

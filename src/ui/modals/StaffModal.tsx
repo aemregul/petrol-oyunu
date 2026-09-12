@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG, ATTENDANT_HIRE_LEVEL } from '../../config/gameConfig';
-import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle, Trash2, Check, Lock } from 'lucide-react';
+import { X, Users, UserCheck, Shield, Sliders, CheckCircle2, AlertCircle, ArrowUpCircle, Trash2, Check, Lock, Pencil } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { openTabs } from '../lessons/openTabs';
 import {
@@ -36,6 +36,7 @@ export const StaffModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const hirePumpAttendant = useGameStore((s) => s.hirePumpAttendant);
+  const renameAttendant = useGameStore((s) => s.renameAttendant);
   const assignAttendantToPump = useGameStore((s) => s.assignAttendantToPump);
   const upgradeAttendant = useGameStore((s) => s.upgradeAttendant);
   const fireAttendant = useGameStore((s) => s.fireAttendant);
@@ -45,6 +46,7 @@ export const StaffModal: React.FC = () => {
   const updateManagerSettings = useGameStore((s) => s.updateManagerSettings);
 
   const [activeTab, setActiveTab] = useState<'attendants' | 'manager'>('attendants');
+  const [editingAttendant, setEditingAttendant] = useState<{ id: string; name: string } | null>(null);
   // The open tab, for a lesson that teaches each tab the first time it is shown.
   useEffect(() => {
     openTabs.staff = activeTab;
@@ -68,6 +70,15 @@ export const StaffModal: React.FC = () => {
   const handleClose = () => {
     sounds.playClick();
     setActiveModal('NONE');
+  };
+
+  const commitAttendantName = () => {
+    if (
+      editingAttendant &&
+      renameAttendant(editingAttendant.id, editingAttendant.name)
+    ) {
+      setEditingAttendant(null);
+    }
   };
 
   return (
@@ -176,6 +187,7 @@ export const StaffModal: React.FC = () => {
                   const progress = nextTier
                     ? Math.min(100, Math.round((emp.serviceCount / Math.max(1, nextTier.requiredServices || 1)) * 100))
                     : 100;
+                  const editingName = editingAttendant?.id === emp.id;
 
                   return (
                     <div
@@ -184,8 +196,54 @@ export const StaffModal: React.FC = () => {
                     >
                       {/* 1 — Name, level, and the one destructive action, right. */}
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-display text-base text-ink truncate">{emp.name}</span>
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                          {editingName ? (
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <input
+                                autoFocus
+                                value={editingAttendant.name}
+                                maxLength={24}
+                                aria-label={`${emp.name} için yeni isim`}
+                                onChange={(event) => setEditingAttendant({ id: emp.id, name: event.target.value })}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') commitAttendantName();
+                                  if (event.key === 'Escape') setEditingAttendant(null);
+                                }}
+                                className="bg-paper border-2 border-ink rounded-md px-2 py-1 text-sm font-display text-ink w-44 max-w-full outline-none select-text"
+                              />
+                              <button
+                                onClick={commitAttendantName}
+                                title="İsmi kaydet"
+                                aria-label="Pompacı ismini kaydet"
+                                className="game-btn bg-kgrn text-white w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditingAttendant(null)}
+                                title="Vazgeç"
+                                aria-label="İsim değişikliğinden vazgeç"
+                                className="game-btn bg-card text-ink w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-display text-base text-ink truncate">{emp.name}</span>
+                              <button
+                                onClick={() => {
+                                  sounds.playClick();
+                                  setEditingAttendant({ id: emp.id, name: emp.name });
+                                }}
+                                title="Pompacı ismini değiştir"
+                                aria-label={`${emp.name} ismini değiştir`}
+                                className="game-btn bg-paper hover:bg-card text-ink w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                           <span className="bg-kblu text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-ink whitespace-nowrap">
                             Seviye {emp.level}
                           </span>

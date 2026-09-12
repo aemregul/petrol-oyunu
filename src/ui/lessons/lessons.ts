@@ -970,7 +970,7 @@ const staffPanel: Lesson = {
       id: 'hire',
       title: 'Pompacı',
       body: [
-        `Seviye ${ATTENDANT_LEVEL}'te açılır: bir kerelik ${lira(recruit.hireCost)}, günde ${lira(recruit.dailyWage)} maaş. Bir pompacı bir pompaya bakar.`
+        `Seviye ${ATTENDANT_LEVEL}'te açılır: bir kerelik ${lira(recruit.hireCost)}, günde ${lira(recruit.dailyWage)} maaş. Bir pompacı bir pompaya bakar. İşe aldıktan sonra kartındaki kalemle ismini değiştirebilirsin.`
       ],
       target: dom('staff-hire'),
       advance: next

@@ -417,3 +417,44 @@ describe('renaming the station', () => {
     expect(useGameStore.getState().gameState.station.name).toBe(before);
   });
 });
+
+describe('renaming pump attendants', () => {
+  const addAttendant = () => {
+    const state = useGameStore.getState().gameState;
+    state.employees.emp_name = {
+      id: 'emp_name',
+      name: 'Ahmet Usta',
+      role: 'PUMP_ATTENDANT',
+      level: 2,
+      wage: 1200,
+      assignedPumpId: 'pump_1',
+      state: 'IDLE',
+      serviceCount: 42,
+      currentVehicleId: null,
+      actionTimerSeconds: 0,
+      worldPosition: [12, 0, 10]
+    };
+    useGameStore.setState({ gameState: { ...state } });
+  };
+
+  it('normalizes and saves the new name without changing employee progress', () => {
+    addAttendant();
+
+    expect(useGameStore.getState().renameAttendant('emp_name', '  Deniz   Usta  ')).toBe(true);
+
+    const attendant = useGameStore.getState().gameState.employees.emp_name;
+    expect(attendant.name).toBe('Deniz Usta');
+    expect(attendant.level).toBe(2);
+    expect(attendant.serviceCount).toBe(42);
+    expect(attendant.assignedPumpId).toBe('pump_1');
+  });
+
+  it('rejects missing employees and names outside the visible limit', () => {
+    addAttendant();
+
+    expect(useGameStore.getState().renameAttendant('missing', 'Deniz')).toBe(false);
+    expect(useGameStore.getState().renameAttendant('emp_name', 'A')).toBe(false);
+    expect(useGameStore.getState().renameAttendant('emp_name', 'X'.repeat(25))).toBe(false);
+    expect(useGameStore.getState().gameState.employees.emp_name.name).toBe('Ahmet Usta');
+  });
+});

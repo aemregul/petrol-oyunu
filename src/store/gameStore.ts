@@ -602,6 +602,8 @@ interface GameStore {
 
   // Employees & Manager
   hirePumpAttendant: (pumpId?: string) => boolean;
+  /** Changes only the attendant's display name; assignment and progress stay put. */
+  renameAttendant: (employeeId: string, name: string) => boolean;
   fireAttendant: (employeeId: string) => void;
   assignAttendantToPump: (employeeId: string, pumpId: string | null) => void;
   upgradeAttendant: (employeeId: string) => boolean;
@@ -3159,6 +3161,37 @@ export const useGameStore = create<GameStore>((set, get) => {
         : `${randomName} Usta göreve başladı. Pompaya gelen araçlara otomatik hizmet verecek.`
     });
 
+    return true;
+  },
+
+  renameAttendant: (employeeId, name) => {
+    const { gameState } = get();
+    const employee = gameState.employees[employeeId];
+    if (!employee || employee.role !== 'PUMP_ATTENDANT') return false;
+
+    const trimmed = name.trim().replace(/\s+/g, ' ');
+    if (trimmed.length < 2 || trimmed.length > 24) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Geçersiz İsim',
+        message: 'Pompacı adı 2 ile 24 karakter arasında olmalı.'
+      });
+      return false;
+    }
+
+    if (employee.name === trimmed) return true;
+
+    const state = JSON.parse(JSON.stringify(gameState)) as GameState;
+    state.employees[employeeId].name = trimmed;
+
+    sounds.playClick();
+    SaveManager.saveGame(state);
+    set({ gameState: state });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Pompacı İsmi Değişti',
+      message: `${employee.name} artık ${trimmed} olarak çalışıyor.`
+    });
     return true;
   },
 
