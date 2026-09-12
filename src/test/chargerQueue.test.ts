@@ -39,8 +39,9 @@ function ev(id: string, state: GameState, x: number): VehicleEntity {
     id, archetype: 'ev', modelVariant: 'hatchback', fuelType: 'gasoline', tankCapacity: 60, currentFuel: 20,
     request: { mode: 'FULL', targetValue: 30, calculatedLiters: 30, calculatedPrice: 0, dispensedLiters: 0, isFinished: false },
     patience: 400, maxPatience: 400, satisfaction: 100, state: 'ROAD_APPROACH', targetPumpId: null, assignedActor: null,
-    worldPosition: [x, 0, layout.roadLaneZ], targetWaypoint: null,
-    route: [[layout.entry.x, 0, layout.roadLaneZ], [layout.entry.x, 0, layout.laneZ]],
+    worldPosition: [x, 0, layout.roadLaneZ],
+    targetWaypoint: [layout.entry.x, 0, layout.roadLaneZ],
+    route: [[layout.entry.x, 0, layout.laneZ]],
     heading: 0, speed: 1, routeProgress: 0, waitingTimeSeconds: 0, shoppingIntent: false
   };
 }
@@ -56,10 +57,12 @@ describe('the line behind the post', () => {
     // the highway; using it merely as a spawn suppressor contradicted that
     // regression rule.
     state.station.open = true;
-    state.buildings.sub = building('sub', 'ev_substation', [13, 13]);
-    state.buildings.bank = building('bank', 'ev_storage', [9.5, 12.5], 0, { energyKwh: 200 });
+    state.pumps = {};
+    state.buildings = {};
+    state.buildings.sub = building('sub', 'ev_substation', [3, 13]);
+    state.buildings.bank = building('bank', 'ev_storage', [6, 13], 0, { energyKwh: 200 });
     // Deep enough in the plot for two to wait behind it, off the front lane.
-    state.buildings.dc = building('dc', 'ev_charger_dc', [13, 10]);
+    state.buildings.dc = building('dc', 'ev_charger_dc', [9, 10]);
     const layout = blockLayout(state, 'near')!;
     // Two electric customers, a little apart on the road.
     state.vehicles.a = ev('a', state, layout.entry.x - 3);
@@ -71,7 +74,7 @@ describe('the line behind the post', () => {
     const effects = createEffects();
 
     const [ox, oz] = pumpBayOffset({ rotation: 0, type: 'ev_charger_dc' });
-    const bay = [13 + ox, 10 + oz];
+    const bay = [9 + ox, 10 + oz];
     const pumpSlot = queueSlotPosition(state, 0, 'near');
 
     let queuedAt: [number, number, number] | null = null;
@@ -83,10 +86,10 @@ describe('the line behind the post', () => {
     expect(a.chargingBuildingId).toBe('dc');
     expect(b.state).toBe('QUEUE');
     expect(queuedAt).not.toBeNull();
-    // Behind the post's bay, on its approach line — well clear of the pump lay-by.
+    // Alongside the parking row, clear of the bay's reversing aisle.
     expect(Math.abs(queuedAt![0] - bay[0])).toBeLessThan(0.6);
     expect(queuedAt![2]).toBeLessThan(bay[1] - 1.5);
-    expect(Math.hypot(queuedAt![0] - pumpSlot[0], queuedAt![2] - pumpSlot[2])).toBeGreaterThan(2);
+    expect(Math.hypot(queuedAt![0] - pumpSlot[0], queuedAt![2] - pumpSlot[2])).toBeGreaterThan(1.5);
 
     // The first car is served and goes; the second takes the post.
     a.chargeSecondsLeft = 0.01;

@@ -1010,11 +1010,11 @@ export function pumpSide(pump: { position: [number, number] }): DrivewaySide {
 /** How far to the side of a pump a vehicle parks, in grid units. */
 export const PUMP_BAY_OFFSET = 1.4;
 /**
- * A charging post is a slim pillar, not a two-sided island: the car pulls up
- * right beside it, on the same slab (Emre, 2026-09-07, after the reference
- * game). Its bay sits this far from the post's centre, in grid units.
+ * A charging post stands at the head of a parking bay. The centre is far
+ * enough from the pillar for a hatchback's half-length, so a reversing car
+ * finishes against the kerb rather than through the post.
  */
-export const CHARGER_BAY_OFFSET = 0.9;
+export const CHARGER_BAY_OFFSET = 1.45;
 
 /** Whether this service point is a charging post rather than a pump. */
 export function isChargerType(type?: string): boolean {
@@ -1058,6 +1058,17 @@ export function bayApproachDir(pump: { rotation?: number }): [number, number] {
   ];
 }
 
+/**
+ * A charging bay points away from the face of its post (local +x). Unlike a
+ * pump, the post is at the HEAD of the vehicle rather than beside it: the car
+ * reaches the open end with its nose facing this direction, then reverses in.
+ */
+export function chargerBayDir(post: { rotation?: number }): [number, number] {
+  const [ox, oz] = pumpBayOffset({ rotation: post.rotation, type: 'ev_charger_ac' });
+  const length = Math.max(0.001, Math.hypot(ox, oz));
+  return [ox / length, oz / length];
+}
+
 /** Duruş alanının kapladığı zemin: bir araçlık dikdörtgen, grid biriminde. */
 export const SERVICE_BAY_TYPES = ['pump_standard', 'ev_charger_ac', 'ev_charger_dc'];
 
@@ -1068,8 +1079,12 @@ export function serviceBayRect(
   type?: string
 ): { minX: number; maxX: number; minZ: number; maxZ: number } {
   const [ox, oz] = pumpBayOffset({ rotation, type });
-  // Uzun kenar, aracın durduğu doğrultuda (bay ofsetine dik eksen).
-  const alongX = Math.abs(ox) < 0.01;
+  // A pump's car stands along the island; a charger's car points away from
+  // the post, like a perpendicular parking bay.
+  const serviceDir = isChargerType(type)
+    ? chargerBayDir({ rotation })
+    : bayApproachDir({ rotation });
+  const alongX = Math.abs(serviceDir[0]) > 0.5;
   const hx = alongX ? 1.0 : 0.6;
   const hz = alongX ? 0.6 : 1.0;
   const rect = {
@@ -1089,12 +1104,13 @@ export function serviceBayRect(
   if (oz > 0.01) rect.minZ = Math.max(rect.minZ, position[1] + islandHz);
   if (oz < -0.01) rect.maxZ = Math.min(rect.maxZ, position[1] - islandHz);
 
-  // A car leaving a post rolls a length ahead before it turns, so the post
-  // needs that much open ground in front of its bay. Claimed as part of the
-  // bay, so a post cannot be put nose-on to a pump island or a wall.
+  // The open end is the shared manoeuvre aisle. Claim its first part so a
+  // player cannot put a wall immediately across a reversing bay. Parallel
+  // chargers can still sit side by side: this grows the rectangle along the
+  // bay, never across neighbouring stalls.
   if (isChargerType(type)) {
-    const [dx, dz] = bayApproachDir({ rotation });
-    const ahead = 1.2;
+    const [dx, dz] = serviceDir;
+    const ahead = 1.0;
     if (dx > 0.01) rect.maxX += ahead;
     if (dx < -0.01) rect.minX -= ahead;
     if (dz > 0.01) rect.maxZ += ahead;
@@ -2156,11 +2172,11 @@ const CHARGE_QUEUE_SPACING = 2.2;
 const CHARGE_QUEUE_MAX = 4;
 
 /**
- * Where electric customers wait: in a line behind a charging post, back
- * along the way in to its bay, not in the pump queue at the front (Emre,
- * 2026-09-07). The line is as long as the concrete behind the post allows —
- * never onto the front lane, the frontage, or into a building or island.
- * With several posts, the one with the longest line takes the queue.
+ * Where electric customers wait: alongside the row of perpendicular stalls,
+ * not across their shared reversing aisle and not in the pump queue at the
+ * front. The line is as long as the concrete permits — never onto the front
+ * lane, the frontage, or into a building or island. With several posts, the
+ * one with the longest line takes the queue.
  */
 export function chargeQueueLine(
   state: GameState,
@@ -2861,9 +2877,39 @@ function drivableOrNull(
   return routeBodyClear(state, vehicle, block.side, vehicle.worldPosition, route) ? route : null;
 }
 
+function chargerParkingPoints(
+  block: BlockLayout,
+  point: [number, number],
+  rotation: number,
+  type?: string
+): {
+  bay: [number, number, number];
+  runUp: [number, number, number];
+  align: [number, number, number];
+  dir: [number, number];
+} {
+  const [ox, oz] = pumpBayOffset({ rotation, type });
+  const dir = chargerBayDir({ rotation });
+  const bay = clampBayToApron(block, [point[0] + ox, 0, point[1] + oz]);
+  const runUp = clampBayToApron(block, [
+    bay[0] + dir[0] * PUMP_APPROACH_RUN,
+    0,
+    bay[2] + dir[1] * PUMP_APPROACH_RUN
+  ]);
+  // The final forward metre points the nose out of the stall. The following
+  // leg travels over the same aisle in reverse and ends at the post.
+  const align = clampBayToApron(block, [
+    runUp[0] - dir[0] * 1.2,
+    0,
+    runUp[2] - dir[1] * 1.2
+  ]);
+  return { bay, runUp, align, dir };
+}
+
 /**
- * Circulation lane -> the bay beside a charging point. The same shape as the
- * route to a pump, because from the driver's seat it is the same manoeuvre.
+ * Circulation lane -> open end of a perpendicular charging bay. The vehicle
+ * deliberately stops beyond the painted stall with its nose pointing away
+ * from the post; PUMP_RESERVED then gives it one straight reversing leg.
  */
 function chargerRoute(
   state: GameState,
@@ -2872,35 +2918,53 @@ function chargerRoute(
   postId?: string
 ): Array<[number, number, number]> | null {
   const block = blockFor(state, vehicle);
-  // Şarj direğinin ön yüzü de oyuncunun çevirdiği yöndür — pompayla aynı kural.
-  const rotation = (postId ? state.buildings[postId]?.rotation : 0) ?? 0;
-  const [ox, oz] = pumpBayOffset({ rotation, type: postId ? state.buildings[postId]?.type : undefined });
-  const bay = clampBayToApron(block, [point[0] + ox, 0, point[1] + oz]);
+  const post = postId ? state.buildings[postId] : undefined;
+  const rotation = post?.rotation ?? 0;
+  const parking = chargerParkingPoints(block, point, rotation, post?.type);
+  const reverseRun = Math.hypot(
+    parking.runUp[0] - parking.bay[0],
+    parking.runUp[2] - parking.bay[2]
+  );
 
-  const approach = approachBay(
+  // Compatibility for old saves: a post built against the former plot edge
+  // may have no ground beyond its newly perpendicular stall. New placement
+  // rejects that geometry, but an existing paid-for charger must not silently
+  // become a dead bollard. It keeps the old side approach; on arrival the
+  // manoeuvre phase aligns it nose-out and completes the zero-length reverse.
+  if (reverseRun < 0.8) {
+    const legacy = approachBay(
+      state,
+      vehicle,
+      block,
+      parking.bay,
+      bayApproachDir({ rotation }),
+      undefined,
+      postId
+    );
+    return drivableOrNull(state, vehicle, block, legacy);
+  }
+
+  const toAlign = driveable(
     state,
     vehicle,
     block,
-    bay,
-    bayApproachDir({ rotation }),
+    [
+      [vehicle.worldPosition[0], 0, block.laneZ],
+      [parking.align[0], 0, block.laneZ],
+      parking.align
+    ],
     undefined,
-    postId
+    undefined
   );
+  if (!toAlign) return null;
 
-  return drivableOrNull(
-    state,
-    vehicle,
-    block,
-    approach ??
-      driveable(
-        state,
-        vehicle,
-        block,
-        [[vehicle.worldPosition[0], 0, block.laneZ], [bay[0], 0, block.laneZ], bay],
-        undefined,
-        postId
-      )
-  );
+  const route = [...toAlign];
+  const last = route[route.length - 1];
+  if (!last || Math.hypot(last[0] - parking.runUp[0], last[2] - parking.runUp[2]) > 0.05) {
+    route.push(parking.runUp);
+  }
+
+  return drivableOrNull(state, vehicle, block, route);
 }
 
 /**
@@ -2981,6 +3045,7 @@ function sendAway(state: GameState, vehicle: VehicleEntity): void {
   setVehicleState(vehicle, 'EXIT');
   setRoute(vehicle, backOut ? [backOut, ...route] : route);
   vehicle.reversing = !!backOut;
+  vehicle.chargerManeuver = null;
   // A driver can arrive here because the way to a selected parking bay stayed
   // blocked long enough to give up. That old wait belongs to the abandoned
   // parking manoeuvre, not to the new exit route: carrying it into EXIT made
@@ -3088,7 +3153,9 @@ function exitRoute(
   for (const point of servicePoints) {
     if (Math.hypot(from.worldPosition[0] - point.bay[0], from.worldPosition[2] - point.bay[2]) >= 1) continue;
     bayKind = (point.position[1] - point.bay[2]) * inwardHere > 0 ? 'front' : 'other';
-    bayDir = bayApproachDir({ rotation: point.rotation });
+    bayDir = isChargerType(point.type)
+      ? chargerBayDir({ rotation: point.rotation })
+      : bayApproachDir({ rotation: point.rotation });
     bayPostId = point.id;
     bayPumpId = point.pumpId;
     break;
@@ -6985,6 +7052,7 @@ function tickVehicles(
 
           if (point && toCharger) {
             vehicle.chargingBuildingId = point.id;
+            vehicle.chargerManeuver = 'APPROACH';
             vehicle.chargeSecondsLeft =
               point.kind === 'dc'
                 ? GAME_CONFIG.ev.dcChargeSeconds
@@ -7161,6 +7229,7 @@ function tickVehicles(
           const toPost = point ? chargerRoute(state, vehicle, point.position, point.id) : null;
           if (point && toPost) {
             vehicle.chargingBuildingId = point.id;
+            vehicle.chargerManeuver = 'APPROACH';
             vehicle.chargeSecondsLeft =
               point.kind === 'dc'
                 ? GAME_CONFIG.ev.dcChargeSeconds
@@ -7221,10 +7290,52 @@ function tickVehicles(
           break;
         }
 
+        // Save compatibility: vehicles that were already driving to a post
+        // before perpendicular bays existed have no manoeuvre phase. Give
+        // them a fresh route to the open end instead of letting an old target
+        // finish beside the newly oriented post.
+        if (vehicle.chargingBuildingId && !vehicle.chargerManeuver && !vehicle.reversing) {
+          const post = state.buildings[vehicle.chargingBuildingId];
+          const approach = post
+            ? chargerRoute(state, vehicle, post.position, post.id)
+            : null;
+          if (approach) {
+            vehicle.chargerManeuver = 'APPROACH';
+            setRoute(vehicle, approach);
+          }
+        }
+
         if (driveInTraffic(state, vehicle, block, dt)) {
-          setVehicleState(vehicle, 'AT_PUMP');
-          const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
-          if (pump) setPumpState(pump, 'REQUEST_READY');
+          if (vehicle.chargingBuildingId && vehicle.chargerManeuver === 'APPROACH') {
+            const post = state.buildings[vehicle.chargingBuildingId];
+            if (!post) {
+              loseCustomer(
+                state,
+                vehicle,
+                'Şarj ünitesi kaldırıldı — müşteri hizmet alamadan ayrıldı.',
+                effects
+              );
+              break;
+            }
+            const parking = chargerParkingPoints(
+              block,
+              post.position,
+              post.rotation,
+              post.type
+            );
+            // Snap only the heading, never the position: the last approach
+            // leg already faces out, and this removes tiny floating error so
+            // the mesh visibly reverses dead straight between the markings.
+            vehicle.heading = Math.atan2(parking.dir[0], parking.dir[1]);
+            vehicle.reversing = true;
+            vehicle.chargerManeuver = 'REVERSING_IN';
+            setRoute(vehicle, [parking.bay]);
+          } else {
+            vehicle.chargerManeuver = null;
+            setVehicleState(vehicle, 'AT_PUMP');
+            const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
+            if (pump) setPumpState(pump, 'REQUEST_READY');
+          }
         }
         vehicle.patience -= dt * 0.5; // waiting is gentler while rolling up
 

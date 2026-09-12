@@ -248,6 +248,13 @@ export interface VehicleEntity {
   /** Backing out of a bay: the nose keeps pointing where it was. */
   reversing?: boolean;
   /**
+   * Parking-style approach to a charging post. APPROACH drives to the open
+   * manoeuvre point with the nose facing out; REVERSING_IN backs down the
+   * marked bay to the post. Kept separate from `reversing`, whose one-leg
+   * movement primitive is also used by ordinary car parks.
+   */
+  chargerManeuver?: 'APPROACH' | 'REVERSING_IN' | null;
+  /**
    * This driver abandoned the visit and should merge into the left/overtaking
    * lane after clearing the exit, rather than lingering in the entry lane.
    */

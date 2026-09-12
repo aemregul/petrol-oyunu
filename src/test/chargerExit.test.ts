@@ -5,6 +5,7 @@ import { GAME_CONFIG } from '../config/gameConfig';
 import { evaluatePlacement } from '../domain/services/placement';
 import {
   createEffects,
+  chargerBayDir,
   runSimulationTick,
   getLayout,
   pumpBayOffset
@@ -80,15 +81,24 @@ describe('leaving the charging post', () => {
       const startX = car.worldPosition[0];
       let lastPos: [number, number, number] = [...car.worldPosition] as [number, number, number];
       let sawExit = false;
+      let leftBayNoseFirst = false;
+      const outward = chargerBayDir({ rotation });
       const bayZ = car.worldPosition[2];
       let deepest = bayZ;
       for (let i = 0; i < 6000 && car.state !== 'DESPAWN'; i++) {
         runSimulationTick(state, 0.05, effects);
-        if (car.state === 'EXIT') sawExit = true;
+        if (car.state === 'EXIT' && !sawExit) {
+          sawExit = true;
+          const target = car.targetWaypoint;
+          leftBayNoseFirst = !!target &&
+            (target[0] - car.worldPosition[0]) * outward[0] +
+              (target[2] - car.worldPosition[2]) * outward[1] > 0;
+        }
         deepest = Math.max(deepest, car.worldPosition[2]);
         lastPos = [...car.worldPosition] as [number, number, number];
       }
       expect(sawExit).toBe(true);
+      expect(leftBayNoseFirst).toBe(true);
       // Straight for the mouth: never deeper into the plot than the bay
       // and a roll ahead of it — no lap round the back to the far corner.
       expect(deepest).toBeLessThan(bayZ + 3);

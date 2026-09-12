@@ -95,6 +95,39 @@ describe('placement rules', () => {
     expect(locked.reason).toContain('Seviye');
   });
 
+  it('allows perpendicular charging stalls side by side on clear concrete', () => {
+    const state = createInitialGameState();
+    state.player.level = 12;
+    state.station.open = false;
+    state.station.plots.ownedParcels = [];
+    state.station.plots.pavedParcels = [];
+    for (let col = 0; col < 4; col++) {
+      for (let row = 0; row < 3; row++) {
+        state.station.plots.ownedParcels.push(`${col},${row}`);
+        state.station.plots.pavedParcels.push(`${col},${row}`);
+      }
+    }
+    state.station.plots.width = 32;
+    state.station.plots.height = 21;
+    const building = (id: string, type: string, position: [number, number]) => ({
+      id, type, level: 1, position, rotation: 0 as const,
+      size: GAME_CONFIG.buildings[type].size,
+      health: 100, constructionState: 'ACTIVE' as const, builtAtTimestamp: 0
+    });
+    state.buildings.sub = building('sub', 'ev_substation', [3, 18]);
+    state.buildings.bank = {
+      ...building('bank', 'ev_storage', [7.5, 18.5]),
+      energyKwh: 200
+    };
+    state.buildings.ac = building('ac', 'ev_charger_ac', [28.5, 13]);
+    state.buildings.dc = building('dc', 'ev_charger_dc', [28.5, 17]);
+
+    // This is the previously rejected screenshot layout: three cells between
+    // posts. Their old side-on rollout reservations overlapped; parking-style
+    // stalls extend in x and therefore share the aisle without overlapping.
+    expect(evaluatePlacement(state, 'ev_charger_ac', [28.5, 10], 0)).toEqual({ valid: true });
+  });
+
 });
 
 describe('placement — paving', () => {

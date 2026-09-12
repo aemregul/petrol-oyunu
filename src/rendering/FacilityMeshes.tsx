@@ -519,10 +519,9 @@ export const EnergyStorage: React.FC<FacilityProps> = ({ building }) => {
 };
 
 /**
- * Charging pillar. A slim post at the edge of one slab, and the car pulls up
- * on that same slab right beside it — the way the reference game does it,
- * not a pump island with a pad floating next to it (Emre, 2026-09-07). DC
- * units are taller, heavier and marked in orange.
+ * Charging pillar at the head of a perpendicular parking bay. The driver
+ * reverses toward the post, charges nose-out, then leaves the stall forwards.
+ * DC units are taller, heavier and marked in orange.
  */
 export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
   building,
@@ -544,12 +543,12 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
   // In the post's own frame the bay is always off to +x: one slab runs from
   // the post's kerb across the whole bay.
   const bayX = CHARGER_BAY_OFFSET * 2;
-  const bayHalfW = 1.2;
+  const bayHalfLength = 2.0;
   const slabMinX = -w / 2;
-  const slabMaxX = bayX + bayHalfW + 0.15;
+  const slabMaxX = bayX + bayHalfLength + 0.15;
   const slabW = slabMaxX - slabMinX;
-  const slabD = Math.max(d, 4.3);
-  const postX = -w / 2 + postD / 2 + 0.25;
+  const slabD = Math.max(d, 2.7);
+  const postX = w / 2 - postD / 2 - 0.15;
 
   return (
     <group>
@@ -561,13 +560,13 @@ export const EvCharger: React.FC<FacilityProps & { fast?: boolean }> = ({
 
       <BayPad
         worldOffset={[bayOffset[0] * 2, bayOffset[1] * 2]}
-        worldAlong={building.rotation % 180 !== 0 ? 'x' : 'z'}
+        worldAlong={building.rotation % 180 === 0 ? 'x' : 'z'}
         rotationDeg={building.rotation}
         color={accent}
       />
 
-      {/* Kerb the post stands on, along the slab's far edge */}
-      <mesh position={[-w / 2 + 0.45, 0.17, 0]} castShadow receiveShadow>
+      {/* Kerb and post close the head of the parking stall. */}
+      <mesh position={[w / 2 - 0.18, 0.17, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.9, 0.18, slabD * 0.7]} />
         <meshStandardMaterial color="#5b6472" roughness={0.9} />
       </mesh>

@@ -9,6 +9,7 @@ import { BuildingBody } from './BuildingMesh';
 import { PumpMesh } from './PumpMesh';
 import { BuildingEntity, PumpEntity } from '../domain/types/gameState';
 import {
+  isChargerType,
   pumpBayOffset,
   SERVICE_BAY_TYPES
 } from '../domain/services/simulationEngine';
@@ -132,6 +133,9 @@ export const BuildPreviewMesh: React.FC = () => {
     !ghostPump && buildMode.buildingType && SERVICE_BAY_TYPES.includes(buildMode.buildingType)
       ? pumpBayOffset({ rotation: buildMode.rotation, type: buildMode.buildingType })
       : null;
+  const bayAlong: 'x' | 'z' = isChargerType(buildMode.buildingType ?? undefined)
+    ? buildMode.rotation % 180 === 0 ? 'x' : 'z'
+    : buildMode.rotation % 180 !== 0 ? 'x' : 'z';
 
   return (
     <>
@@ -145,7 +149,7 @@ export const BuildPreviewMesh: React.FC = () => {
         {bayOffset && (
           <BayPad
             worldOffset={[bayOffset[0] * 2, bayOffset[1] * 2]}
-            worldAlong={buildMode.rotation % 180 !== 0 ? 'x' : 'z'}
+            worldAlong={bayAlong}
             rotationDeg={buildMode.rotation}
             color={color}
           />
