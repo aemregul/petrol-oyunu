@@ -84,7 +84,10 @@ describe('fuel reservation recovery', () => {
     expect(loaded.tanks.gasoline.reservedStock).toBe(20);
 
     runSimulationTick(loaded, 0.05, createEffects());
-    expect(loaded.tanks.gasoline.reservedStock).toBe(20);
+    // The pour has begun: the hold is what is still reserved plus what has
+    // already left the tank down the hose (Emre, 2026-09-12).
+    const poured = loaded.vehicles.low_stock_customer.request.dispensedLiters;
+    expect(loaded.tanks.gasoline.reservedStock + poured).toBeCloseTo(20, 5);
     expect(loaded.vehicles.low_stock_customer.state).toBe('FUELING');
   });
 });

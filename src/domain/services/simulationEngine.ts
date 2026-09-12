@@ -3894,6 +3894,20 @@ export function isUnderCanopy(pump: { hasCanopy?: boolean }): boolean {
   return pump.hasCanopy === true;
 }
 
+/**
+ * Takes what has gone down the hose out of the tank as it goes, so the gauge
+ * falls with the meter instead of all at once at the till (Emre, 2026-09-12:
+ * "yakıt göstergesi de anlık canlı veri gibi azalsın"). The hold shrinks by
+ * the same litres, so what is left to sell to anyone else never moves.
+ */
+function drawPouredFuel(state: GameState, vehicle: VehicleEntity): void {
+  const drawn = vehicle.request.drawnLiters ?? 0;
+  const owed = vehicle.request.dispensedLiters - drawn;
+  if (owed <= 0) return;
+  TransactionService.dispenseFuel(state, vehicle.fuelType, owed);
+  vehicle.request.drawnLiters = drawn + owed;
+}
+
 /** Pushes fuel for one step. Returns true when the requested amount is met. */
 export function dispenseStep(
   state: GameState,
@@ -3921,11 +3935,13 @@ export function dispenseStep(
   if (vehicle.request.dispensedLiters >= vehicle.request.calculatedLiters - 0.05) {
     vehicle.request.dispensedLiters = vehicle.request.calculatedLiters;
     vehicle.request.isFinished = true;
+    drawPouredFuel(state, vehicle);
     setVehicleState(vehicle, 'PAYMENT');
     if (pump) setPumpState(pump, 'PAYMENT');
     return true;
   }
 
+  drawPouredFuel(state, vehicle);
   return false;
 }
 
@@ -4102,7 +4118,9 @@ export function finalizeSale(
   const unitPrice = state.pricing[vehicle.fuelType].playerPrice;
   const totalSale = Number((dispensed * unitPrice).toFixed(2));
 
-  TransactionService.dispenseFuel(state, vehicle.fuelType, dispensed);
+  // The fuel left the tank while it was poured; this takes only what a save
+  // from before live drawing still owes.
+  drawPouredFuel(state, vehicle);
   vehicle.currentFuel = Math.min(vehicle.tankCapacity, vehicle.currentFuel + dispensed);
 
   // An interrupted fill settled for less than it reserved; the difference
@@ -6756,7 +6774,8 @@ export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number
     // Whatever went into the car leaves the tank unpaid; the rest of the
     // reservation goes back on the shelf.
     if (dispensed > 0) {
-      TransactionService.dispenseFuel(state, vehicle.fuelType, dispensed);
+      // It left the tank as it was poured; this takes any remainder.
+      drawPouredFuel(state, vehicle);
       vehicle.currentFuel = Math.min(vehicle.tankCapacity, vehicle.currentFuel + dispensed);
       unpaid = dispensed;
     }
@@ -6768,6 +6787,7 @@ export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number
     vehicle.request.reservedLiters = 0;
     vehicle.request.calculatedLiters = 0;
     vehicle.request.dispensedLiters = 0;
+    vehicle.request.drawnLiters = 0;
   }
 
   if (vehicle.targetPumpId && state.pumps[vehicle.targetPumpId]) {

@@ -2028,7 +2028,9 @@ describe('withdrawing a service mid-visit', () => {
     expect(
       Object.values(state.vehicles).filter((v) => v.state === 'QUEUE')
     ).toHaveLength(0);
-    expect(state.tanks.gasoline.reservedStock).toBeCloseTo(20, 1);
+    // The hold is intact: what is still reserved plus what has already been
+    // drawn out of the tank as it poured (Emre, 2026-09-12).
+    expect(state.tanks.gasoline.reservedStock + atPump.request.dispensedLiters).toBeCloseTo(20, 1);
   });
 
   it('loses the visitor inside a facility that is sold, unless an upgrade absorbed it', () => {

@@ -26,7 +26,9 @@ export function reconcileFuelReservations(state: GameState): void {
   for (const vehicle of Object.values(state.vehicles)) {
     // Runtime traffic is normally a complete VehicleEntity, but old saves and
     // defensive traffic fixtures can contain road-only cars without a request.
-    const liters = Number(vehicle.request?.reservedLiters ?? 0);
+    // Still held: the reservation, less what has already gone down the hose.
+    const liters =
+      Number(vehicle.request?.reservedLiters ?? 0) - Number(vehicle.request?.drawnLiters ?? 0);
     const ownsLiveHold =
       !vehicle.chargingBuildingId &&
       (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT') &&

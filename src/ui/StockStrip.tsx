@@ -2,7 +2,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { energyAvailable, energyCapacityOn } from '../domain/services/simulationEngine';
-import { FuelType } from '../domain/types/gameState';
+import { FuelTankEntity, FuelType } from '../domain/types/gameState';
 import { availableFuelLiters } from '../domain/services/TransactionService';
 
 /**
@@ -11,6 +11,29 @@ import { availableFuelLiters } from '../domain/services/TransactionService';
  * the battery in kWh. The battery card only appears once there is one.
  */
 const FUELS: FuelType[] = ['gasoline', 'diesel', 'lpg'];
+
+/**
+ * One tank's card: the litres in it, falling live while a pour runs (Emre,
+ * 2026-09-12: the number used to sit still and jump at the till). The hover
+ * says how much of it a pour in progress still holds.
+ */
+export function tankGauge(tank: Pick<FuelTankEntity, 'stock' | 'reservedStock' | 'capacity'>): {
+  share: number;
+  value: string;
+  hint: string;
+} {
+  const available = availableFuelLiters(tank);
+  const held = Math.max(0, tank.stock - available);
+  const litres = (n: number) => Math.round(n).toLocaleString('tr-TR');
+  return {
+    share: tank.capacity > 0 ? tank.stock / tank.capacity : 0,
+    value: `${litres(tank.stock)}L`,
+    hint:
+      held > 0
+        ? `${litres(tank.stock)} L depoda · ${litres(held)} L devam eden doluma ayrıldı · ${litres(available)} L satılabilir`
+        : `${litres(tank.stock)} L depoda`
+  };
+}
 
 const Card: React.FC<{
   label: string;
@@ -42,20 +65,15 @@ export const StockStrip: React.FC = () => {
         const tank = tanks[fuel];
         const conf = GAME_CONFIG.fuels[fuel];
         if (!tank || !conf) return null;
-        const available = availableFuelLiters(tank);
-        const reserved = Math.max(0, tank.stock - available);
+        const gauge = tankGauge(tank);
         return (
           <Card
             key={fuel}
             label={conf.shortName}
             color={conf.color}
-            share={tank.capacity > 0 ? available / tank.capacity : 0}
-            value={`${Math.round(available).toLocaleString('tr-TR')}L`}
-            hint={
-              reserved > 0
-                ? `${Math.round(tank.stock).toLocaleString('tr-TR')} L depoda · ${Math.round(reserved).toLocaleString('tr-TR')} L devam eden doluma ayrıldı · ${Math.round(available).toLocaleString('tr-TR')} L satılabilir`
-                : `${Math.round(available).toLocaleString('tr-TR')} L satılabilir`
-            }
+            share={gauge.share}
+            value={gauge.value}
+            hint={gauge.hint}
           />
         );
       })}

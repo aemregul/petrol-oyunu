@@ -198,6 +198,13 @@ export interface VehicleEntity {
      * to buy, and releasing an intention would eat somebody else's hold.
      */
     reservedLiters?: number;
+    /**
+     * Litres already taken out of the tank for this sale. Fuel leaves the tank
+     * as it goes down the hose, so the gauge falls with the meter (Emre,
+     * 2026-09-12); the hold still standing is `reservedLiters` less this.
+     * Absent on saves from before, whose pours settle at the till.
+     */
+    drawnLiters?: number;
   };
   patience: number;
   maxPatience: number;
