@@ -8,6 +8,7 @@ import { BuildingMesh } from '../rendering/BuildingMesh';
 import { PumpMesh } from '../rendering/PumpMesh';
 import { BuildingEntity, PumpEntity } from '../domain/types/gameState';
 import { BUILDING_MODEL_URLS } from '../rendering/models/buildingModels';
+import { LIGHT_POLE_VISUAL_SCALE } from '../rendering/LightPole';
 
 /**
  * Pictures of the catalogue, drawn with the very meshes the forecourt uses.
@@ -117,8 +118,8 @@ const Booth: React.FC<{
       // tiny speck. Frame the pole and housing themselves for the catalogue;
       // the model and its actual illumination remain untouched in the game.
       if (group.name === 'light_pole') {
-        centre.set(0.45, 3.65, 0);
-        radius = 3.85;
+        centre.set(0.45 * LIGHT_POLE_VISUAL_SCALE, 3.65 * LIGHT_POLE_VISUAL_SCALE, 0);
+        radius = 3.85 * LIGHT_POLE_VISUAL_SCALE;
       }
 
       const lens = camera as THREE.PerspectiveCamera;

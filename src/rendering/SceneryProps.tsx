@@ -9,7 +9,7 @@ import {
   LAND_BOUNDS,
   FAR_SIDE_FRONT
 } from '../domain/services/land';
-import { lampsAreLit } from './LightPole';
+import { lampsAreLit, LIGHT_POLE_VISUAL_SCALE } from './LightPole';
 import { LampGlow } from './LampGlow';
 import { GameState } from '../domain/types/gameState';
 
@@ -71,10 +71,11 @@ const LAMP_FIRST_X = -60;
  * get its lens out over the kerb or it lights nothing but the grass it stands
  * on — which is exactly what a short arm did.
  */
-const LAMP_ARM = 2.6;
+const LAMP_ARM = 2.6 * LIGHT_POLE_VISUAL_SCALE;
 /** Length and tilt of the arm that spans it, from column top to lens. */
-const LAMP_ARM_LENGTH = Math.hypot(LAMP_ARM, 0.5);
-const LAMP_ARM_TILT = -Math.atan2(LAMP_ARM, 0.5);
+const LAMP_ARM_DROP = 0.5 * LIGHT_POLE_VISUAL_SCALE;
+const LAMP_ARM_LENGTH = Math.hypot(LAMP_ARM, LAMP_ARM_DROP);
+const LAMP_ARM_TILT = -Math.atan2(LAMP_ARM, LAMP_ARM_DROP);
 
 /** Deterministic pseudo-random so scenery never reshuffles between frames. */
 function seeded(seed: number): () => number {
@@ -277,30 +278,30 @@ export const SceneryProps: React.FC<{ scene?: SceneryScene }> = ({ scene }) => {
 
       {/* Lamp base plinths */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <cylinderGeometry args={[0.34, 0.42, 0.36, 10]} />
+        <cylinderGeometry args={[0.34 * LIGHT_POLE_VISUAL_SCALE, 0.42 * LIGHT_POLE_VISUAL_SCALE, 0.36 * LIGHT_POLE_VISUAL_SCALE, 10]} />
         <meshStandardMaterial color="#475569" roughness={0.8} />
         {lamps.map((l, i) => (
-          <Instance key={i} position={lampPart(l, 0, 0.18)} />
+          <Instance key={i} position={lampPart(l, 0, 0.18 * LIGHT_POLE_VISUAL_SCALE)} />
         ))}
       </Instances>
 
       {/* Tapered columns */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <cylinderGeometry args={[0.12, 0.2, 6.8, 10]} />
+        <cylinderGeometry args={[0.12 * LIGHT_POLE_VISUAL_SCALE, 0.2 * LIGHT_POLE_VISUAL_SCALE, 6.8 * LIGHT_POLE_VISUAL_SCALE, 10]} />
         <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
         {lamps.map((l, i) => (
-          <Instance key={i} position={lampPart(l, 0, 3.6)} />
+          <Instance key={i} position={lampPart(l, 0, 3.6 * LIGHT_POLE_VISUAL_SCALE)} />
         ))}
       </Instances>
 
       {/* Arms reaching out over the carriageway */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <cylinderGeometry args={[0.1, 0.13, LAMP_ARM_LENGTH, 10]} />
+        <cylinderGeometry args={[0.1 * LIGHT_POLE_VISUAL_SCALE, 0.13 * LIGHT_POLE_VISUAL_SCALE, LAMP_ARM_LENGTH, 10]} />
         <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
         {lamps.map((l, i) => (
           <Instance
             key={i}
-            position={lampPart(l, LAMP_ARM / 2, 7.1)}
+            position={lampPart(l, LAMP_ARM / 2, 7.1 * LIGHT_POLE_VISUAL_SCALE)}
             rotation={[0, l.yaw, LAMP_ARM_TILT]}
           />
         ))}
@@ -308,16 +309,16 @@ export const SceneryProps: React.FC<{ scene?: SceneryScene }> = ({ scene }) => {
 
       {/* Lamp housings */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <boxGeometry args={[1.15, 0.26, 0.55]} />
+        <boxGeometry args={[1.15 * LIGHT_POLE_VISUAL_SCALE, 0.26 * LIGHT_POLE_VISUAL_SCALE, 0.55 * LIGHT_POLE_VISUAL_SCALE]} />
         <meshStandardMaterial color="#64748b" metalness={0.5} roughness={0.5} />
         {lamps.map((l, i) => (
-          <Instance key={i} position={lampPart(l, LAMP_ARM, 7.28)} rotation={[0, l.yaw, 0]} />
+          <Instance key={i} position={lampPart(l, LAMP_ARM, 7.28 * LIGHT_POLE_VISUAL_SCALE)} rotation={[0, l.yaw, 0]} />
         ))}
       </Instances>
 
       {/* Lenses, lit from dusk by the same photocell as the forecourt lamps. */}
       <Instances limit={MAX_LAMPS} range={lamps.length}>
-        <boxGeometry args={[0.95, 0.1, 0.42]} />
+        <boxGeometry args={[0.95 * LIGHT_POLE_VISUAL_SCALE, 0.1 * LIGHT_POLE_VISUAL_SCALE, 0.42 * LIGHT_POLE_VISUAL_SCALE]} />
         <meshStandardMaterial
           color="#fff6d8"
           emissive="#ffe9a8"
@@ -325,7 +326,7 @@ export const SceneryProps: React.FC<{ scene?: SceneryScene }> = ({ scene }) => {
           toneMapped={false}
         />
         {lamps.map((l, i) => (
-          <Instance key={i} position={lampPart(l, LAMP_ARM, 7.12)} rotation={[0, l.yaw, 0]} />
+          <Instance key={i} position={lampPart(l, LAMP_ARM, 7.12 * LIGHT_POLE_VISUAL_SCALE)} rotation={[0, l.yaw, 0]} />
         ))}
       </Instances>
 
@@ -336,7 +337,7 @@ export const SceneryProps: React.FC<{ scene?: SceneryScene }> = ({ scene }) => {
       {lamps.map((l, i) => (
         <LampGlow
           key={`glow${i}`}
-          position={lampPart(l, LAMP_ARM, 7.08)}
+          position={lampPart(l, LAMP_ARM, 7.08 * LIGHT_POLE_VISUAL_SCALE)}
           reach={7.5}
           shaft={false}
           lit={isDark}

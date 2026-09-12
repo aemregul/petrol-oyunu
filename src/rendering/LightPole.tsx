@@ -9,6 +9,13 @@ const DAWN = 7.5;
 const DUSK = 18.5;
 
 /**
+ * Physical size of every lighting column. The original seven-unit mast read
+ * almost as tall as the multi-storey office; this keeps it in proportion
+ * without changing its one-cell footprint or the light pool it buys.
+ */
+export const LIGHT_POLE_VISUAL_SCALE = 0.72;
+
+/**
  * The photocell every lamp in the game shares: overcast skies bring them on
  * early, as real ones do. Exported so the highway columns switch on at the
  * same moment as the forecourt lamps.
@@ -45,49 +52,54 @@ export const LightPole: React.FC<{
 
   // Fade rather than snap, so switch-on reads as a dimming lamp warming up.
   const glow = isDark ? 1 : 0.08;
+  const s = LIGHT_POLE_VISUAL_SCALE;
 
   return (
     <group>
-      {/* Base plinth */}
-      <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.34, 0.42, 0.36, 10]} />
-        <meshStandardMaterial color="#475569" roughness={0.8} />
-      </mesh>
-
-      {/* Tapered column */}
-      <mesh position={[0, 3.6, 0]} castShadow>
-        <cylinderGeometry args={[0.12, 0.2, 6.8, 10]} />
-        <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
-      </mesh>
-
-      {/* Curved arm reaching out over the apron */}
-      <mesh position={[0.5, 7.05, 0]} rotation={[0, 0, -Math.PI / 2.6]} castShadow>
-        <cylinderGeometry args={[0.1, 0.12, 1.5, 10]} />
-        <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
-      </mesh>
-
-      {/* Lamp housing and lens */}
-      <group position={[1.15, 7.25, 0]}>
-        <mesh castShadow>
-          <boxGeometry args={[1.15, 0.26, 0.55]} />
-          <meshStandardMaterial color="#64748b" metalness={0.5} roughness={0.5} />
+      {/* Only the physical fixture is scaled. Its paid lighting coverage is
+          kept at the existing reach below. */}
+      <group scale={s}>
+        {/* Base plinth */}
+        <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.34, 0.42, 0.36, 10]} />
+          <meshStandardMaterial color="#475569" roughness={0.8} />
         </mesh>
-        <mesh position={[0, -0.16, 0]}>
-          <boxGeometry args={[0.95, 0.1, 0.42]} />
-          <meshStandardMaterial
-            color="#fff6d8"
-            emissive="#ffe9a8"
-            emissiveIntensity={glow * 2}
-            toneMapped={false}
-          />
+
+        {/* Tapered column */}
+        <mesh position={[0, 3.6, 0]} castShadow>
+          <cylinderGeometry args={[0.12, 0.2, 6.8, 10]} />
+          <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
         </mesh>
+
+        {/* Curved arm reaching out over the apron */}
+        <mesh position={[0.5, 7.05, 0]} rotation={[0, 0, -Math.PI / 2.6]} castShadow>
+          <cylinderGeometry args={[0.1, 0.12, 1.5, 10]} />
+          <meshStandardMaterial color="#94a3b8" metalness={0.55} roughness={0.45} />
+        </mesh>
+
+        {/* Lamp housing and lens */}
+        <group position={[1.15, 7.25, 0]}>
+          <mesh castShadow>
+            <boxGeometry args={[1.15, 0.26, 0.55]} />
+            <meshStandardMaterial color="#64748b" metalness={0.5} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, -0.16, 0]}>
+            <boxGeometry args={[0.95, 0.1, 0.42]} />
+            <meshStandardMaterial
+              color="#fff6d8"
+              emissive="#ffe9a8"
+              emissiveIntensity={glow * 2}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
       </group>
 
       {/* The pool, shaft and flare that make the lamp read as lit. The pool is
           widened on its own: the lit ground has to match how far the lamp
           actually throws, while the glare around the bulb stays a bulb. */}
       <LampGlow
-        position={[1.15, 7.05, 0]}
+        position={[1.15 * s, 7.05 * s, 0]}
         reach={5.4}
         spread={2.8}
         poolOpacity={0.06}
@@ -122,9 +134,9 @@ export const LightPole: React.FC<{
           dağıtıldı. */}
       {isDark && (
         <>
-          <primitive object={target} position={[1.15, 0, 0]} />
+          <primitive object={target} position={[1.15 * s, 0, 0]} />
           <spotLight
-            position={[1.15, 7, 0]}
+            position={[1.15 * s, 7 * s, 0]}
             target={target}
             angle={1.12}
             penumbra={1}
@@ -137,7 +149,7 @@ export const LightPole: React.FC<{
             shadow-bias={-0.002}
           />
           <pointLight
-            position={[1.15, 6.4, 0]}
+            position={[1.15 * s, 6.4 * s, 0]}
             intensity={14}
             distance={30}
             decay={1.2}
