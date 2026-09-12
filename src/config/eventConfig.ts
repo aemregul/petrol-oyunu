@@ -40,7 +40,7 @@ export const GAME_EVENTS: GameEventConfig[] = [
   },
   {
     id: 'supply_discount',
-    name: 'Tedarikçi İndirimi',
+    name: 'Tedarik İndirimi',
     description: 'Tedarikçi kampanya başlattı. Bugün toptan alış %6 daha ucuz.',
     category: 'ECONOMY',
     icon: 'TrendingDown',

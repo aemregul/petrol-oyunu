@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { GAME_EVENTS } from '../../config/eventConfig';
-import { FUEL_DEAL_DISCOUNT, eventEffectSummary } from '../../domain/services/simulationEngine';
+import { FUEL_DEAL_DISCOUNT, FUEL_DEAL_NAME, eventEffectSummary } from '../../domain/services/simulationEngine';
 import { X, BookOpen, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { matchesGuideSearch } from './guideSearch';
@@ -168,8 +168,8 @@ function sections(): Section[] {
           <P>Toptan alış fiyatı her sabah bir miktar oynar. Üç tedarikçi var: ucuz ama yavaş depo, standart, hızlı ama pahalı lojistik.</P>
           <H>İki indirim, bir zam: farkları</H>
           <UL items={[
-            <><b>Yakıtta İndirim %{Math.round(FUEL_DEAL_DISCOUNT * 100)}</b>: arada bir, piyasanın sakin olduğu bir günde, rastgele bir saatte ve yalnızca bir dakika açık kalan pencere. Zam, kur ya da tedarikçi indirimi olan günlerde ve art arda iki gün gelmez. Sağ üstte geri sayımla görünür. Yakalarsan tüm yakıtlarda alış fiyatı üçte bir düşer; depoyu fullemenin tam zamanı. Sv.3 müdür bunu senin yerine yapar.</>,
-            <><b>Tedarikçi İndirimi</b>: bir olaydır, gün boyu sürer, alışı yüzde altı ucuzlatır. Küçük ama uzun.</>,
+            <><b>{FUEL_DEAL_NAME} %{Math.round(FUEL_DEAL_DISCOUNT * 100)}</b>: arada bir, piyasanın sakin olduğu bir günde, rastgele bir saatte ve yalnızca bir dakika açık kalan pencere. Zam, kur ya da tedarik indirimi olan günlerde ve art arda iki gün gelmez. Sağ üstte geri sayımla görünür. Yakalarsan tüm yakıtlarda alış fiyatı üçte bir düşer; depoyu fullemenin tam zamanı. Sv.3 müdür bunu senin yerine yapar.</>,
+            <><b>Tedarik İndirimi</b>: bir olaydır, gün boyu sürer, alışı yüzde altı ucuzlatır. Küçük ama uzun.</>,
             <><b>Rafineri Zammı</b> ve <b>Kur Dalgalanması</b>: tersi; o gün alış yüzde sekiz ya da on iki pahalıdır. Stokun varsa o gün sipariş verme.</>
           ]} />
         </>
@@ -231,7 +231,7 @@ function sections(): Section[] {
           <P>Sağ üstte kartla belirir, süresi dolunca gider. Kimi iyi kimi kötü; iyisini kullan, kötüsünde bekle.</P>
           <div className="flex flex-col gap-2 pt-1">
             <div className="bg-board border-2 border-ink rounded-md px-3 py-2">
-              <div className="font-display text-[14px] text-ink">Yakıtta İndirim %{Math.round(FUEL_DEAL_DISCOUNT * 100)}</div>
+              <div className="font-display text-[14px] text-ink">{FUEL_DEAL_NAME} %{Math.round(FUEL_DEAL_DISCOUNT * 100)}</div>
               <div className="text-[12px] font-semibold text-mute">Sakin günlerde arada bir, bir dakikalık alış indirimi. Depoyu fullemenin zamanı.</div>
             </div>
             <div className="bg-board border-2 border-ink rounded-md px-3 py-2">
@@ -284,7 +284,7 @@ function sections(): Section[] {
           'Her müşteride camı temizle: memnuniyet itibara, itibar trafiğe döner.',
           'Fiyatı bölge ortalamasının biraz altına çek; hacim marjdan çok kazandırır.',
           'İkinci pompadan önce pompacı: kaybedilen müşteri boş pompadan pahalıdır.',
-          'Yakıtta İndirim penceresini kaçırma; Sv.3 müdür yakalar.',
+          `${FUEL_DEAL_NAME} penceresini kaçırma; Sv.3 müdür yakalar.`,
           'Kafe ve market yakıt müşterisinden beslenir; yanına ulaşılabilir bir otopark koy, ziyaretler tam bedelle biter.',
           'Oto yıkama, lastik ve yağ servisi her yakıt satışında zar atar; erken dönemde en hızlı geri dönen tesislerdir.',
           'Gece için dört aydınlatma direği, tank yüzde yirmiye inmeden sipariş, pompa sağlığı kırkın altına inmeden bakım.',

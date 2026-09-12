@@ -9,6 +9,7 @@ import {
   rollDailyEvent,
   rollFuelDeal,
   isFuelDealOn,
+  FUEL_DEAL_NAME,
   FUEL_DEAL_DAY_CHANCE
 } from '../domain/services/simulationEngine';
 
@@ -46,6 +47,12 @@ function dealOpensToday(state: GameState): boolean {
 }
 
 describe('the one-minute fuel deal', () => {
+  it('has a different name from the smaller all-day supply discount', () => {
+    expect(FUEL_DEAL_NAME).toBe('Tedarikte Dev İndirim');
+    expect(event('supply_discount').name).toBe('Tedarik İndirimi');
+    expect(FUEL_DEAL_NAME).not.toBe(event('supply_discount').name);
+  });
+
   it('stays shut on a day the market moved, however the dice fall', () => {
     for (const id of ['refinery_hike', 'currency_shock', 'supply_discount']) {
       const state = createInitialGameState();

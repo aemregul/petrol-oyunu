@@ -17,6 +17,7 @@ import {
 } from '../../domain/services/managerDuties';
 import type { ManagerDuty } from '../../config/gameConfig';
 import { pumpName } from '../../domain/services/pumpNames';
+import { FUEL_DEAL_NAME } from '../../domain/services/simulationEngine';
 
 /** What each duty is called on the panel, and what it means in a line. */
 const DUTY_LABEL: Record<ManagerDuty, { label: string; hint: string }> = {
@@ -28,7 +29,7 @@ const DUTY_LABEL: Record<ManagerDuty, { label: string; hint: string }> = {
   nightGridFill: { label: 'Bataryayı gece doldur', hint: 'Şebekeden yalnızca gece tarifesinde çeker.' },
   cleanStation: { label: 'Sahayı temizle', hint: 'Temizlik %50 altına inince sahayı ve panelleri yıkatır.' },
   repair: { label: 'Arıza tamir et', hint: 'Arızalanan pompayı tekrar hizmete alır.' },
-  dealStock: { label: 'İndirimde stokla', hint: 'Tedarikçi indirimi açılınca depoları fuller.' }
+  dealStock: { label: 'İndirimde stokla', hint: `${FUEL_DEAL_NAME} açılınca depoları fuller.` }
 };
 
 export const StaffModal: React.FC = () => {

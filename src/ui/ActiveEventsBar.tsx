@@ -2,7 +2,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { ActiveGameEvent } from '../domain/types/gameState';
-import { FUEL_DEAL_DISCOUNT, eventEffectSummary } from '../domain/services/simulationEngine';
+import { FUEL_DEAL_DISCOUNT, FUEL_DEAL_NAME, eventEffectSummary } from '../domain/services/simulationEngine';
 import { TONE_GLASS, TONE_TEXT, TONE_DOT, type Tone } from './gameStyle';
 import {
   TrendingUp,
@@ -150,7 +150,7 @@ export const ActiveEventsBar: React.FC = () => {
       )}
       {dealLeft > 0 && (
         <EventChip
-          title={`Yakıtta İndirim %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`}
+          title={`${FUEL_DEAL_NAME} %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`}
           hint="Tedarikçi alış fiyatını indirdi; satış fiyatınız değişmez — depoları şimdi doldurun."
           timeLabel={`${Math.ceil(dealLeft)} s`}
           ratio={dealLeft / 60}

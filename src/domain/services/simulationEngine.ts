@@ -5447,6 +5447,8 @@ const RUSH_SECONDS = 60;
  * is the point of it.
  */
 const FUEL_DEAL_SECONDS = 60;
+/** The short, exceptional wholesale offer; distinct from the daily 6% event. */
+export const FUEL_DEAL_NAME = 'Tedarikte Dev İndirim';
 export const FUEL_DEAL_DISCOUNT = 0.3;
 /**
  * The share of quiet days — no refinery hike, no currency shock, no supplier
@@ -5522,7 +5524,7 @@ function tickFuelDeal(state: GameState, dt: number, effects: SimEffects): void {
   notify(
     effects,
     'INFO',
-    `Toptan Yakıt İndirimi! %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`,
+    `${FUEL_DEAL_NAME}! %${Math.round(FUEL_DEAL_DISCOUNT * 100)}`,
     'Tedarikçi bir dakikalığına tüm yakıtlarda alış fiyatını indirdi — depoları şimdi doldurun.',
     EVENT_TOAST_HOLD_MS
   );
