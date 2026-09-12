@@ -2905,7 +2905,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!vehicle) return;
 
     const effects = createEffects();
-    const { sale, tip } = finalizeSale(state, vehicle, effects);
+    const { sale, tip, poured, asked, off } = finalizeSale(state, vehicle, effects);
     flushEffects(state, effects);
 
     SaveManager.saveGame(state);
@@ -2919,13 +2919,20 @@ export const useGameStore = create<GameStore>((set, get) => {
     // out from the cash tile (Emre, 2026-09-12). Only the player's hand-over
     // says it; an attendant's sales would bury the corner.
     const lira = (n: number) => `₺${n.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
+    // A pour off the driver's ask is said too, so the player learns from it.
+    const miss =
+      off === 'over'
+        ? ` ${lira(poured - asked)} fazla doldurdun; müşteri fazlasını ödemedi.`
+        : off === 'short'
+          ? ` Müşteri ${lira(asked)} istemişti; eksik doldurdun, memnuniyeti düştü.`
+          : '';
     get().addNotification({
-      type: tip > 0 ? 'REWARD' : 'INFO',
+      type: off ? 'WARNING' : tip > 0 ? 'REWARD' : 'INFO',
       title: 'Satış Tamamlandı',
       message:
-        tip > 0
+        (tip > 0
           ? `${lira(sale)} yakıt + ${lira(tip)} bahşiş = ${lira(sale + tip)} kasaya girdi.`
-          : `${lira(sale)} kasaya girdi; bu müşteri bahşiş bırakmadı.`
+          : `${lira(sale)} kasaya girdi; bu müşteri bahşiş bırakmadı.`) + miss
     });
   },
 

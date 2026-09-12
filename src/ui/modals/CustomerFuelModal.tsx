@@ -42,20 +42,16 @@ function plateFor(id: string): string {
   return `${String(city).padStart(2, '0')} ${letters} ${num}`;
 }
 
-/** The sum the driver named, ready to sit in the amount box; empty for FULL. */
-function requestedText(vehicle: { request: { mode: string; targetValue: number } } | null): string {
-  return vehicle && vehicle.request.mode === 'MONEY' ? String(vehicle.request.targetValue) : '';
-}
-
 /**
- * The fuelling window: pick the customer's nozzle, then BAŞLAT for the sum
- * they named or FULLE if they asked for a full tank. Starting latches the
+ * The fuelling window: pick the customer's nozzle, enter the sum they named
+ * and BAŞLAT, or FULLE if they asked for a full tank. Starting latches the
  * nozzle and closes the window; the simulation keeps pouring while the player
  * is elsewhere, and this window can be reopened to watch or hand over.
  * The nozzle has to match what they asked for — a station that
- * pours petrol into a diesel engine does not get paid. The driver's sum is
- * already in the box when the window opens; FULLE is only live for a driver
- * who actually asked for it.
+ * pours petrol into a diesel engine does not get paid. The box opens empty:
+ * reading the driver's sum and entering it is the player's job (Emre,
+ * 2026-09-12). Pour short and the driver is less pleased; pour over and they
+ * pay only what they asked. FULLE is only live for a driver who asked for it.
  */
 export const CustomerFuelModal: React.FC = () => {
   const selectedVehicleId = useGameStore((s) => s.selectedVehicleId);
@@ -69,13 +65,12 @@ export const CustomerFuelModal: React.FC = () => {
   const vehicle = selectedVehicleId ? gameState.vehicles[selectedVehicleId] : null;
 
   const [chosenFuel, setChosenFuel] = useState<FuelType | null>(null);
-  const [amountText, setAmountText] = useState(() => requestedText(vehicle));
+  const [amountText, setAmountText] = useState('');
 
-  // A different car at the window means a different request in the box.
+  // A different car at the window starts from an empty box again.
   useEffect(() => {
-    setAmountText(requestedText(vehicle));
+    setAmountText('');
     setChosenFuel(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle?.id]);
 
   const isFueling = vehicle?.state === 'FUELING';
@@ -85,10 +80,17 @@ export const CustomerFuelModal: React.FC = () => {
 
   const pricing = gameState.pricing[vehicle.fuelType];
   const unitPrice = pricing.playerPrice;
-  const wantsFull = vehicle.request.mode === 'FULL';
-  const demandLiters = vehicle.request.calculatedLiters || vehicle.request.targetValue || 30;
+  // What the driver asked for at the window, kept apart from what is being
+  // poured: once a pour starts, the request holds the player's own sum.
+  const ask = vehicle.request.asked ?? {
+    mode: vehicle.request.mode,
+    targetValue: vehicle.request.targetValue,
+    liters: vehicle.request.calculatedLiters
+  };
+  const wantsFull = ask.mode === 'FULL';
+  const demandLiters = ask.liters || ask.targetValue || 30;
   // Whole lira, always: the sum the driver named, or a full tank's worth.
-  const requestPrice = wantsFull ? Math.round(demandLiters * unitPrice) : vehicle.request.targetValue;
+  const requestPrice = wantsFull ? Math.round(demandLiters * unitPrice) : ask.targetValue;
   const dispensed = vehicle.request.dispensedLiters || 0;
   const runningTotal = dispensed * unitPrice;
   const conf = GAME_CONFIG.customerTypes[vehicle.archetype];
@@ -107,10 +109,13 @@ export const CustomerFuelModal: React.FC = () => {
     startVehicleFueling(vehicle.id, mode, value);
   };
 
+  const askedSum = `₺${requestPrice.toLocaleString('tr-TR')}`;
+  // A sum typed off the ask is allowed — it costs — and the line says what it will cost.
+  const typedOff = rightFuelChosen && !isFueling && !isFinished && !wantsFull && amount > 0 && amount !== requestPrice;
   const hint = !chosenFuel
     ? wantsFull
       ? 'Tabanca seç, sonra FULLE'
-      : 'Tabanca seç, sonra BAŞLAT'
+      : 'Tabanca seç, tutarı yaz, sonra BAŞLAT'
     : !rightFuelChosen
       ? `Müşteri ${fuelConf.shortName} istiyor — doğru tabancayı seç`
       : isFueling
@@ -119,7 +124,13 @@ export const CustomerFuelModal: React.FC = () => {
           ? 'Dolum tamam — teslim et'
           : wantsFull
             ? 'Müşteri depo istiyor — FULLE'
-            : `Müşteri ₺${requestPrice.toLocaleString('tr-TR')} istiyor — BAŞLAT`;
+            : !(amount > 0)
+              ? `Müşteri ${askedSum} istiyor — tutarı yaz, sonra BAŞLAT`
+              : amount > requestPrice
+                ? `Müşteri ${askedSum} istiyor — fazlasını ödemez`
+                : amount < requestPrice
+                  ? `Müşteri ${askedSum} istiyor — eksik kalırsa memnuniyeti düşer`
+                  : `Müşteri ${askedSum} istiyor — BAŞLAT`;
 
   return (
     <div className="fixed inset-0 flex items-center justify-center md:justify-start p-4 md:pl-20 z-50 animate-fade-in select-none pointer-events-none">
@@ -197,7 +208,7 @@ export const CustomerFuelModal: React.FC = () => {
 
           {/* Amount presets */}
           {!isFueling && !isFinished && (
-            <>
+            <div className="flex flex-col gap-3" data-tour="fuel-amount">
               {/* Presets put a sum in the box; BAŞLAT is what opens the tap. */}
               <div className="grid grid-cols-4 gap-1.5">
                 {PRESETS.map((v) => (
@@ -254,7 +265,7 @@ export const CustomerFuelModal: React.FC = () => {
                   FULLE
                 </button>
               </div>
-            </>
+            </div>
           )}
 
           {/* The meter */}
@@ -273,7 +284,7 @@ export const CustomerFuelModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="text-center text-[11px] text-mute font-bold">{hint}</div>
+          <div className={`text-center text-[11px] font-bold ${typedOff ? 'text-kred' : 'text-mute'}`}>{hint}</div>
 
           {/* Squeegee */}
           <button

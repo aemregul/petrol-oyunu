@@ -513,7 +513,9 @@
       "Bash(mkdir -p gauge-shots)",
       "Bash(node fuelGaugeWalk.mjs gauge-shots)",
       "Bash(git -C /Users/emre/petrol-oyunu status --short)",
-      "Bash(git -C /Users/emre/petrol-oyunu log --oneline -1)"
+      "Bash(git -C /Users/emre/petrol-oyunu log --oneline -1)",
+      "Bash(awk 'NR>=1075 && NR<=1310 && \\(/^    [a-z_]+: \\\\{/ || /minDemand|maxDemand/\\)' src/config/gameConfig.ts)",
+      "Bash(git -C /Users/emre/petrol-oyunu diff --stat -- src)"
     ],
     "additionalDirectories": [
       "/private/tmp",

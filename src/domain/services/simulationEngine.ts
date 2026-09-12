@@ -3853,7 +3853,10 @@ export function beginFueling(
   // is owed exactly, so when the tank covered it the litres are the sum's own.
   const liters =
     reservation.reservedLiters >= litersNeeded - 0.01 ? litersNeeded : reservation.reservedLiters;
+  // The driver's ask is kept before the player's sum takes its place.
+  const asked = askedOf(vehicle);
   vehicle.request = {
+    asked,
     mode,
     targetValue,
     calculatedLiters: liters,
@@ -3880,6 +3883,39 @@ export function beginFueling(
 
 /** What a wiped windscreen adds to the driver's satisfaction at the till. */
 export const SQUEEGEE_SATISFACTION = 8;
+
+/**
+ * The player enters the sum at the pump, and the sale is measured against
+ * what the driver asked for (Emre, 2026-09-12). A pour within this share of
+ * the ask is spot on; every further share off costs accuracy at this rate —
+ * ten per cent out is 70 of 100.
+ */
+export const POUR_TOLERANCE = 0.01;
+export const POUR_MISS_PENALTY = 300;
+
+/** What the driver asked for at the window; a save from before keeps only the pour. */
+function askedOf(vehicle: VehicleEntity): NonNullable<VehicleEntity['request']['asked']> {
+  return (
+    vehicle.request.asked ?? {
+      mode: vehicle.request.mode,
+      targetValue: vehicle.request.targetValue,
+      liters: vehicle.request.calculatedLiters
+    }
+  );
+}
+
+/** Whether a pour went over or fell short of the ask, beyond the tolerance. */
+export function pourMiss(poured: number, asked: number): 'over' | 'short' | null {
+  if (asked <= 0 || Math.abs(1 - poured / asked) <= POUR_TOLERANCE) return null;
+  return poured > asked ? 'over' : 'short';
+}
+
+/** The "hedef tutturma" part of the service score: 100 on the ask, less the further off. */
+export function pourAccuracy(poured: number, asked: number): number {
+  if (asked <= 0) return 100;
+  const miss = Math.abs(1 - poured / asked);
+  return miss <= POUR_TOLERANCE ? 100 : clamp(100 - miss * POUR_MISS_PENALTY, 0, 100);
+}
 
 /** What a roof over the island is worth: faster fills, and less weathering. */
 const CANOPY_FLOW_BONUS = 0.05;
@@ -4116,10 +4152,17 @@ export function finalizeSale(
   state: GameState,
   vehicle: VehicleEntity,
   effects: SimEffects
-): { sale: number; tip: number } {
+): { sale: number; tip: number; poured: number; asked: number; off: 'over' | 'short' | null } {
   const dispensed = vehicle.request.dispensedLiters;
   const unitPrice = state.pricing[vehicle.fuelType].playerPrice;
-  const totalSale = Number((dispensed * unitPrice).toFixed(2));
+  // Measured against what the driver asked for, not the sum the player typed:
+  // pour short and they pay for what went in; pour over and they pay only what
+  // they asked for — the extra is on the house (Emre, 2026-09-12).
+  const ask = askedOf(vehicle);
+  const askedValue = ask.mode === 'MONEY' ? ask.targetValue : ask.liters * unitPrice;
+  const pouredValue = dispensed * unitPrice;
+  const off = pourMiss(pouredValue, askedValue);
+  const totalSale = Number(Math.min(pouredValue, askedValue).toFixed(2));
 
   // The fuel left the tank while it was poured; this takes only what a save
   // from before live drawing still owes.
@@ -4133,7 +4176,7 @@ export function finalizeSale(
   vehicle.request.reservedLiters = 0;
 
   const speedRatio = clamp((vehicle.patience / vehicle.maxPatience) * 100, 0, 100);
-  const accuracy = vehicle.request.isFinished ? 100 : 80;
+  const accuracy = pourAccuracy(pouredValue, askedValue);
   const facilities = blockFacilities(state, vehicleSide(vehicle));
   // A wiped windscreen is the cheapest goodwill on the forecourt.
   const squeegee = vehicle.windowsCleaned ? SQUEEGEE_SATISFACTION : 0;
@@ -4217,7 +4260,7 @@ export function finalizeSale(
   if (served >= 1) playCue(effects, 'cash');
 
   // What went into the till, for a hand-over that wants to say so.
-  return { sale: totalSale, tip };
+  return { sale: totalSale, tip, poured: pouredValue, asked: askedValue, off };
 }
 
 /* ------------------------------------------------------------------ */

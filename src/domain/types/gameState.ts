@@ -205,6 +205,12 @@ export interface VehicleEntity {
      * Absent on saves from before, whose pours settle at the till.
      */
     drawnLiters?: number;
+    /**
+     * What the driver asked for at the window, kept once a pour begins: from
+     * then on the fields above hold the player's own sum. The sale is measured
+     * against this (Emre, 2026-09-12). Absent until fueling starts.
+     */
+    asked?: { mode: 'LITERS' | 'MONEY' | 'FULL'; targetValue: number; liters: number };
   };
   patience: number;
   maxPatience: number;

@@ -64,7 +64,8 @@ function sections(): Section[] {
       title: 'Müşteri servisi',
       render: () => (
         <>
-          <P>Araç pompaya yanaşır ve bekler. Üstüne tıklayınca panel açılır: istediği yakıt türü ve miktar yazar. Aynı türü seç, dolumu başlat; sayaç kendi akar, bitince ödeme alınır.</P>
+          <P>Araç pompaya yanaşır ve bekler. Üstüne tıklayınca panel açılır: istediği yakıt türü ve tutar yazar. Aynı tabancayı seç, istediği tutarı kutuya yaz ya da hazır tutarlardan seç, dolumu başlat; sayaç kendi akar, bitince teslim edip parasını alırsın.</P>
+          <P>Tutarı tutturmak senin işin: az doldurursan müşteri döküleni öder ama memnuniyeti düşer; fazla doldurursan yalnızca istediğini öder, fazlası senin zararın.</P>
           <H>Cam temizleme ne kazandırır</H>
           <P>Cam temizle düğmesi müşteri memnuniyetine sekiz puan ekler ve bahşiş ihtimalini artırır. Memnuniyet gün sonunda itibara döner, itibar yarınki trafiği belirler. Küçük bir tık, büyük bir zincir.</P>
           <H>Sabır</H>

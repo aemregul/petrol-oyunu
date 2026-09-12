@@ -120,11 +120,15 @@ const FIRST_CUSTOMER_STEPS: LessonStep[] = [
   {
     id: 'start',
     title: 'Dolumu başlat',
-    body: (view, id) =>
-      car(view, id)?.request.mode === 'FULL'
-        ? ["Depoyu doldurmak istiyor: FULLE'ye bas."]
-        : ["Tutar kutuya hazır geldi: BAŞLAT'a bas."],
-    target: (view, id) => dom(car(view, id)?.request.mode === 'FULL' ? 'fuel-full' : 'fuel-start'),
+    body: (view, id) => {
+      const v = car(view, id);
+      if (v?.request.mode === 'FULL') return ["Depoyu doldurmak istiyor: FULLE'ye bas."];
+      return [
+        `Kutuya istediği tutarı (${lira(v?.request.targetValue ?? 0)}) yaz ya da hazır tutarlardan seç, sonra BAŞLAT'a bas.`,
+        'Az doldurursan memnuniyeti düşer; fazla doldurursan fazlasını ödemez.'
+      ];
+    },
+    target: (view, id) => dom(car(view, id)?.request.mode === 'FULL' ? 'fuel-full' : 'fuel-amount'),
     advance: {
       kind: 'until',
       done: (view, id) => {
@@ -180,7 +184,7 @@ const FIRST_CUSTOMER_STEPS: LessonStep[] = [
     id: 'done',
     title: 'İlk satış tamam!',
     body: () => [
-      "Satışın parası Kasa'ya girdi. Sıradaki araçlarda da aynı yol: araca tıkla, tabancayı seç, başlat, teslim et.",
+      "Satışın parası Kasa'ya girdi. Sıradaki araçlarda da aynı yol: araca tıkla, tabancayı seç, tutarı gir, başlat, teslim et.",
       `Seviye ${ATTENDANT_HIRE_LEVEL}'te pompacı tutunca bu işi o yapar.`
     ],
     // A card about the till points at the till (Emre, 2026-09-11: it sat in
