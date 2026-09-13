@@ -97,7 +97,8 @@ export default {
         'fade-out': 'fadeOut 0.6s ease-in forwards',
         breathe: 'breathe 2.2s ease-in-out infinite',
         'toast-in': 'toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        'toast-out': 'toastOut 0.9s cubic-bezier(0.4, 0, 0.6, 1) forwards'
+        'toast-out': 'toastOut 0.9s cubic-bezier(0.4, 0, 0.6, 1) forwards',
+        'mood-rise': 'moodRise 3.2s ease-out forwards'
       },
       keyframes: {
         floatUp: {
@@ -132,6 +133,15 @@ export default {
           '0%': { opacity: '1', transform: 'translateX(0) scale(1)' },
           '35%': { opacity: '0.7', transform: 'translateX(-4px) scale(0.995)' },
           '100%': { opacity: '0', transform: 'translateX(-22px) scale(0.96)' }
+        },
+        // Why a driver left pops over the roof, holds long enough to be read
+        // from across the forecourt, then drifts up and out of the way.
+        moodRise: {
+          '0%': { opacity: '0', transform: 'translateY(6px) scale(0.8)' },
+          '10%': { opacity: '1', transform: 'translateY(0) scale(1.08)' },
+          '18%': { transform: 'translateY(0) scale(1)' },
+          '70%': { opacity: '1', transform: 'translateY(-6px) scale(1)' },
+          '100%': { opacity: '0', transform: 'translateY(-22px) scale(0.96)' }
         }
       }
     },

@@ -6,6 +6,7 @@ import { FUEL_DEAL_DISCOUNT, FUEL_DEAL_NAME, eventEffectSummary } from '../../do
 import { X, BookOpen, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
 import { matchesGuideSearch } from './guideSearch';
+import { CHARGE_GLYPH, DEPARTURE_GLYPHS, FACILITY_GLYPHS, PATIENCE_GLYPHS } from '../../rendering/vehicleMood';
 
 /**
  * The guide (Emre, 2026-09-09): everything the lessons say, at length, plus
@@ -129,6 +130,25 @@ function sections(): Section[] {
           </>
         );
       }
+    },
+    {
+      id: 'moods',
+      title: 'Araç üstü emojiler',
+      render: () => (
+        <>
+          <P>Araçların üstündeki emojiler müşteriyi uzaktan okumanı sağlar: ne için geldiğini, sabrının ne durumda olduğunu ve giderken neden gittiğini. Giderken çıkan emoji birkaç saniye görünür, sonra kaybolur.</P>
+          <H>Ne için geldi</H>
+          <UL items={[
+            <>⛽ <b>{Object.values(GAME_CONFIG.fuels).map((f) => f.shortName).join(', ')}</b>: yakıt almaya geldi; yanında istediği yakıt yazar.</>,
+            <>{CHARGE_GLYPH.emoji} <b>{CHARGE_GLYPH.label}</b>: elektrikli araç; pompaya değil şarj ünitesine gelir.</>,
+            <>{Object.values(FACILITY_GLYPHS).map((g) => `${g.emoji} ${g.label}`).join('  ·  ')}: o tesis için uğradı, ya da yakıtını alıp tesise yürüdü.</>
+          ]} />
+          <H>Sabrı</H>
+          <UL items={PATIENCE_GLYPHS.map((g) => <>{g.emoji} <b>{g.label}</b>: {g.hint}</>)} />
+          <H>Neden gitti</H>
+          <UL items={Object.values(DEPARTURE_GLYPHS).map((g) => <>{g.emoji} <b>{g.label}</b>: {g.hint}</>)} />
+        </>
+      )
     },
     {
       id: 'build',

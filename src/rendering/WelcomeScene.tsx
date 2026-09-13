@@ -228,7 +228,7 @@ const PassingCar: React.FC<{
 
   return (
     <group ref={ref}>
-      <VehicleMesh vehicle={car} />
+      <VehicleMesh vehicle={car} showMood={false} />
     </group>
   );
 };
@@ -337,7 +337,7 @@ export const WelcomeScene: React.FC = () => (
           </group>
         ))}
         {WELCOME_CARS.map((c) => (
-          <VehicleMesh key={c.id} vehicle={c} />
+          <VehicleMesh key={c.id} vehicle={c} showMood={false} />
         ))}
 
         <WelcomeTotem />

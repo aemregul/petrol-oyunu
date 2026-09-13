@@ -77,6 +77,43 @@ export type VehicleState =
   | 'EXIT'
   | 'DESPAWN';
 
+/**
+ * Why a driver is leaving, kept on the car for the drive out so the forecourt
+ * can say it over the roof (live testers, 2026-09-13: what did this customer
+ * come for, how long will they wait, and why did they go). The notification
+ * in the corner says it once; the car carries it all the way to the road.
+ */
+export type DepartureReason =
+  /** Served, and left a tip on top. */
+  | 'SERVED_TIP'
+  /** Served well: a score the tip table already counts as excellent. */
+  | 'SERVED_GREAT'
+  | 'SERVED_OK'
+  /** Served, but slowly or short of what they asked for. */
+  | 'SERVED_POOR'
+  /** Came for a building and had the visit. */
+  | 'VISITED'
+  /** Waited until their patience ran out. */
+  | 'PATIENCE'
+  /** The tank for their fuel was dry. */
+  | 'NO_FUEL'
+  /** No bay on the block could pour. */
+  | 'PUMP_BROKEN'
+  /** The batteries behind the charging posts were flat. */
+  | 'NO_POWER'
+  /** What they came for is not on offer: sold, carted off, or turning people away. */
+  | 'NO_SERVICE'
+  /** No safe way to a bay, or boxed in on the way to one. */
+  | 'NO_ROOM'
+  /** The pumps and the queue were full, so they drove on. */
+  | 'FULL'
+  /** The station was shut. */
+  | 'CLOSED'
+  /** Came for a building and found nowhere to park. */
+  | 'NO_PARKING'
+  /** The player sent them off. */
+  | 'SENT_AWAY';
+
 export type PumpState =
   | 'IDLE'
   | 'RESERVED'
@@ -283,6 +320,11 @@ export interface VehicleEntity {
    * is not there.
    */
   noServiceSeconds?: number;
+  /**
+   * Why this driver is on their way out, set by whatever sent them. Absent
+   * until then, for through traffic, and on saves from before it was kept.
+   */
+  departureReason?: DepartureReason;
   shoppingIntent: boolean;
 }
 

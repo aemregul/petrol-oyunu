@@ -18,6 +18,7 @@ import {
   FuelType,
   VehicleArchetype,
   VehicleState,
+  DepartureReason,
   PumpState,
   OrderState,
   EmployeeState,
@@ -3055,7 +3056,11 @@ function offWalls(
  * built so tightly that a car cannot leave it is the player's doing; the car
  * simply goes, rather than going through the wall in front of everybody.
  */
-function sendAway(state: GameState, vehicle: VehicleEntity): void {
+function sendAway(state: GameState, vehicle: VehicleEntity, why?: DepartureReason): void {
+  // What the car says over its roof on the way out. A caller with nothing new
+  // to add leaves the reason the car already carries.
+  if (why) vehicle.departureReason = why;
+
   // A car standing in a park bay backs out to the spot it turned in from
   // before it goes anywhere: the kerb is in front of it, and a route drawn
   // from the bay itself would drive straight over it. It keeps its bay until
@@ -4056,6 +4061,17 @@ function evPriceIndex(state: GameState, side: DrivewaySide): number {
   return sum / kinds.size;
 }
 
+/**
+ * The face a paid-up driver drives off with. A tip says it best; otherwise the
+ * service score, read against the same 85 the tip table calls excellent.
+ */
+function servedReason(serviceScore: number, tip: number): DepartureReason {
+  if (tip > 0) return 'SERVED_TIP';
+  if (serviceScore >= 85) return 'SERVED_GREAT';
+  if (serviceScore >= 60) return 'SERVED_OK';
+  return 'SERVED_POOR';
+}
+
 export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
   const point = vehicle.chargingBuildingId
     ? state.buildings[vehicle.chargingBuildingId]
@@ -4087,6 +4103,7 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
       getEventModifiers(state).tip *
       tipHabit
   );
+  vehicle.departureReason = servedReason(serviceScore, tip);
 
   TransactionService.executeCashTransaction(state, {
     type: 'FUEL_SALE',
@@ -4233,6 +4250,7 @@ export function finalizeSale(
   );
 
   vehicle.satisfaction = serviceScore;
+  vehicle.departureReason = servedReason(serviceScore, tip);
 
   TransactionService.executeCashTransaction(state, {
     type: 'FUEL_SALE',
@@ -4824,7 +4842,8 @@ function startFacilityVisit(
     vehicle.targetPumpId = null;
     vehicle.visitBuildingId = null;
     vehicle.visitMode = null;
-    sendAway(state, vehicle);
+    // Nothing on this block will have them: shut, full, or gone.
+    sendAway(state, vehicle, 'NO_SERVICE');
     return;
   }
 
@@ -4852,7 +4871,7 @@ function startFacilityVisit(
   vehicle.visitBuildingId = null;
   vehicle.visitMode = null;
   vehicle.shoppingIntent = false;
-  sendAway(state, vehicle);
+  sendAway(state, vehicle, 'NO_PARKING');
 }
 
 /** The visit is over, one way or another: the driver is back in and the car goes. */
@@ -4863,10 +4882,10 @@ function startFacilityVisit(
  */
 function giveUpParking(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
   void effects;
-  endVisit(state, vehicle);
+  endVisit(state, vehicle, 'NO_ROOM');
 }
 
-function endVisit(state: GameState, vehicle: VehicleEntity): void {
+function endVisit(state: GameState, vehicle: VehicleEntity, why: DepartureReason): void {
   vehicle.visitor = undefined;
   vehicle.visitBuildingId = null;
   vehicle.visitMode = null;
@@ -4874,7 +4893,9 @@ function endVisit(state: GameState, vehicle: VehicleEntity): void {
     releasePump(state.pumps[vehicle.targetPumpId]);
   }
   vehicle.targetPumpId = null;
-  sendAway(state, vehicle);
+  // A fuel customer who walked over after paying already says how the
+  // service went; the stroll to the shop does not replace that.
+  sendAway(state, vehicle, vehicle.departureReason ?? why);
 }
 
 export function applyLevelProgression(state: GameState, effects: SimEffects): void {
@@ -6032,6 +6053,12 @@ function blockHasWorkingPump(state: GameState, side: DrivewaySide): boolean {
   );
 }
 
+/** A lost customer: why, for the car to show, and in words, for the notification. */
+interface Departure {
+  why: DepartureReason;
+  text: string;
+}
+
 /**
  * Why this customer could not be served, in words the player can act on.
  *
@@ -6040,26 +6067,26 @@ function blockHasWorkingPump(state: GameState, side: DrivewaySide): boolean {
  * player notices, so the notification says which of the two it is rather than
  * repeating that somebody left.
  */
-function serviceFailureReason(
+function serviceFailure(
   state: GameState,
   vehicle: VehicleEntity,
-  fallback: string
-): string {
+  fallback: Departure
+): Departure {
   const side = vehicleSide(vehicle);
   const tank = state.tanks[vehicle.fuelType];
   const fuel = GAME_CONFIG.fuels[vehicle.fuelType]?.shortName ?? vehicle.fuelType;
 
   if (GAME_CONFIG.customerTypes[vehicle.archetype]?.requiresCharger) {
     if (energyAvailable(state, side) < 1) {
-      return 'Batarya boş — elektrikli müşteri şarj alamadan ayrıldı.';
+      return { why: 'NO_POWER', text: 'Batarya boş — elektrikli müşteri şarj alamadan ayrıldı.' };
     }
     return fallback;
   }
   if (!blockHasWorkingPump(state, side)) {
-    return 'Çalışır pompa yok — müşteri bekledi ve ayrıldı. Pompayı onarın.';
+    return { why: 'PUMP_BROKEN', text: 'Çalışır pompa yok — müşteri bekledi ve ayrıldı. Pompayı onarın.' };
   }
   if (tank && availableFuelLiters(tank) < 0.1) {
-    return `${fuel} deposu boş — müşteri yakıt alamadan ayrıldı.`;
+    return { why: 'NO_FUEL', text: `${fuel} deposu boş — müşteri yakıt alamadan ayrıldı.` };
   }
   return fallback;
 }
@@ -6827,7 +6854,7 @@ function turnAwayForNoManeuver(
     state.player.statistics.totalCustomersLost++;
   }
   notifyNoManeuverRoom(vehicle, effects, reputationPenalty);
-  sendAway(state, vehicle);
+  sendAway(state, vehicle, 'NO_ROOM');
   turnAway(state);
 }
 
@@ -6837,8 +6864,9 @@ function turnAwayForNoManeuver(
  * would assume it was already on the apron; from the road that route cuts
  * across the field to reach the station's exit mouth.
  */
-function continuePastStation(state: GameState, vehicle: VehicleEntity): void {
+function continuePastStation(state: GameState, vehicle: VehicleEntity, why: DepartureReason): void {
   const block = blockFor(state, vehicle);
+  vehicle.departureReason = why;
   setVehicleState(vehicle, 'PASSING');
   setRoute(vehicle, continueInPassingLane(block, vehicle));
   vehicle.waitingTimeSeconds = 0;
@@ -6871,7 +6899,7 @@ function arrivalStillOnRoad(state: GameState, vehicle: VehicleEntity): boolean {
 function loseCustomer(
   state: GameState,
   vehicle: VehicleEntity,
-  reason: string,
+  departure: Departure,
   effects: SimEffects
 ): void {
   state.player.reputation = clamp(state.player.reputation - 0.015, 1, 5);
@@ -6903,9 +6931,9 @@ function loseCustomer(
   vehicle.visitMode = null;
   vehicle.visitor = undefined;
   vehicle.assignedActor = null;
-  sendAway(state, vehicle);
+  sendAway(state, vehicle, departure.why);
 
-  notify(effects, 'WARNING', 'Müşteri Kaybedildi!', `${reason} (-0.015 İtibar)`);
+  notify(effects, 'WARNING', 'Müşteri Kaybedildi!', `${departure.text} (-0.015 İtibar)`);
 }
 
 /**
@@ -6935,12 +6963,12 @@ export function closeForecourt(state: GameState): { left: number; unpaidLiters: 
       vehicle.state === 'SPAWN' ||
       (vehicle.state === 'ROAD_APPROACH' && arrivalStillOnRoad(state, vehicle))
     ) {
-      continuePastStation(state, vehicle);
+      continuePastStation(state, vehicle, 'CLOSED');
       turnAway(state);
       continue;
     }
     if (!isOnForecourt(vehicle)) continue;
-    unpaidLiters += dismissVehicle(state, vehicle);
+    unpaidLiters += dismissVehicle(state, vehicle, 'CLOSED');
     left++;
   }
 
@@ -6962,9 +6990,14 @@ function isOnForecourt(vehicle: VehicleEntity): boolean {
 
 /**
  * Sends one car away mid-service, giving back everything it was holding.
- * Returns the litres that went into it and will never be paid for.
+ * Returns the litres that went into it and will never be paid for. Unless the
+ * caller knows better, it was the player who sent them.
  */
-export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number {
+export function dismissVehicle(
+  state: GameState,
+  vehicle: VehicleEntity,
+  why: DepartureReason = 'SENT_AWAY'
+): number {
   const reserved = vehicle.request.reservedLiters ?? 0;
   const dispensed = vehicle.request.dispensedLiters;
   let unpaid = 0;
@@ -7004,7 +7037,7 @@ export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number
   vehicle.visitor = undefined;
   vehicle.visitBuildingId = null;
   vehicle.visitMode = null;
-  sendAway(state, vehicle);
+  sendAway(state, vehicle, why);
 
   return unpaid;
 }
@@ -7019,14 +7052,15 @@ export function dismissVehicle(state: GameState, vehicle: VehicleEntity): number
  */
 export function evictFromPump(
   state: GameState,
-  pumpId: string
+  pumpId: string,
+  why: DepartureReason = 'NO_SERVICE'
 ): { unpaidLiters: number; evicted: number } {
   let unpaidLiters = 0;
   let evicted = 0;
 
   for (const vehicle of Object.values(state.vehicles)) {
     if (vehicle.targetPumpId !== pumpId || !isOnForecourt(vehicle)) continue;
-    unpaidLiters += dismissVehicle(state, vehicle);
+    unpaidLiters += dismissVehicle(state, vehicle, why);
     evicted++;
 
     // Selling or carting off the pump somebody was using is the player's own
@@ -7135,7 +7169,7 @@ function dismissOrphanedAtPump(state: GameState): void {
     const pump = state.pumps[vehicle.targetPumpId];
     if (pump && pump.currentVehicleId && pump.currentVehicleId !== vehicle.id) {
       vehicle.targetPumpId = null;
-      dismissVehicle(state, vehicle);
+      dismissVehicle(state, vehicle, 'NO_SERVICE');
     }
   }
 }
@@ -7177,14 +7211,14 @@ function tickVehicles(
         // closeForecourt. Keep the simulation rule here too for direct state
         // changes and old saves paused on exactly this tick.
         if (!state.station.open) {
-          continuePastStation(state, vehicle);
+          continuePastStation(state, vehicle, 'CLOSED');
           turnAway(state);
           break;
         }
 
         const approach = approachRoute(state, vehicle);
         if (!approach) {
-          continuePastStation(state, vehicle);
+          continuePastStation(state, vehicle, 'NO_ROOM');
           turnAway(state);
           break;
         }
@@ -7215,7 +7249,7 @@ function tickVehicles(
         // the carriageway waiting for a gap that cannot open.
         const stillOnRoad = onCarriageway(vehicle, block);
         if (!state.station.open && stillOnRoad) {
-          continuePastStation(state, vehicle);
+          continuePastStation(state, vehicle, 'CLOSED');
           turnAway(state);
           break;
         }
@@ -7231,7 +7265,7 @@ function tickVehicles(
             : !findAvailablePump(state, vehicle.fuelType, mods, side) &&
               queued.length >= maxQueueLength(state, block))
         ) {
-          continuePastStation(state, vehicle);
+          continuePastStation(state, vehicle, 'FULL');
           turnAway(state);
           break;
         }
@@ -7254,7 +7288,7 @@ function tickVehicles(
           // up, waits for a left-lane gap, and overtakes the queue instead of
           // blocking the kerb lane forever or disappearing in place.
           if (vehicle.patience <= 0) {
-            continuePastStation(state, vehicle);
+            continuePastStation(state, vehicle, 'PATIENCE');
             turnAway(state);
             break;
           }
@@ -7265,7 +7299,7 @@ function tickVehicles(
           // a car has crossed the kerb it must finish the visit it committed
           // to; converting it to PASSING there draws a road-bound diagonal
           // across the forecourt and looks like it entered only to leave.
-          continuePastStation(state, vehicle);
+          continuePastStation(state, vehicle, 'FULL');
           turnAway(state);
           break;
         }
@@ -7314,7 +7348,7 @@ function tickVehicles(
             if (hadRoomButNoRoute) {
               turnAwayForNoManeuver(state, vehicle, effects);
             } else {
-              sendAway(state, vehicle);
+              sendAway(state, vehicle, 'FULL');
               turnAway(state);
             }
           }
@@ -7336,7 +7370,7 @@ function tickVehicles(
             .find((candidate) => candidate.route !== null);
 
           if (!walkUp) {
-            sendAway(state, vehicle);
+            sendAway(state, vehicle, serviceFailure(state, vehicle, { why: 'NO_FUEL', text: '' }).why);
             turnAway(state);
             break;
           }
@@ -7369,7 +7403,7 @@ function tickVehicles(
             if (hasQueueRoom && queued.length === 0) {
               turnAwayForNoManeuver(state, vehicle, effects);
             } else {
-              sendAway(state, vehicle);
+              sendAway(state, vehicle, 'FULL');
               turnAway(state);
             }
           }
@@ -7392,7 +7426,7 @@ function tickVehicles(
           loseCustomer(
             state,
             vehicle,
-            'Şarj ünitesi kaldırıldı — elektrikli müşteri hizmet alamadan ayrıldı.',
+            { why: 'NO_SERVICE', text: 'Şarj ünitesi kaldırıldı — elektrikli müşteri hizmet alamadan ayrıldı.' },
             effects
           );
           break;
@@ -7401,7 +7435,7 @@ function tickVehicles(
           loseCustomer(
             state,
             vehicle,
-            'Pompa kaldırıldı — kuyruktaki müşteri yakıt alamadan ayrıldı.',
+            { why: 'NO_SERVICE', text: 'Pompa kaldırıldı — kuyruktaki müşteri yakıt alamadan ayrıldı.' },
             effects
           );
           break;
@@ -7411,7 +7445,7 @@ function tickVehicles(
           loseCustomer(
             state,
             vehicle,
-            serviceFailureReason(state, vehicle, 'Kuyrukta bekleyen müşteri sabrını yitirdi.'),
+            serviceFailure(state, vehicle, { why: 'PATIENCE', text: 'Kuyrukta bekleyen müşteri sabrını yitirdi.' }),
             effects
           );
           break;
@@ -7424,7 +7458,7 @@ function tickVehicles(
         if (wantsCharge && !lineSlot && slot !== 0) {
           // The line has shrunk under them — something built across it, a
           // post sold. Beyond the head, there is nowhere to stand: leave.
-          loseCustomer(state, vehicle, 'Şarj kuyruğunda yer kalmadı — elektrikli müşteri ayrıldı.', effects);
+          loseCustomer(state, vehicle, { why: 'NO_ROOM', text: 'Şarj kuyruğunda yer kalmadı — elektrikli müşteri ayrıldı.' }, effects);
           break;
         }
         if (slot >= 0 && (!wantsCharge || lineSlot)) {
@@ -7521,7 +7555,7 @@ function tickVehicles(
             vehicle.targetPumpId = null;
           }
           vehicle.chargingBuildingId = null;
-          sendAway(state, vehicle);
+          sendAway(state, vehicle, 'NO_ROOM');
           break;
         }
 
@@ -7535,7 +7569,7 @@ function tickVehicles(
           loseCustomer(
             state,
             vehicle,
-            'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.',
+            { why: 'NO_SERVICE', text: 'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.' },
             effects
           );
           break;
@@ -7563,7 +7597,7 @@ function tickVehicles(
               loseCustomer(
                 state,
                 vehicle,
-                'Şarj ünitesi kaldırıldı — müşteri hizmet alamadan ayrıldı.',
+                { why: 'NO_SERVICE', text: 'Şarj ünitesi kaldırıldı — müşteri hizmet alamadan ayrıldı.' },
                 effects
               );
               break;
@@ -7593,7 +7627,7 @@ function tickVehicles(
         // A driver who cannot reach the bay they were promised gives it up.
         // Holding the pump reserved for one would shut it for everybody else.
         if (vehicle.patience <= 0 || isWedged(vehicle)) {
-          loseCustomer(state, vehicle, 'Pompaya ulaşamayan müşteri vazgeçti.', effects);
+          loseCustomer(state, vehicle, { why: 'NO_ROOM', text: 'Pompaya ulaşamayan müşteri vazgeçti.' }, effects);
         }
         break;
       }
@@ -7604,7 +7638,7 @@ function tickVehicles(
         if (!vehicle.chargingBuildingId && cannotServe(state, vehicle)) {
           vehicle.noServiceSeconds = (vehicle.noServiceSeconds ?? 0) + dt;
           if (vehicle.noServiceSeconds >= GIVE_UP_SECONDS) {
-            loseCustomer(state, vehicle, serviceFailureReason(state, vehicle, 'Müşteri hizmet alamadan ayrıldı.'), effects);
+            loseCustomer(state, vehicle, serviceFailure(state, vehicle, { why: 'NO_FUEL', text: 'Müşteri hizmet alamadan ayrıldı.' }), effects);
           }
           break;
         }
@@ -7618,7 +7652,7 @@ function tickVehicles(
             loseCustomer(
               state,
               vehicle,
-              'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.',
+              { why: 'NO_SERVICE', text: 'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.' },
               effects
             );
             break;
@@ -7626,14 +7660,14 @@ function tickVehicles(
           if (energyAvailable(state, side) < 1) {
             vehicle.noServiceSeconds = (vehicle.noServiceSeconds ?? 0) + dt;
             if (vehicle.noServiceSeconds >= GIVE_UP_SECONDS) {
-              loseCustomer(state, vehicle, serviceFailureReason(state, vehicle, 'Müşteri şarj alamadan ayrıldı.'), effects);
+              loseCustomer(state, vehicle, serviceFailure(state, vehicle, { why: 'NO_POWER', text: 'Müşteri şarj alamadan ayrıldı.' }), effects);
             }
             break;
           }
           vehicle.waitingTimeSeconds += dt;
           vehicle.patience -= dt;
           if (vehicle.patience <= 0) {
-            loseCustomer(state, vehicle, 'Şarj için bekleyen müşteri sabrını yitirdi.', effects);
+            loseCustomer(state, vehicle, { why: 'PATIENCE', text: 'Şarj için bekleyen müşteri sabrını yitirdi.' }, effects);
           }
           break;
         }
@@ -7644,7 +7678,7 @@ function tickVehicles(
           loseCustomer(
             state,
             vehicle,
-            serviceFailureReason(state, vehicle, 'Pompada hizmet bekleyen müşteri ayrıldı.'),
+            serviceFailure(state, vehicle, { why: 'PATIENCE', text: 'Pompada hizmet bekleyen müşteri ayrıldı.' }),
             effects
           );
         }
@@ -7658,7 +7692,7 @@ function tickVehicles(
         if (vehicle.chargingBuildingId) {
           const point = chargingPoints(state, side).find((p) => p.id === vehicle.chargingBuildingId);
           if (!point) {
-            loseCustomer(state, vehicle, 'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.', effects);
+            loseCustomer(state, vehicle, { why: 'NO_SERVICE', text: 'Şarj hizmeti kesildi — müşteri hizmet alamadan ayrıldı.' }, effects);
             break;
           }
           const seconds =
@@ -7670,7 +7704,7 @@ function tickVehicles(
           if (drawn < need * 0.999) {
             vehicle.patience -= dt * 0.5;
             if (vehicle.patience <= 0) {
-              loseCustomer(state, vehicle, 'Batarya boş — şarjı yarım kalan müşteri ayrıldı.', effects);
+              loseCustomer(state, vehicle, { why: 'NO_POWER', text: 'Batarya boş — şarjı yarım kalan müşteri ayrıldı.' }, effects);
               break;
             }
           }
@@ -7706,7 +7740,7 @@ function tickVehicles(
         if (vehicle.waitingTimeSeconds >= VIRTUAL_VISIT_SECONDS) {
           vehicle.visitBuildingId = null;
           vehicle.visitMode = null;
-          sendAway(state, vehicle);
+          sendAway(state, vehicle, vehicle.departureReason ?? 'VISITED');
         }
         break;
       }
@@ -7716,7 +7750,7 @@ function tickVehicles(
 
         // The park itself can be sold while a car is rolling up to it.
         if (!vehicle.parkingBuildingId || !state.buildings[vehicle.parkingBuildingId]) {
-          endVisit(state, vehicle);
+          endVisit(state, vehicle, 'NO_PARKING');
           break;
         }
 
@@ -7749,7 +7783,7 @@ function tickVehicles(
           vehicle.visitMode === 'PARK' &&
           (!vehicle.parkingBuildingId || !state.buildings[vehicle.parkingBuildingId])
         ) {
-          endVisit(state, vehicle);
+          endVisit(state, vehicle, 'VISITED');
           break;
         }
 
@@ -7760,7 +7794,7 @@ function tickVehicles(
           vehicle.waitingTimeSeconds > VISIT_TIMEOUT_SECONDS ||
           advanceVisitor(state, vehicle, building, dt, effects)
         ) {
-          endVisit(state, vehicle);
+          endVisit(state, vehicle, 'VISITED');
         }
         break;
       }
@@ -7811,7 +7845,7 @@ function facilityStillOpen(
     loseCustomer(
       state,
       vehicle,
-      'Kullandığı tesis kaldırıldı — müşteri hizmet alamadan ayrıldı.',
+      { why: 'NO_SERVICE', text: 'Kullandığı tesis kaldırıldı — müşteri hizmet alamadan ayrıldı.' },
       effects
     );
     return false;
@@ -8086,7 +8120,7 @@ function breakPump(
   effects: SimEffects,
   message: string
 ): void {
-  const { evicted } = evictFromPump(state, pump.id);
+  const { evicted } = evictFromPump(state, pump.id, 'PUMP_BROKEN');
   setPumpState(pump, 'BROKEN');
   pump.currentVehicleId = null;
   notify(effects, 'CRITICAL', 'Pompa Arızalandı!', message);

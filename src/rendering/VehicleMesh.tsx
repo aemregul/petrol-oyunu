@@ -1,4 +1,4 @@
-import React, { useRef, Suspense } from 'react';
+import React, { useRef, useState, Suspense } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { VehicleEntity } from '../domain/types/gameState';
@@ -7,6 +7,7 @@ import { Html } from '@react-three/drei';
 import { VehicleModel } from './models/VehicleModel';
 import { ModelErrorBoundary } from './models/ModelErrorBoundary';
 import { GAME_CONFIG } from '../config/gameConfig';
+import { MoodGlyph, vehicleMood } from './vehicleMood';
 
 /** Shown for the frame or two before a vehicle's model finishes loading. */
 const FallbackBody: React.FC<{ color: string }> = ({ color }) => (
@@ -16,8 +17,28 @@ const FallbackBody: React.FC<{ color: string }> = ({ color }) => (
   </mesh>
 );
 
+/** What the driver came for and how their patience is holding: "⛽ Benzin 😐". */
+const WaitingChip: React.FC<{ intent: MoodGlyph; patience: MoodGlyph; className?: string }> = ({
+  intent,
+  patience,
+  className = ''
+}) => (
+  <div
+    className={`game-glass bg-paper px-2 py-0.5 rounded-full flex items-center gap-1 text-[11px] text-ink font-display whitespace-nowrap ${className}`}
+  >
+    <span className="text-[13px] leading-none">{intent.emoji}</span>
+    <span>{intent.label}</span>
+    <span className="text-[13px] leading-none">{patience.emoji}</span>
+  </div>
+);
+
 interface VehicleMeshProps {
   vehicle: VehicleEntity;
+  /**
+   * The emoji over the roof. The welcome screen's showcase cars stand in the
+   * queue state for want of a quieter one, and would otherwise wear them.
+   */
+  showMood?: boolean;
 }
 
 /**
@@ -57,7 +78,7 @@ function getRequestHeight(modelVariant: VehicleEntity['modelVariant']): number {
   }
 }
 
-export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
+export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle, showMood = true }) => {
   const openFuelingPanel = useGameStore((s) => s.openFuelingPanelForVehicle);
   const gameState = useGameStore((s) => s.gameState);
 
@@ -83,6 +104,8 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
 
   const groupRef = useRef<THREE.Group>(null);
   const spawnedRef = useRef(false);
+  // The leaving bubble plays once, then comes off the page.
+  const [departureShown, setDepartureShown] = useState(false);
 
   /**
    * The simulation ticks at 20Hz, so reading its positions straight into the
@@ -176,6 +199,12 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
   const patienceRatio = Math.max(0, vehicle.patience / vehicle.maxPatience);
   const requestHeight = getRequestHeight(vehicle.modelVariant);
 
+  const mood = showMood ? vehicleMood(vehicle, gameState.buildings) : null;
+  const waiting = mood?.kind === 'WAITING' ? mood : null;
+  // The waiting chip rides on the service card where there is one; in the
+  // queue and on the way to the bay it stands on its own.
+  const chipStandsAlone = vehicle.state === 'QUEUE' || vehicle.state === 'PUMP_RESERVED';
+
   return (
     <group
       ref={groupRef}
@@ -204,6 +233,7 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
               holdsPump ? 'bg-kyel' : 'bg-paper'
             }`}
           >
+            {mood?.kind === 'AWAY' && <span className="mr-1">{mood.intent.emoji}</span>}
             {holdsPump ? `⚠ ${awayLabel} — pompa dolu` : awayLabel}
           </div>
         </Html>
@@ -226,6 +256,8 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
               if (canPlayerInteract) serve();
             }}
           >
+            {waiting && <WaitingChip intent={waiting.intent} patience={waiting.patience} className="mb-1" />}
+
             {/* Meter Badge (like beneloil.com: 18.9L • ₺170) */}
             <div className="game-glass bg-paper border-2 border-ink text-ink text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 font-display tabular-nums whitespace-nowrap">
               {isFueling || awaitingHandover ? (
@@ -259,6 +291,25 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle }) => {
                 style={{ width: `${patienceRatio * 100}%` }}
               />
             </div>
+          </div>
+        </Html>
+      )}
+
+      {waiting && chipStandsAlone && (
+        <Html position={[0, requestHeight, 0]} center distanceFactor={20} zIndexRange={[5, 0]} pointerEvents="none">
+          <WaitingChip intent={waiting.intent} patience={waiting.patience} />
+        </Html>
+      )}
+
+      {/* Why they went: pops up as the car pulls away, then clears itself. */}
+      {mood?.kind === 'LEAVING' && !departureShown && (
+        <Html position={[0, requestHeight, 0]} center distanceFactor={20} zIndexRange={[5, 0]} pointerEvents="none">
+          <div
+            className="game-glass bg-paper px-2.5 py-1 rounded-full flex items-center gap-1.5 text-[11px] text-ink font-display whitespace-nowrap animate-mood-rise"
+            onAnimationEnd={() => setDepartureShown(true)}
+          >
+            <span className="text-[15px] leading-none">{mood.glyph.emoji}</span>
+            <span>{mood.glyph.label}</span>
           </div>
         </Html>
       )}
