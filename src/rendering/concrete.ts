@@ -9,6 +9,12 @@ import * as THREE from 'three';
  * staining where it has weathered, and the sawn joints between slabs — and all
  * three are cheap to draw into a canvas at start-up. Generating it keeps the
  * repo free of a binary asset and lets the slab size follow the world grid.
+ *
+ * The joints are drawn only while building (Emre, 2026-09-13): they are the
+ * squares a structure snaps to, which is worth seeing while placing one and
+ * nothing but clutter the rest of the time. Out of build mode the pour is
+ * plain. Both variants share the same staining and grain, so switching modes
+ * adds or removes the lines without the surface under them shifting.
  */
 
 /**
@@ -38,7 +44,8 @@ const JOINTS_PER_TILE = TILE_WORLD / JOINT_SPACING;
 /** Texture resolution for that tile — 128px per world unit, ample at zoom 7. */
 const TILE_PX = 1024;
 
-let cached: THREE.CanvasTexture | null = null;
+/** One source texture per variant: with the slab joints, and plain. */
+const cached = new Map<boolean, THREE.CanvasTexture>();
 
 /** Deterministic noise, so the forecourt looks the same every session. */
 function makeRandom(seed: number): () => number {
@@ -49,7 +56,7 @@ function makeRandom(seed: number): () => number {
   };
 }
 
-function draw(): HTMLCanvasElement {
+function draw(joints: boolean): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = TILE_PX;
   canvas.height = TILE_PX;
@@ -58,9 +65,9 @@ function draw(): HTMLCanvasElement {
 
   // Base pour: a light neutral grey. The warmth is what turned an earlier,
   // equally light mix into limestone paving, so this one is kept off the yellow
-  // side of grey — light, but still plainly concrete. Bright enough that the
-  // material tint takes it down for rain rather than having to lift it up.
-  ctx.fillStyle = '#b2b3ae';
+  // side of grey — light, but still plainly concrete. The apron is drawn unlit
+  // (Emre, 2026-09-13), so this is the colour on screen at every hour.
+  ctx.fillStyle = '#8a8b86';
   ctx.fillRect(0, 0, TILE_PX, TILE_PX);
 
   /**
@@ -72,9 +79,10 @@ function draw(): HTMLCanvasElement {
     const cx = random() * TILE_PX;
     const cy = random() * TILE_PX;
     const r = TILE_PX * (0.04 + random() * 0.11);
-    // Mostly darker patches, with the occasional lighter wash.
+    // Mostly darker patches, with the occasional lighter wash. Faint, so the
+    // pour still reads as one light colour rather than a cloudy one.
     const dark = random() < 0.72;
-    const alpha = 0.06 + random() * 0.08;
+    const alpha = 0.03 + random() * 0.04;
 
     for (const ox of [-TILE_PX, 0, TILE_PX]) {
       for (const oy of [-TILE_PX, 0, TILE_PX]) {
@@ -91,17 +99,20 @@ function draw(): HTMLCanvasElement {
   // Sawn joints between slabs, evenly across the tile so that repeating it
   // lays a continuous grid one build square on a side. A hairline highlight on
   // the far side of each groove is what makes it read as cut into the surface
-  // rather than painted onto it.
-  const joint = Math.max(2, Math.round(TILE_PX * 0.0022));
-  const step = TILE_PX / JOINTS_PER_TILE;
-  for (let i = 0; i < JOINTS_PER_TILE; i++) {
-    const at = Math.round(i * step);
-    ctx.fillStyle = 'rgba(74, 76, 75, 0.55)';
-    ctx.fillRect(0, at, TILE_PX, joint);
-    ctx.fillRect(at, 0, joint, TILE_PX);
-    ctx.fillStyle = 'rgba(206, 208, 203, 0.26)';
-    ctx.fillRect(0, at + joint, TILE_PX, 1);
-    ctx.fillRect(at + joint, 0, 1, TILE_PX);
+  // rather than painted onto it. They draw no random numbers, so the grain
+  // below comes out the same with or without them.
+  if (joints) {
+    const joint = Math.max(2, Math.round(TILE_PX * 0.0022));
+    const step = TILE_PX / JOINTS_PER_TILE;
+    for (let i = 0; i < JOINTS_PER_TILE; i++) {
+      const at = Math.round(i * step);
+      ctx.fillStyle = 'rgba(74, 76, 75, 0.55)';
+      ctx.fillRect(0, at, TILE_PX, joint);
+      ctx.fillRect(at, 0, joint, TILE_PX);
+      ctx.fillStyle = 'rgba(238, 239, 234, 0.3)';
+      ctx.fillRect(0, at + joint, TILE_PX, 1);
+      ctx.fillRect(at + joint, 0, 1, TILE_PX);
+    }
   }
 
   // Aggregate. Per-pixel and last, so it grains the joints and the staining
@@ -120,26 +131,29 @@ function draw(): HTMLCanvasElement {
 }
 
 /**
- * The shared source texture. Callers get their own clone with their own
- * repeat and offset; clones share this one's GPU upload.
+ * The shared source texture for a variant. Callers get their own clone with
+ * their own repeat and offset; clones share this one's GPU upload.
  */
-function source(): THREE.CanvasTexture {
-  if (cached) return cached;
+function source(joints: boolean): THREE.CanvasTexture {
+  const hit = cached.get(joints);
+  if (hit) return hit;
 
-  cached = new THREE.CanvasTexture(draw());
-  cached.wrapS = THREE.RepeatWrapping;
-  cached.wrapT = THREE.RepeatWrapping;
-  cached.colorSpace = THREE.SRGBColorSpace;
+  const texture = new THREE.CanvasTexture(draw(joints));
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
   // The forecourt is looked at from a low angle at the widest zoom, which is
   // exactly where an unfiltered repeat turns to shimmer.
-  cached.anisotropy = 8;
-  return cached;
+  texture.anisotropy = 8;
+  cached.set(joints, texture);
+  return texture;
 }
 
 const clones = new Map<string, THREE.Texture>();
 
 /**
- * A concrete texture for one patch of ground.
+ * A concrete texture for one patch of ground, with the slab joints drawn in
+ * only when `joints` asks for them — the build grid's squares, for placing.
  *
  * The offset is world-space rather than per-patch, so the slab grid runs
  * unbroken across parcel boundaries: buy the plot next door and the joints
@@ -161,13 +175,14 @@ export function concreteTexture(
   depth: number,
   westX: number,
   northZ: number,
-  anchorZ = 0
+  anchorZ = 0,
+  joints = false
 ): THREE.Texture {
-  const key = `${width}|${depth}|${westX}|${northZ}|${anchorZ}`;
+  const key = `${width}|${depth}|${westX}|${northZ}|${anchorZ}|${joints}`;
   const hit = clones.get(key);
   if (hit) return hit;
 
-  const texture = source().clone();
+  const texture = source(joints).clone();
   texture.repeat.set(width / TILE_WORLD, depth / TILE_WORLD);
   texture.offset.set(westX / TILE_WORLD, -(northZ + depth - anchorZ) / TILE_WORLD);
   texture.needsUpdate = true;

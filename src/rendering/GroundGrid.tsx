@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { DECAL, decal } from './decal';
 import { concreteTexture } from './concrete';
+import { ForecourtWear } from './ForecourtWear';
 import { APRON_FRONT, FAR_APRON_FRONT, pavedSpan } from './forecourt';
 import {
   LAYOUT,
@@ -207,30 +208,20 @@ const ConcreteApron: React.FC<{
   depth: number;
   /** z the slab-joint grid is phased from — the block's own front edge. */
   anchorZ: number;
-  tint: string;
-  roughness: number;
-}> = ({ westX, northZ, width, depth, anchorZ, tint, roughness }) => {
-  const map = concreteTexture(width, depth, westX, northZ, anchorZ);
+  /** Slab joints, the squares a structure snaps to: drawn only while building. */
+  joints: boolean;
+}> = ({ westX, northZ, width, depth, anchorZ, joints }) => {
+  const map = concreteTexture(width, depth, westX, northZ, anchorZ, joints);
 
+  // Unlit, and one light colour at every hour (Emre, 2026-09-13). Lit, the
+  // pour followed the sun from pale grey at noon to blue-grey at night, and
+  // rain and dirt darkened it again. It is the surface the player builds on,
+  // so it reads the same at dawn and at midnight; the shadows are laid over
+  // it by ForecourtWear.
   return (
-    <mesh
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[westX + width / 2, 0.02, northZ + depth / 2]}
-      receiveShadow
-    >
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[westX + width / 2, 0.02, northZ + depth / 2]}>
       <planeGeometry args={[width, depth]} />
-      <meshStandardMaterial
-        map={map}
-        color={tint}
-        // No roughness map. The colour map was being used as one, and three
-        // multiplies roughness by it: a light grey pour meant the surface ran
-        // about a third smoother than the number here says, and in the rain
-        // that landed at a near-polish where the sun came back off the
-        // forecourt as a single hard blob — concrete lit like bathroom tile.
-        // Damp joints are not worth an unpredictable finish.
-        roughness={roughness}
-        metalness={0}
-      />
+      <meshBasicMaterial map={map} toneMapped={false} fog={false} />
     </mesh>
   );
 };
@@ -633,14 +624,15 @@ const ParcelFence: React.FC<{ col: number; row: number }> = ({ col, row }) => {
 export const GroundGrid: React.FC<{ scene?: GroundScene }> = ({ scene }) => {
   const storePlots = useGameStore((s) => s.gameState.station.plots);
   const storeBuildMode = useGameStore((s) => s.buildMode.active);
-  const storeWeather = useGameStore((s) => s.gameState.dayState.weather);
+  const storeGameTime = useGameStore((s) => s.gameState.dayState.gameTime);
   const storeCleanliness = useGameStore((s) => s.gameState.station.cleanliness);
   const storeRoadLevel = useGameStore((s) => s.gameState.station.roadLevel);
   const storeBuildings = useGameStore((s) => s.gameState.buildings);
   const storePumps = useGameStore((s) => s.gameState.pumps);
 
   const plots = scene?.plots ?? storePlots;
-  const weather = scene?.weather ?? storeWeather;
+  // A staged scene has no clock; its shadows fall as they would at midday.
+  const gameTime = scene ? 12 : storeGameTime;
   const cleanliness = scene?.cleanliness ?? storeCleanliness;
   const roadLevel = scene?.roadLevel ?? storeRoadLevel;
   const buildings = scene?.buildings ?? storeBuildings;
@@ -700,21 +692,6 @@ export const GroundGrid: React.FC<{ scene?: GroundScene }> = ({ scene }) => {
   // Both edges, and the span they trim a parcel to, are defined once in
   // ./forecourt so the land overlay cannot drift away from the concrete.
   const apronFront = APRON_FRONT;
-
-  /**
-   * The concrete texture carries the colour now, so this is a tint over it
-   * rather than the surface itself: white leaves the pour as drawn, and rain
-   * darkens and cools it into wet concrete. A filthy forecourt greys off a
-   * little as well as going matt.
-   */
-  const apronTint =
-    weather === 'RAIN' ? '#8b93a0' : cleanliness < 50 ? '#cfccc4' : '#ffffff';
-  /**
-   * Wet concrete is darker and a little glossier than dry, but it is still
-   * concrete: it never returns a mirror image of the sun. The old wet value
-   * was low enough to do exactly that.
-   */
-  const apronRoughness = weather === 'RAIN' ? 0.62 : 0.78 + (1 - cleanliness / 100) * 0.18;
 
   const unpaved = plots.ownedParcels.filter((key) => !plots.pavedParcels.includes(key));
 
@@ -891,11 +868,22 @@ export const GroundGrid: React.FC<{ scene?: GroundScene }> = ({ scene }) => {
             width={PARCEL.width * S}
             depth={back - front}
             anchorZ={row >= 0 ? apronFront : farApronFront}
-            tint={apronTint}
-            roughness={apronRoughness}
+            joints={buildMode}
           />
         );
       })}
+
+      {/* Over the concrete: mottling that hides the base texture's repeat,
+          the marks cars leave where they stand, drive and turn, and the
+          shadows the unlit concrete cannot take itself. */}
+      <ForecourtWear
+        plots={plots}
+        roadLevel={roadLevel}
+        buildings={buildings}
+        pumps={pumps}
+        cleanliness={cleanliness}
+        gameTime={gameTime}
+      />
 
       {/* Land bought but not yet paved: fenced off and bare */}
       {unpaved.map((key) => {
