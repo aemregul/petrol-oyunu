@@ -110,7 +110,7 @@ export const MISSION_CHAIN: ChainStep[] = [
   {
     id: 'finish_day',
     title: 'İlk günü tamamla',
-    detail: 'Gün ertesi sabah kapanır; her sabah yeni günlük görevler gelir.',
+    detail: 'Gün ertesi sabah altıda biter ve rapor gelir; Günü Kapat deyince yeni gün, yeni günlük görevlerle başlar.',
     target: 1,
     progress: (state) => stats(state).daysCompleted,
     rewardCash: 1000,

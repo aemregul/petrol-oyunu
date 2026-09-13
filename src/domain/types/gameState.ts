@@ -576,6 +576,10 @@ export interface DayState {
   gameTime: number;
   /** Player-controlled simulation speed: paused, relaxed, or normal. */
   timeSpeed: 0 | 0.5 | 1;
+  /**
+   * False from closing time, once the day's books are settled, until the
+   * player starts the next morning from the day-end report.
+   */
   isDayActive: boolean;
   isDayEnding: boolean;
   weather: 'SUNNY' | 'OVERCAST' | 'RAIN';
@@ -637,6 +641,21 @@ export interface DayState {
     customersTurnedAway?: number;
     /** Running total of service scores, divided by customersServed at day end. */
     serviceScoreSum: number;
+    /**
+     * Drivers who chose to stop here today, whatever became of them — the
+     * first line of the day-end report (players, 2026-09-13).
+     */
+    arrivals?: number;
+    /**
+     * How today's customers left, each by the first reason they were given:
+     * a driver served and then turned out by the closed sign was served.
+     */
+    departures?: Partial<Record<DepartureReason, number>>;
+    /** Cash and reputation as the morning opened, for the report's day-on-day lines. */
+    openingCash?: number;
+    openingReputation?: number;
+    /** Loan instalments the till could not cover at closing. */
+    missedLoanPayments?: number;
   };
 }
 

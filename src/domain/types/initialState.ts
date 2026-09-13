@@ -194,7 +194,11 @@ export function createInitialGameState(): GameState {
         repairs: 0,
         customersServed: 0,
         customersLost: 0,
-        serviceScoreSum: 0
+        serviceScoreSum: 0,
+        arrivals: 0,
+        departures: {},
+        openingCash: GAME_CONFIG.economy.initialCash,
+        openingReputation: GAME_CONFIG.economy.initialReputation
       }
     },
     market: {

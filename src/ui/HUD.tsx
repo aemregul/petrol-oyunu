@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, ShieldCheck, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Box, Building2, Check, Cloud, CloudRain, ClipboardList, Wrench, ShieldCheck, Crosshair, Eye, Fuel, Grid2x2, Hammer, Map as MapIcon, Move, Pause, Play, Power, RotateCcw, RotateCw, Settings as SettingsIcon, ShieldAlert, Sun, Sunrise, Target, Umbrella, UserRound, Users, X } from 'lucide-react';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { absorbedByRestComplex } from '../domain/services/placement';
 import { calculateRepairCost } from '../domain/formulas/economy';
@@ -242,45 +242,60 @@ export const HUD: React.FC = () => {
           </div>
 
           <div className="hud-day flex items-center gap-2">
-            <div
-              className="flex items-center overflow-hidden rounded-md border-2 border-ink bg-card"
-              role="group"
-              aria-label="Oyun hızı"
-            >
-              <button
-                onClick={() => setTimeSpeed(0)}
-                disabled={lessonActive || !dayState.isDayActive}
-                aria-pressed={dayState.timeSpeed === 0}
-                title="Oyunu durdur"
-                className={`h-9 min-w-9 px-2 flex items-center justify-center border-r-2 border-ink transition-colors ${
-                  dayState.timeSpeed === 0 ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
-                } disabled:opacity-50`}
+            {dayState.isDayActive ? (
+              <div
+                className="flex items-center overflow-hidden rounded-md border-2 border-ink bg-card"
+                role="group"
+                aria-label="Oyun hızı"
               >
-                <Pause className="w-4 h-4" strokeWidth={3} />
-              </button>
+                <button
+                  onClick={() => setTimeSpeed(0)}
+                  disabled={lessonActive}
+                  aria-pressed={dayState.timeSpeed === 0}
+                  title="Oyunu durdur"
+                  className={`h-9 min-w-9 px-2 flex items-center justify-center border-r-2 border-ink transition-colors ${
+                    dayState.timeSpeed === 0 ? 'bg-kred text-white' : 'bg-card text-ink hover:bg-board'
+                  } disabled:opacity-50`}
+                >
+                  <Pause className="w-4 h-4" strokeWidth={3} />
+                </button>
+                <button
+                  onClick={() => setTimeSpeed(0.5)}
+                  disabled={lessonActive}
+                  aria-pressed={dayState.timeSpeed === 0.5}
+                  title="Oyunu yavaşlat"
+                  className={`h-9 min-w-[3.25rem] px-2 font-display text-xs border-r-2 border-ink transition-colors ${
+                    dayState.timeSpeed === 0.5 ? 'bg-kyel text-ink' : 'bg-card text-ink hover:bg-board'
+                  } disabled:opacity-50`}
+                >
+                  0,5×
+                </button>
+                <button
+                  onClick={() => setTimeSpeed(1)}
+                  disabled={lessonActive}
+                  aria-pressed={dayState.timeSpeed === 1}
+                  title="Normal hızda devam et"
+                  className={`h-9 min-w-9 px-2 flex items-center justify-center transition-colors ${
+                    dayState.timeSpeed === 1 ? 'bg-kgrn text-white' : 'bg-card text-ink hover:bg-board'
+                  } disabled:opacity-50`}
+                >
+                  <Play className="w-4 h-4" strokeWidth={3} />
+                </button>
+              </div>
+            ) : (
+              // Closing time has settled the day and stopped the clock
+              // (players, 2026-09-13). The speed controls have nothing to run
+              // until the player starts the next morning, so their place goes
+              // to the way back to the report that starts it.
               <button
-                onClick={() => setTimeSpeed(0.5)}
-                disabled={lessonActive || !dayState.isDayActive}
-                aria-pressed={dayState.timeSpeed === 0.5}
-                title="Oyunu yavaşlat"
-                className={`h-9 min-w-[3.25rem] px-2 font-display text-xs border-r-2 border-ink transition-colors ${
-                  dayState.timeSpeed === 0.5 ? 'bg-kyel text-ink' : 'bg-card text-ink hover:bg-board'
-                } disabled:opacity-50`}
+                onClick={() => setActiveModal('DAY_REPORT')}
+                title="Gün bitti — raporu aç, günü kapatıp yeni güne geç"
+                className="game-btn h-9 px-3 flex items-center gap-1.5 bg-kyel text-ink hover:bg-kyel-dark font-display text-sm tracking-wide animate-pulse"
               >
-                0,5×
+                <Sunrise className="w-4 h-4" strokeWidth={3} />
+                GÜN SONU
               </button>
-              <button
-                onClick={() => setTimeSpeed(1)}
-                disabled={lessonActive || !dayState.isDayActive}
-                aria-pressed={dayState.timeSpeed === 1}
-                title="Normal hızda devam et"
-                className={`h-9 min-w-9 px-2 flex items-center justify-center transition-colors ${
-                  dayState.timeSpeed === 1 ? 'bg-kgrn text-white' : 'bg-card text-ink hover:bg-board'
-                } disabled:opacity-50`}
-              >
-                <Play className="w-4 h-4" strokeWidth={3} />
-              </button>
-            </div>
+            )}
             <div
               className="k-world px-2.5 py-1 font-display text-base flex items-center gap-1.5 tabular-nums"
               title={`${weatherStyle.label} · Gün ${dayState.currentDay}`}

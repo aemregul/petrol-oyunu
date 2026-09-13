@@ -60,7 +60,7 @@ function sections(): Section[] {
       render: () => (
         <>
           <P>Yol kenarında bir istasyon işletiyorsun. Yoldan geçen araçların bir kısmı sana sapar; ne kadarının sapacağını itibarın, fiyatın ve tesislerin belirler.</P>
-          <P>Bir oyun günü dört gerçek dakika. Sabah altıda başlar, ertesi sabah altıda gün sonu raporu gelir: satışlar, giderler, maaşlar, net kâr. Gün sonunda itibarın o günkü hizmete göre yeniden hesaplanır.</P>
+          <P>Bir oyun günü dört gerçek dakika. Sabah altıda başlar, ertesi sabah altıda saat durur ve gün sonu raporu gelir: gelen, hizmet verilen ve kaybedilen araçlar; gelir, gider ve net kâr. Gün sonunda maaşlar ödenir, itibarın o günkü hizmete göre yeniden hesaplanır. Yeni gün, raporda Günü Kapat'a bastığında başlar; o zamana dek sahadaki araçlar olduğu yerde bekler.</P>
           <H>Günün döngüsü</H>
           <UL items={[
             'Müşteriye servis: pompacı varsa o yapar, yoksa araca tıklayıp sen yaparsın.',

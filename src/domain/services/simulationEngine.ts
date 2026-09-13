@@ -3049,6 +3049,21 @@ function offWalls(
 }
 
 /**
+ * Gives a departing driver their reason, and tallies the first one they are
+ * given for the day-end report (players, 2026-09-13). A driver served and then
+ * turned out by the closed sign was served; one re-routed on the way out left
+ * once.
+ */
+function markDeparture(state: GameState, vehicle: VehicleEntity, why: DepartureReason): void {
+  if (!vehicle.departureReason) {
+    const stats = state.dayState.todayStats;
+    const tally = stats.departures ?? (stats.departures = {});
+    tally[why] = (tally[why] ?? 0) + 1;
+  }
+  vehicle.departureReason = why;
+}
+
+/**
  * Sends a car on its way, or takes it off the plot when there is no way out.
  *
  * Every exit used to fall back to a straight line when no way round could be
@@ -3059,7 +3074,7 @@ function offWalls(
 function sendAway(state: GameState, vehicle: VehicleEntity, why?: DepartureReason): void {
   // What the car says over its roof on the way out. A caller with nothing new
   // to add leaves the reason the car already carries.
-  if (why) vehicle.departureReason = why;
+  if (why) markDeparture(state, vehicle, why);
 
   // A car standing in a park bay backs out to the spot it turned in from
   // before it goes anywhere: the kerb is in front of it, and a route drawn
@@ -4103,7 +4118,7 @@ export function finalizeCharge(state: GameState, vehicle: VehicleEntity, effects
       getEventModifiers(state).tip *
       tipHabit
   );
-  vehicle.departureReason = servedReason(serviceScore, tip);
+  markDeparture(state, vehicle, servedReason(serviceScore, tip));
 
   TransactionService.executeCashTransaction(state, {
     type: 'FUEL_SALE',
@@ -4250,7 +4265,7 @@ export function finalizeSale(
   );
 
   vehicle.satisfaction = serviceScore;
-  vehicle.departureReason = servedReason(serviceScore, tip);
+  markDeparture(state, vehicle, servedReason(serviceScore, tip));
 
   TransactionService.executeCashTransaction(state, {
     type: 'FUEL_SALE',
@@ -6407,6 +6422,11 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
     shoppingIntent: false
   };
 
+  // Everyone who chose to stop is a car that came, whatever becomes of them.
+  if (stops) {
+    state.dayState.todayStats.arrivals = (state.dayState.todayStats.arrivals ?? 0) + 1;
+  }
+
   // Not everyone who turns in wants fuel. Some are here for the toilet, the
   // coffee or a bed for the night, and they head for the park rather than
   // the pumps — decided now, on the road, like everything else about them.
@@ -6866,7 +6886,7 @@ function turnAwayForNoManeuver(
  */
 function continuePastStation(state: GameState, vehicle: VehicleEntity, why: DepartureReason): void {
   const block = blockFor(state, vehicle);
-  vehicle.departureReason = why;
+  markDeparture(state, vehicle, why);
   setVehicleState(vehicle, 'PASSING');
   setRoute(vehicle, continueInPassingLane(block, vehicle));
   vehicle.waitingTimeSeconds = 0;

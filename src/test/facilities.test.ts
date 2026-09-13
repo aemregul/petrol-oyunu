@@ -701,6 +701,7 @@ describe('facilities - the store', () => {
 
   it("resets the day's takings at dawn but leaves the till alone", () => {
     useGameStore.getState().endDayAndShowReport();
+    useGameStore.getState().startNextDay();
     const wc = useGameStore.getState().gameState.buildings.wc;
     expect(wc.todayRevenue).toBe(0);
     expect(wc.todayVisits).toBe(0);

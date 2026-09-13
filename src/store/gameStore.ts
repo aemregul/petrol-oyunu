@@ -96,6 +96,7 @@ import {
 } from '../services/account';
 import { zoomToFit, CAMERA_VIEWS } from '../rendering/cameraFrame';
 import { siteCleaningCost } from '../domain/services/maintenance';
+import { dayBooks } from '../domain/services/dayReport';
 
 const SOUND_PLAYERS: Record<SoundCue, () => void> = {
   click: () => sounds.playClick(),
@@ -308,7 +309,12 @@ function beginNewDay(state: GameState, effects: ReturnType<typeof createEffects>
     repairs: 0,
     customersServed: 0,
     customersLost: 0,
-    serviceScoreSum: 0
+    serviceScoreSum: 0,
+    arrivals: 0,
+    departures: {},
+    // Where the morning starts from, for the day-end report's day-on-day lines.
+    openingCash: state.player.cash,
+    openingReputation: state.player.reputation
   };
 
   // Restock the mini-market shelves for the new day.
@@ -339,7 +345,8 @@ export type ActiveModalType =
   | 'ACCOUNT'
   | 'GUIDE'
   | 'FEEDBACK'
-  | 'ADMIN';
+  | 'ADMIN'
+  | 'DAY_REPORT';
 
 export interface PerformanceMetrics {
   fps: number;
@@ -617,7 +624,13 @@ interface GameStore {
 
   // Simulation Step & Day Cycle
   simulationTick: (deltaSeconds: number) => void;
+  /**
+   * Closing time (players, 2026-09-13): settles the day's books, stops the
+   * clock and puts the report up. Nothing rolls over until the player says so.
+   */
   endDayAndShowReport: () => void;
+  /** The player's hand on the next morning, from the day-end report. */
+  startNextDay: () => void;
   claimMissionReward: (missionId: string) => boolean;
   /** Pays the main goal on the board, once it is met, and puts up the next. */
   claimChainReward: () => boolean;
@@ -679,7 +692,7 @@ export function foldCanopiesIntoPumps(state: GameState): void {
  * without this the station would load frozen with no traffic and no way
  * forward but resetting.
  */
-function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveModalType } {
+export function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveModalType } {
   // Older saves measured the plot across both sides of the highway, which
   // dragged the exit driveway off the forecourt as the far side grew — and
   // later ones measured it over bought-but-bare land, which put the lorry's
@@ -806,13 +819,10 @@ function reviveLoadedSave(loaded: GameState): { state: GameState; modal: ActiveM
     loaded.dayState.timeSpeed = 1;
   }
 
-  // The day had already closed when this was saved. There is no report
-  // screen to reopen any more — the station simply wakes into the next
-  // morning and carries on.
+  // The day had already closed when this was saved: its books are settled
+  // and its report is still waiting for the player to start the next morning.
   if (!loaded.dayState.isDayActive) {
-    const morning = createEffects();
-    beginNewDay(loaded, morning);
-    flushEffects(loaded, morning);
+    return { state: loaded, modal: 'DAY_REPORT' };
   }
 
   return { state: loaded, modal: 'NONE' };
@@ -3504,14 +3514,23 @@ export const useGameStore = create<GameStore>((set, get) => {
 
 
   endDayAndShowReport: () => {
+    // Closing time comes once a day. A day already settled only has its
+    // report put back up.
+    if (!get().gameState.dayState.isDayActive) {
+      set({ activeModal: 'DAY_REPORT' });
+      return;
+    }
+
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     const effects = createEffects();
 
-    // The day's books are settled and the next morning starts in the same
-    // breath. Nothing stops: the cars on the forecourt keep being served,
-    // the clock just reads 06:00 again. Closing time used to freeze the game
-    // behind a report screen and sweep the plot clean — a hard cut in the
-    // middle of whatever the player was doing.
+    // The books are settled at closing time and then the day waits (players,
+    // 2026-09-13): the clock stops, the report goes up, and the next morning
+    // starts when the player closes the day from it. Nothing is swept away —
+    // the cars on the forecourt stand where they are and carry on in the
+    // morning. The first report screen also cleared the plot at closing, a
+    // hard cut in the middle of whatever the player was doing, which is why
+    // it went; the pause is what players asked to have back.
 
     // The manager lives outside the employees collection, which is how their
     // wage went uncollected for as long as the job existed.
@@ -3538,6 +3557,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     totalUpkeep += energyBill;
 
     let totalLoans = 0;
+    let missedLoans = 0;
     for (const loan of state.loans) {
       if (loan.state !== 'ACTIVE') continue;
 
@@ -3546,6 +3566,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       if (!affordable) {
         loan.missedCount++;
+        missedLoans++;
         state.player.reputation = Math.max(1, state.player.reputation - 0.1);
         effects.notifications.push({
           type: 'CRITICAL',
@@ -3571,6 +3592,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     state.dayState.todayStats.wages = totalWages;
     state.dayState.todayStats.upkeep = totalUpkeep;
     state.dayState.todayStats.loanPayments = totalLoans;
+    state.dayState.todayStats.missedLoanPayments = missedLoans;
 
     const totalDailyExpenses = totalWages + totalUpkeep + totalLoans;
     if (totalDailyExpenses > 0) {
@@ -3610,11 +3632,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     );
 
     // The last three days' net, for anyone who asks whether the place is
-    // actually making money — the manager's hiring bar does.
-    const t = state.dayState.todayStats;
-    const netProfit =
-      t.fuelRevenue + t.tips + t.marketRevenue -
-      (t.fuelCost + t.marketCost + t.repairs + totalWages + totalUpkeep + totalLoans);
+    // actually making money — the manager's hiring bar does. It is the same
+    // sum the day-end report shows.
+    const netProfit = dayBooks(state.dayState.todayStats).net;
     state.player.statistics.recentNetProfits = [
       ...(state.player.statistics.recentNetProfits ?? []),
       Math.round(netProfit)
@@ -3624,18 +3644,35 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     trackMissionMetric(state, 'DAYS_COMPLETED', 1, effects);
 
-    // The one line the report screen was worth: how the day went.
+    // The report goes once the next morning starts; the notification log
+    // keeps a line of how each day went.
     effects.notifications.push({
       type: netProfit >= 0 ? 'REWARD' : 'WARNING',
       title: `Gün ${state.dayState.currentDay} Kapandı`,
-      message: `Net kâr: ${netProfit >= 0 ? '' : '-'}₺${Math.abs(Math.round(netProfit)).toLocaleString('tr-TR')} · İtibar ${state.player.reputation.toFixed(2)} · ${t.customersServed} müşteri.`
+      message: `Net kâr: ${netProfit >= 0 ? '' : '-'}₺${Math.abs(Math.round(netProfit)).toLocaleString('tr-TR')} · İtibar ${state.player.reputation.toFixed(2)} · ${state.dayState.todayStats.customersServed} müşteri.`
     });
 
+    // The day is over until the player starts the next one from the report.
+    state.dayState.isDayActive = false;
+    state.dayState.isDayEnding = true;
+    flushEffects(state, effects);
+
+    SaveManager.saveGame(state);
+    set({ gameState: state, activeModal: 'DAY_REPORT' });
+  },
+
+  startNextDay: () => {
+    // Only a day that has closed has a next morning to start.
+    if (get().gameState.dayState.isDayActive) return;
+
+    sounds.playClick();
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const effects = createEffects();
     beginNewDay(state, effects);
     flushEffects(state, effects);
 
     SaveManager.saveGame(state);
-    set({ gameState: state });
+    set({ gameState: state, activeModal: 'NONE' });
   },
 
   claimMissionReward: (missionId) => {

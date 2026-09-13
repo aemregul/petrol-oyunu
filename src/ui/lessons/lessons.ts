@@ -1553,7 +1553,7 @@ const guideDay = guide({
       title: 'Günün saati',
       body: [
         `Gün sabah ${hourText(GAME_CONFIG.economy.dayStartHour)}'da başlar, ertesi sabah aynı saatte biter; saat burada akar.`,
-        'Yandaki düğmelerle oyunu durdurur ya da yarı hıza alırsın. Her yeni sabah yeni günlük görevler getirir.'
+        'Yandaki düğmelerle oyunu durdurur ya da yarı hıza alırsın. Gün bitince saat durur ve gün sonu raporu gelir; Günü Kapat deyince yeni sabah, yeni günlük görevlerle başlar.'
       ],
       target: dom('clock'),
       advance: next

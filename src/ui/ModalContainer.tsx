@@ -14,6 +14,7 @@ import { AccountModal } from './modals/AccountModal';
 import { GuideModal } from './modals/GuideModal';
 import { FeedbackModal } from './modals/FeedbackModal';
 import { AdminModal } from './modals/AdminModal';
+import { DayReportModal } from './modals/DayReportModal';
 
 export const ModalContainer: React.FC = () => {
   const activeModal = useGameStore((s) => s.activeModal);
@@ -47,6 +48,8 @@ export const ModalContainer: React.FC = () => {
       return <FeedbackModal />;
     case 'ADMIN':
       return <AdminModal />;
+    case 'DAY_REPORT':
+      return <DayReportModal />;
     default:
       return null;
   }

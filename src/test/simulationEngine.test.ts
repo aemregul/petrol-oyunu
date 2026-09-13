@@ -1771,7 +1771,7 @@ describe('the lorry shares the forecourt', () => {
 });
 
 describe('the day rolls over without stopping', () => {
-  it('carries the forecourt straight into the next morning', () => {
+  it('holds the forecourt at closing time and carries it into the morning the player starts', () => {
     // The store is UI code: it saves and plays sounds through the browser.
     (globalThis as any).window = {};
     (globalThis as any).localStorage = {
@@ -1798,8 +1798,16 @@ describe('the day rolls over without stopping', () => {
     useGameStore.setState({ gameState: state });
     useGameStore.getState().endDayAndShowReport();
 
+    // The day stops at closing and waits for the player (players, 2026-09-13),
+    // and nothing is swept off the plot while it waits.
+    const closed = useGameStore.getState().gameState;
+    expect(closed.dayState.isDayActive).toBe(false);
+    expect(closed.dayState.currentDay).toBe(1);
+    expect(Object.keys(closed.vehicles).length).toBe(onPlot);
+
+    useGameStore.getState().startNextDay();
     const after = useGameStore.getState().gameState;
-    // A new day, already running — and the cars that were here are still here.
+    // A new day, running — and the cars that were here are still here.
     expect(after.dayState.currentDay).toBe(2);
     expect(after.dayState.isDayActive).toBe(true);
     expect(after.dayState.timeSpeed).toBe(1);

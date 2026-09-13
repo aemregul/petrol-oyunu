@@ -98,7 +98,10 @@ function playUntilSecondPump(maxDays: number): { pump: Moment | null; secondLeve
     const effects = createEffects();
     runSimulationTick(s, 0.2, effects);
     if (effects.dayEnded) {
-      act((a) => a.endDayAndShowReport());
+      act((a) => {
+        a.endDayAndShowReport();
+        a.startNextDay();
+      });
       fuelBillYesterday = fuelBillToday;
       fuelBillToday = 0;
     }

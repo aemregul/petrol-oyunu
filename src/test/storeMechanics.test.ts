@@ -286,14 +286,17 @@ describe('the manager', () => {
 
     useGameStore.getState().endDayAndShowReport();
 
-    // The day rolls straight into the next morning, so the wage shows in the
-    // closed day's recorded net: nothing sold, the manager still got paid.
+    // Closing time settles the books, so the wage shows in the closed day's
+    // recorded net: nothing sold, the manager still got paid.
     const after = useGameStore.getState().gameState;
     const closedDayNet = after.player.statistics.recentNetProfits?.at(-1) ?? 0;
     expect(closedDayNet).toBeLessThanOrEqual(-GAME_CONFIG.employees.manager.dailyWage);
-    // And the game did not stop: the new day is already running.
-    expect(after.dayState.isDayActive).toBe(true);
-    expect(after.dayState.currentDay).toBe(2);
+    // And the day waits for the player, who starts the next one from the report.
+    expect(after.dayState.isDayActive).toBe(false);
+    expect(after.dayState.currentDay).toBe(1);
+    useGameStore.getState().startNextDay();
+    expect(useGameStore.getState().gameState.dayState.isDayActive).toBe(true);
+    expect(useGameStore.getState().gameState.dayState.currentDay).toBe(2);
   });
 
   it('cannot be hired until every advertised requirement actually holds', () => {
