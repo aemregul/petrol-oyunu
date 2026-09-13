@@ -3,6 +3,7 @@ import * as Icons from 'lucide-react';
 import { useGameStore, EDIT_MODE_LEVEL } from '../store/gameStore';
 import { GAME_CONFIG, upgradePathFor } from '../config/gameConfig';
 import { isFacility } from '../domain/services/facilities';
+import { attendantPlacesFull } from '../domain/services/staffing';
 import {
   drivewaySideAt,
   energyAvailable,
@@ -78,6 +79,9 @@ export const StructurePanel: React.FC = () => {
       )
     : undefined;
   const attendantConf = GAME_CONFIG.employees.pumpAttendant.tierLevels[0];
+  // One hand per pump and post (Emre, 2026-09-13): full with this post
+  // unmanned means someone stands idle off a pump.
+  const placesFull = isPost && attendantPlacesFull(gameState);
   const plugged = isPost
     ? Object.values(gameState.vehicles).find((v) => v.chargingBuildingId === building.id)
     : undefined;
@@ -318,10 +322,14 @@ export const StructurePanel: React.FC = () => {
                     sounds.playClick();
                     hirePumpAttendant(building.id);
                   }}
-                  disabled={gameState.player.cash < attendantConf.hireCost}
-                  className="w-full py-3.5 game-btn bg-kgrn hover:bg-kgrn-dark text-white font-display tracking-wide text-sm"
+                  disabled={placesFull || gameState.player.cash < attendantConf.hireCost}
+                  className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
+                    placesFull ? 'bg-card text-mute cursor-not-allowed' : 'bg-kgrn hover:bg-kgrn-dark text-white'
+                  }`}
                 >
-                  Şarjcı Al — ₺{attendantConf.hireCost.toLocaleString('tr-TR')}
+                  {placesFull
+                    ? "Boşta pompacı var — Personel'den ata"
+                    : `Şarjcı Al — ₺${attendantConf.hireCost.toLocaleString('tr-TR')}`}
                 </button>
               ))}
             {isGenerator && (

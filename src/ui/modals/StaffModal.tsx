@@ -18,6 +18,7 @@ import {
 import type { ManagerDuty } from '../../config/gameConfig';
 import { pumpName } from '../../domain/services/pumpNames';
 import { FUEL_DEAL_NAME } from '../../domain/services/simulationEngine';
+import { attendantPlaces } from '../../domain/services/staffing';
 
 /** What each duty is called on the panel, and what it means in a line. */
 const DUTY_LABEL: Record<ManagerDuty, { label: string; hint: string }> = {
@@ -56,6 +57,9 @@ export const StaffModal: React.FC = () => {
   }, [activeTab]);
 
   const attendants = Object.values(gameState.employees).filter((e) => e.role === 'PUMP_ATTENDANT');
+  // One for every pump and charging post (Emre, 2026-09-13).
+  const places = attendantPlaces(gameState);
+  const placesFull = attendants.length >= places;
   const managerConf = GAME_CONFIG.employees.manager;
   // What a new attendant costs, from the config rather than a number typed
   // into the card: the figures moved (Emre, 2026-09-08) and the card lied.
@@ -144,21 +148,23 @@ export const StaffModal: React.FC = () => {
                   Gelen araçların akaryakıt dolumunu ve tahsilatını otomatik gerçekleştirir.
                 </div>
                 <div className="text-[11px] font-mono text-kgrn mt-1">
-                  Maaş: {lira(recruit.dailyWage)} TL/gün • İşe Alım: {lira(recruit.hireCost)} TL
+                  Maaş: {lira(recruit.dailyWage)} TL/gün • İşe Alım: {lira(recruit.hireCost)} TL • Kadro: {attendants.length}/{places}
                 </div>
               </div>
               <button
                 onClick={() => hirePumpAttendant()}
-                disabled={gameState.player.level < ATTENDANT_HIRE_LEVEL || gameState.player.cash < recruit.hireCost}
+                disabled={gameState.player.level < ATTENDANT_HIRE_LEVEL || placesFull || gameState.player.cash < recruit.hireCost}
                 className={`game-btn px-5 py-2.5 rounded-md font-display tracking-wide text-xs uppercase ${
-                  gameState.player.level < ATTENDANT_HIRE_LEVEL || gameState.player.cash < recruit.hireCost
+                  gameState.player.level < ATTENDANT_HIRE_LEVEL || placesFull || gameState.player.cash < recruit.hireCost
                     ? 'bg-card text-mute cursor-not-allowed'
                     : 'bg-kgrn hover:bg-kgrn-dark text-white'
                 }`}
               >
                 {gameState.player.level < ATTENDANT_HIRE_LEVEL
                   ? `Seviye ${ATTENDANT_HIRE_LEVEL} Gerekli`
-                  : `İşe Al (₺${lira(recruit.hireCost)})`}
+                  : placesFull
+                    ? `Kadro Dolu (${attendants.length}/${places})`
+                    : `İşe Al (₺${lira(recruit.hireCost)})`}
               </button>
             </div>
 

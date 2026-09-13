@@ -50,6 +50,7 @@ import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services
 import { unitPrice } from '../domain/services/catalogRules';
 import { chainStatus } from '../domain/services/missionChain';
 import { pumpName, nextPumpNumber } from '../domain/services/pumpNames';
+import { attendantPlaces, attendantsOnPayroll, attendantsOffPost } from '../domain/services/staffing';
 import { GAME_EVENTS } from '../config/eventConfig';
 import { firstLessonStep, lessonById, lessonClock, lessonView } from '../ui/lessons/lessons';
 import { cloudSaveAvailable, fetchCloudSave, followsAccount, pushCloudSave, reconcile } from '../services/cloudSave';
@@ -3085,6 +3086,21 @@ export const useGameStore = create<GameStore>((set, get) => {
         type: 'WARNING',
         title: 'Seviye Gerekli',
         message: `Pompacı Seviye ${ATTENDANT_HIRE_LEVEL}'te işe alınabilir.`
+      });
+      return false;
+    }
+    // One attendant for every pump and every charging post, and one taken off
+    // a pump still holds a place (Emre, 2026-09-13).
+    const places = attendantPlaces(gameState);
+    const onPayroll = attendantsOnPayroll(gameState);
+    if (onPayroll >= places) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Pompacı Sınırı',
+        message:
+          attendantsOffPost(gameState) > 0
+            ? `Her pompaya bir pompacı alınır (${onPayroll}/${places}). Boşta bekleyen pompacını Personel ekranından boş pompaya ata.`
+            : `Her pompaya bir pompacı alınır (${onPayroll}/${places}). Yeni pompacı için önce pompa kur.`
       });
       return false;
     }

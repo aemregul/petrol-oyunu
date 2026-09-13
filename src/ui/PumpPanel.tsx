@@ -5,6 +5,7 @@ import { calculateRepairCost } from '../domain/formulas/economy';
 import { Fuel, X, Wrench, Umbrella, Sun } from 'lucide-react';
 import { solarPrice, solarPeakKwhPerHour } from '../domain/services/energy';
 import { pumpNumber } from '../domain/services/pumpNames';
+import { attendantPlacesFull } from '../domain/services/staffing';
 import { sounds } from '../audio/soundEffects';
 
 const STATE_LABELS: Record<string, { text: string; className: string }> = {
@@ -62,6 +63,9 @@ export const PumpPanel: React.FC = () => {
       : null;
 
   const canAffordHire = gameState.player.cash >= attendantConfig.hireCost;
+  // One attendant per pump (Emre, 2026-09-13). Full with this pump unmanned
+  // means someone on the payroll stands idle off a pump: send them here.
+  const placesFull = attendantPlacesFull(gameState);
 
   const handleClose = () => {
     sounds.playClick();
@@ -184,16 +188,18 @@ export const PumpPanel: React.FC = () => {
               <button
                 data-tour="pump-hire"
                 onClick={handleHireOrFire}
-                disabled={!canAffordHire || gameState.player.level < ATTENDANT_HIRE_LEVEL}
+                disabled={!canAffordHire || placesFull || gameState.player.level < ATTENDANT_HIRE_LEVEL}
                 className={`w-full py-3.5 game-btn font-display tracking-wide text-sm ${
-                  gameState.player.level < ATTENDANT_HIRE_LEVEL
+                  gameState.player.level < ATTENDANT_HIRE_LEVEL || placesFull
                     ? 'bg-card text-mute cursor-not-allowed'
                     : 'bg-kgrn hover:bg-kgrn-dark text-white'
                 }`}
               >
                 {gameState.player.level < ATTENDANT_HIRE_LEVEL
                   ? `Pompacı — Seviye ${ATTENDANT_HIRE_LEVEL} Gerekli`
-                  : `Pompacı Al — ₺${attendantConfig.hireCost.toLocaleString('tr-TR')}`}
+                  : placesFull
+                    ? "Boşta pompacı var — Personel'den ata"
+                    : `Pompacı Al — ₺${attendantConfig.hireCost.toLocaleString('tr-TR')}`}
               </button>
             )}
 

@@ -13,6 +13,7 @@ import { X, Fuel, Power, Move, Pencil, Check, Minus, Plus, Users, Landmark, Arro
 import { sounds } from '../../audio/soundEffects';
 import { openTabs } from '../lessons/openTabs';
 import { siteCleaningCost } from '../../domain/services/maintenance';
+import { attendantPlaces } from '../../domain/services/staffing';
 
 // The goals moved out to their own panel behind the HUD's pano door (Emre, 2026-09-12).
 type OfficeTab = 'summary' | 'price' | 'accounts' | 'maintenance';
@@ -75,6 +76,9 @@ export function officeFigures(state: GameState) {
         (e) => e.role === 'PUMP_ATTENDANT' && e.assignedPumpId === p.id
       )
   ).length;
+  // Hires stop at one per pump and post (Emre, 2026-09-13): an attendant
+  // standing idle off a pump fills a place the button would otherwise pay for.
+  const hireable = Math.min(unmanned, Math.max(0, attendantPlaces(state) - attendants));
 
   return {
     cash: state.player.cash,
@@ -90,7 +94,8 @@ export function officeFigures(state: GameState) {
     pumps,
     attendants,
     unmanned,
-    hireAllCost: unmanned * GAME_CONFIG.employees.pumpAttendant.tierLevels[0].hireCost
+    hireable,
+    hireAllCost: hireable * GAME_CONFIG.employees.pumpAttendant.tierLevels[0].hireCost
   };
 }
 
@@ -314,7 +319,7 @@ export const OfficeModal: React.FC = () => {
 
   const hireAll = () => {
     sounds.playClick();
-    for (let i = 0; i < figures.unmanned; i++) {
+    for (let i = 0; i < figures.hireable; i++) {
       if (!hirePumpAttendant()) break;
     }
   };
@@ -503,11 +508,15 @@ export const OfficeModal: React.FC = () => {
                   label={
                     player.level < ATTENDANT_HIRE_LEVEL
                       ? `Pompacı — Seviye ${ATTENDANT_HIRE_LEVEL} Gerekli`
-                      : figures.unmanned > 0
-                        ? `Tüm pompalara pompacı (${lira(figures.hireAllCost)})`
-                        : 'Her pompada pompacı var'
+                      : figures.unmanned === 0
+                        ? 'Her pompada pompacı var'
+                        : figures.hireable === 0
+                          ? "Boşta pompacı var — Personel'den ata"
+                          : figures.hireable < figures.unmanned
+                            ? `${figures.hireable} pompacı al (${lira(figures.hireAllCost)})`
+                            : `Tüm pompalara pompacı (${lira(figures.hireAllCost)})`
                   }
-                  disabled={player.level < ATTENDANT_HIRE_LEVEL || figures.unmanned === 0 || player.cash < figures.hireAllCost}
+                  disabled={player.level < ATTENDANT_HIRE_LEVEL || figures.hireable === 0 || player.cash < figures.hireAllCost}
                 />
                 <ActionButton
                   onClick={() => {
