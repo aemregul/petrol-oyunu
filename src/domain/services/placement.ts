@@ -411,6 +411,7 @@ const SEVERED_WAY_REASON: Record<BlockedWay, string> = {
   CUSTOMERS: 'Bu yapı girişi kapatıyor — müşteriler bekleme hattına ulaşamaz.',
   TANKER: 'Bu yapı tankerin yolunu kapatıyor — tank sahasına yakıt gelmez.',
   PUMP_BAYS: 'Bu yapı pompalara giden yolu kapatıyor — hiçbir bay’e araç yanaşamaz.',
+  PUMP_ACCESS: 'Bu yerleşimle bir pompaya araç ulaşamaz — pompalar ve yapılar arasında bir araçlık yol bırakın.',
   CHARGER_BAYS: 'Bu yapı şarj direklerine giden yolu kapatıyor.',
   PARK_BAYS: 'Bu yapı otoparkın yolunu kapatıyor — hiçbir araç park yerine giremez.'
 };

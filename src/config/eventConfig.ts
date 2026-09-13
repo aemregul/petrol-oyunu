@@ -218,6 +218,14 @@ export interface DailyMissionTemplate {
   needs?: string[];
 }
 
+/**
+ * What the day's goals pay. A bonus on top of the station's own trade, not a
+ * second wage: at twice these figures they paid as much as the fuel margin
+ * itself — three to four thousand a day beside a forecourt clearing a few
+ * thousand — and the second pump the economy is priced to take a fortnight of
+ * fuel sales paid for itself in a week (Emre, 2026-09-12: "her şeyin dengesi
+ * olması gerekiyor"). The experience they give is unchanged.
+ */
 export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
   {
     id: 'D_SERVE',
@@ -226,7 +234,7 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     minTarget: 6,
     maxTarget: 16,
     step: 1,
-    rewardCashPerUnit: 90,
+    rewardCashPerUnit: 50,
     rewardXp: 60,
     minLevel: 1
   },
@@ -237,7 +245,7 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     minTarget: 200,
     maxTarget: 700,
     step: 50,
-    rewardCashPerUnit: 2.5,
+    rewardCashPerUnit: 1.4,
     rewardXp: 70,
     minLevel: 1
   },
@@ -248,7 +256,7 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     minTarget: 8000,
     maxTarget: 30000,
     step: 1000,
-    rewardCashPerUnit: 0.06,
+    rewardCashPerUnit: 0.035,
     rewardXp: 80,
     minLevel: 2
   },
@@ -259,7 +267,7 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     minTarget: 40,
     maxTarget: 200,
     step: 10,
-    rewardCashPerUnit: 8,
+    rewardCashPerUnit: 4.5,
     rewardXp: 60,
     minLevel: 3
   },
@@ -270,7 +278,7 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     minTarget: 3,
     maxTarget: 10,
     step: 1,
-    rewardCashPerUnit: 200,
+    rewardCashPerUnit: 110,
     rewardXp: 70,
     minLevel: 6,
     needs: ['mini_market', 'rest_complex']
@@ -282,7 +290,7 @@ export const DAILY_MISSION_TEMPLATES: DailyMissionTemplate[] = [
     minTarget: 1,
     maxTarget: 3,
     step: 1,
-    rewardCashPerUnit: 450,
+    rewardCashPerUnit: 250,
     rewardXp: 40,
     minLevel: 2
   }

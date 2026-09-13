@@ -1372,6 +1372,47 @@ function truckBodies(state: GameState): VehicleEntity[] {
 }
 
 /**
+ * A lorry pulling out has the way to the exit to itself.
+ *
+ * It leaves down the same stretch of forecourt to the exit mouth as the cars
+ * leaving the pumps, and it only ever brakes for what is ahead of its nose.
+ * The cars came into that stretch from the side, one after another, each in
+ * front of it: on a forecourt busy with a car park and a café, or grown by a
+ * parcel at the back, the lorry stood two minutes and more with its trailer
+ * across the lanes, the cars behind it could not reach the pumps, and the day's
+ * custom fell by a third (Emre, 2026-09-12: "istasyon büyüdükçe müşteri
+ * düşüyor"; measured 2026-09-13). While one is leaving the plot, a car not yet
+ * in that stretch waits at its edge; one already in it — ahead of the lorry —
+ * carries on out.
+ */
+function yieldsToDepartingLorry(
+  state: GameState,
+  vehicle: VehicleEntity,
+  block: BlockLayout,
+  target: [number, number, number]
+): boolean {
+  if (state.fuelOrders.length === 0) return false;
+  if (vehicle.state === 'PASSING' || vehicle.state === 'SPAWN' || vehicle.state === 'DESPAWN') return false;
+  if (onCarriageway(vehicle, block)) return false;
+
+  const near = block.side === 'near';
+  const halfWidth = block.exit.width / 2 + 1.5;
+  const inExitStretch = (x: number, z: number) =>
+    Math.abs(x - block.exit.x) <= halfWidth && (near ? z <= block.exitLaneZ + 1 : z >= block.exitLaneZ - 1);
+  if (inExitStretch(vehicle.worldPosition[0], vehicle.worldPosition[2])) return false;
+  if (!inExitStretch(target[0], target[2])) return false;
+
+  return state.fuelOrders.some((order) => {
+    const truck = order.truck;
+    if (!truck || truck.phase !== 'LEAVING') return false;
+    const tz = truck.worldPosition[2];
+    // Out on the carriageway it is road traffic like any other.
+    const onPlot = near ? tz > block.minZ - LAYOUT.vergeDepth : tz < block.maxZ + LAYOUT.vergeDepth;
+    return onPlot && drivewaySideAt(tz) === block.side;
+  });
+}
+
+/**
  * On the apron a crossing vehicle yields briefly, then eases through. A hard
  * reservation between every pair produced wait rings with three or more cars
  * (A waits for B, B for C, C for A). The small grace keeps crossings readable
@@ -1397,6 +1438,8 @@ function followThrottle(
   if (!dir) return { throttle: 1, gap: Infinity };
 
   const target = vehicle.targetWaypoint!;
+  if (yieldsToDepartingLorry(state, vehicle, block, target)) return { throttle: 0, gap: 0 };
+
   // The spread costs real time at 20Hz across every car; with no lorry about
   // — which is most of every day — the plain list is the same list.
   const traffic =
@@ -3740,7 +3783,7 @@ export function generateDailyMissions(state: GameState): void {
 
     // The first pick of the day is the headline goal and pays extra.
     const isMain = i === 0;
-    const rewardCash = Math.round(target * template.rewardCashPerUnit * (isMain ? 1.6 : 1));
+    const rewardCash = Math.round(target * template.rewardCashPerUnit * (isMain ? 1.5 : 1));
 
     state.missions.push({
       id: 'mission_' + template.id + '_' + state.dayState.currentDay,
@@ -4277,6 +4320,10 @@ export const PUMP_WALK_SHARE = 0.2;
 /** How fast a driver walks, in grid units per game second. */
 const WALK_SPEED = 1.15;
 
+/** How much quicker a driver walks who has left the car at a pump, and how much of the usual stay they take. */
+const PUMP_VISIT_PACE = 2;
+const PUMP_VISIT_STAY = 0.35;
+
 /**
  * How long a car may stand in a bay or at a pump on a visit before it is sent
  * on regardless. A safety valve, well past the longest stay a facility asks
@@ -4383,6 +4430,30 @@ export function facilityOnlyShare(state: GameState, side: DrivewaySide): number 
     (b) => (b.type === 'car_park' || b.type === 'truck_park') && drivewaySideAt(b.position[1]) === side
   );
   return Math.min(0.5, draw * 0.8) * (parking ? 1 : 0.4);
+}
+
+/**
+ * The odds a driver on the road turns in at all, the ones who come only for
+ * the buildings included.
+ *
+ * Those drivers are custom the buildings bring in on top of the fuel trade.
+ * Drawn out of the same odds as the fuel customers, they took their places: a
+ * car park, a café and a shop turned half of everyone who stopped into a
+ * visitor, the day's fuel customers fell by a third, and the station grew
+ * poorer in sales and experience with every building it put up (Emre,
+ * 2026-09-12: "istasyon büyüdükçe müşteri düşüyor"; measured 2026-09-13).
+ * The odds are widened to give back half of what that share took: the visitors
+ * mostly come in addition, and a forecourt with a shop and a park is busier
+ * without filling with so many cars that the road beside it stands empty — at
+ * the full share it did.
+ */
+const VISITOR_TURN_IN_RETURN = 0.5;
+
+export function turnInChance(state: GameState, side: DrivewaySide): number {
+  const chance = stopChance(state, side);
+  if (!blockHasPumps(state, side)) return chance;
+  const share = facilityOnlyShare(state, side);
+  return share > 0 ? Math.min(1, chance / (1 - share * VISITOR_TURN_IN_RETURN)) : chance;
 }
 
 /** What this visit brings in, with the day's luck rolled for an open bill. */
@@ -4536,11 +4607,22 @@ function advanceVisitor(
   const visitor = vehicle.visitor;
   if (!visitor) return true;
 
+  // A driver who left the car in a pump bay is in and out: a coffee to take
+  // away, not a sit-down. The car holds the pump the whole time, and at the
+  // full stay and a stroll each way it held it for two or three fills — with a
+  // café beside two pumps the station served a third fewer drivers a day, and
+  // the café's till never made up the fuel it cost (Emre, 2026-09-12:
+  // "istasyon büyüdükçe müşteri düşüyor"; measured 2026-09-13). The visit is
+  // booked and paid for just the same; only the car's time at the pump is cut.
+  const fromPump = vehicle.visitMode === 'PUMP';
+  const walkDt = fromPump ? dt * PUMP_VISIT_PACE : dt;
+
   switch (visitor.phase) {
     case 'TO_BUILDING': {
-      if (!walkToward(visitor, dt)) return false;
+      if (!walkToward(visitor, walkDt)) return false;
       visitor.phase = 'INSIDE';
-      visitor.insideSecondsLeft = facilityConfig(building.type)?.visitSeconds ?? 6;
+      visitor.insideSecondsLeft =
+        (facilityConfig(building.type)?.visitSeconds ?? 6) * (fromPump ? PUMP_VISIT_STAY : 1);
       bookVisit(state, building, vehicle, 1, effects);
       return false;
     }
@@ -4560,7 +4642,7 @@ function advanceVisitor(
       return false;
     }
     case 'TO_CAR':
-      return walkToward(visitor, dt);
+      return walkToward(visitor, walkDt);
   }
   return true;
 }
@@ -6193,7 +6275,7 @@ function trySpawnVehicle(state: GameState, dt: number, mods: EventModifiers): vo
   // built has no way through to the bays, and a driver reads that from the
   // road rather than pulling in and finding out.
   const wayIn = !bare && hasWayIn(state, block, side);
-  const stops = wayIn && servable.length > 0 && Math.random() < stopChance(state, side);
+  const stops = wayIn && servable.length > 0 && Math.random() < turnInChance(state, side);
   const archetypes = stops
     ? servable
     : (Object.keys(GAME_CONFIG.customerTypes) as VehicleArchetype[]);
@@ -6433,7 +6515,7 @@ export function hasWayIn(state: GameState, block: BlockLayout, side: DrivewaySid
  *   PUMP_BAYS    giriş şeridinden en az bir pompa bay'ine (findAvailablePump)
  *   CHARGER_BAYS giriş şeridinden en az bir şarj direğine (chargerRoute)
  */
-export type BlockedWay = 'CUSTOMERS' | 'TANKER' | 'PUMP_BAYS' | 'CHARGER_BAYS' | 'PARK_BAYS';
+export type BlockedWay = 'CUSTOMERS' | 'TANKER' | 'PUMP_BAYS' | 'PUMP_ACCESS' | 'CHARGER_BAYS' | 'PARK_BAYS';
 
 /**
  * Bu blokta hangi yollar kesik. Yerleşim kuralı (aday yapı hayaletken önce
@@ -6465,6 +6547,24 @@ export function blockedWays(state: GameState, side: DrivewaySide): BlockedWay[] 
   const pumps = Object.values(state.pumps).filter((p) => pumpSide(p) === side);
   if (pumps.length > 0 && !pumps.some((p) => pumpRoute(state, probe, p) !== null)) {
     out.push('PUMP_BAYS');
+  }
+  // Every pump, not just one, has to be a pump a waiting car can drive to. "At
+  // least one bay" let a second island squeezed in behind or beside the first
+  // pass, and it then stood idle for good: the car at the head of the queue had
+  // no way round to it, and drivers turned away beside a pump nobody could
+  // reach (Emre, 2026-09-12; measured 2026-09-13). Asked of the layout alone,
+  // with the forecourt empty, so a car parked there now changes nothing.
+  // A bay is reached either by a driver turning in or by one moving up from
+  // the head of the queue; a pump neither can get to is the one that stands
+  // idle. Asked from one of them alone, a queue head squeezed against the
+  // plot's edge condemned pumps that serve all day.
+  if (!out.includes('PUMP_BAYS') && pumps.length > 1) {
+    const layout = { ...state, vehicles: {} };
+    const arriving = probeCar(block);
+    const waiting = queueHeadProbe(layout, block);
+    const unreachable = (p: PumpEntity) =>
+      pumpRoute(layout, arriving, p) === null && pumpRoute(layout, waiting, p) === null;
+    if (pumps.some(unreachable)) out.push('PUMP_ACCESS');
   }
   const posts = chargingPoints(state, side);
   if (posts.length > 0 && !posts.some((p) => chargerRoute(state, probe, p.position, p.id) !== null)) {
@@ -6501,6 +6601,15 @@ function probeCar(block: BlockLayout): VehicleEntity {
   } as unknown as VehicleEntity;
 }
 
+/** A car standing at the head of the pump queue, facing along it. */
+function queueHeadProbe(state: GameState, block: BlockLayout): VehicleEntity {
+  return {
+    ...probeCar(block),
+    worldPosition: queueSlotPosition(state, 0, block.side),
+    heading: block.queueStep < 0 ? Math.PI / 2 : -Math.PI / 2
+  } as VehicleEntity;
+}
+
 /** Ne kadar sık bakılır (oyun saati). */
 const WAY_CHECK_HOURS = 0.25;
 
@@ -6510,6 +6619,9 @@ const WAY_WARNINGS: Record<BlockedWay, string> = {
     'tek bir araç sapmaz.',
   TANKER: 'Tanker giremiyor: tank sahasına giden yol kalmadı — tanker kapıda bekler, yakıt gelmez.',
   PUMP_BAYS: 'Hiçbir pompaya araç yanaşamıyor: bay’lere giden yol kapalı.',
+  PUMP_ACCESS:
+    'Bir pompaya araç ulaşamıyor: kuyruktaki araçların o pompanın duruş alanına yolu yok — pompa ' +
+    'boşta beklerken müşteriler geri döner. Pompayı ya da önündeki yapıyı taşıyın.',
   CHARGER_BAYS: 'Hiçbir şarj direğine araç yanaşamıyor: direklere giden yol kapalı.',
   PARK_BAYS:
     'Otoparka ulaşılamıyor: hiçbir araç park yerine giremiyor, tesislerine yoldan müşteri gelmiyor.'
@@ -6731,6 +6843,23 @@ function continuePastStation(state: GameState, vehicle: VehicleEntity): void {
   setRoute(vehicle, continueInPassingLane(block, vehicle));
   vehicle.waitingTimeSeconds = 0;
   vehicle.blockedSeconds = 0;
+}
+
+/**
+ * How far short of the entry mouth a driver still out on the road judges the
+ * forecourt. Arrivals appear far off-screen, and judged the moment they
+ * appeared, a full queue sent them on down the road some ten seconds before
+ * they could have seen it — by which time a pump had usually come free, and
+ * the bays stood half empty while the day's count of drivers who drove on
+ * climbed (measured, 2026-09-13).
+ */
+const TURN_IN_DECISION_DISTANCE = 8;
+
+function inSightOfTurn(vehicle: VehicleEntity, block: BlockLayout): boolean {
+  const mouthX = drivewayLaneX(block.entry, 0);
+  const toGo =
+    block.roadEndX > block.roadStartX ? mouthX - vehicle.worldPosition[0] : vehicle.worldPosition[0] - mouthX;
+  return toGo <= TURN_IN_DECISION_DISTANCE;
 }
 
 /** True while an arrival has not yet turned off its carriageway. */
@@ -7095,6 +7224,7 @@ function tickVehicles(
         const chargeLine = electric ? chargeQueueLine(state, block, side) : null;
         if (
           stillOnRoad &&
+          inSightOfTurn(vehicle, block) &&
           !vehicle.facilityIntent &&
           (electric
             ? !findFreeCharger(state, side) && chargeQueued.length >= (chargeLine?.slots.length ?? 0)
@@ -7229,7 +7359,14 @@ function tickVehicles(
             queued.push(vehicle);
           } else {
             // Forecourt is full, or walled off — this driver never even stops.
-            if (hasQueueRoom) {
+            //
+            // Only an empty queue that cannot be joined is the layout's fault.
+            // The last place of a queue already forming lies against the plot's
+            // edge, and a longer body — a luxury saloon, an estate, a van —
+            // has no room to swing into it: that driver found the forecourt
+            // full. Charged as a no-room failure, it cost the station its name
+            // a dozen times in a season (measured, 2026-09-13).
+            if (hasQueueRoom && queued.length === 0) {
               turnAwayForNoManeuver(state, vehicle, effects);
             } else {
               sendAway(state, vehicle);

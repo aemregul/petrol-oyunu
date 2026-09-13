@@ -58,8 +58,18 @@ describe('placement rules', () => {
     // Ve tersi: yeni pompanın DURUŞ ALANI mevcut ofisin (x 2..6, z 9..13)
     // üstüne gelirse pompa da reddedilir — ayak izi temiz olsa bile.
     expect(evaluatePlacement(state, 'pump_standard', [7.5, 11.5], 180).valid).toBe(false);
-    // Aynı nokta, alanı boşluğa bakan rotasyonla: kabul.
-    expect(evaluatePlacement(state, 'pump_standard', [7.5, 11.5], 0).valid).toBe(true);
+    // Başlangıç pompası dururken bu nokta, alanı boşluğa baksa da reddedilir:
+    // adanın arkasındaki duruş alanına ne giren ne kuyruktaki araç ulaşır
+    // (2026-09-13, ölü pompa kuralı).
+    const tucked = evaluatePlacement(state, 'pump_standard', [7.5, 11.5], 0);
+    expect(tucked.valid).toBe(false);
+    expect(tucked.reason).toContain('ulaşamaz');
+    // Başlangıç pompası kaldırılınca aynı nokta, alanı boşluğa bakan
+    // rotasyonla: kabul — duruş alanı kuralının kendisi değişmedi.
+    const bare = createInitialGameState();
+    bare.player.level = 10;
+    bare.pumps = {};
+    expect(evaluatePlacement(bare, 'pump_standard', [7.5, 11.5], 0).valid).toBe(true);
   });
 
   it('rejects a structure hanging off the plot edge', () => {
