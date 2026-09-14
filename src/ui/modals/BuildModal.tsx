@@ -9,6 +9,7 @@ import { buyableParcels, parcelPrice, paveCost, parseParcelKey, LAND_BOUNDS, PAR
 import { sounds } from '../../audio/soundEffects';
 import { openTabs } from '../lessons/openTabs';
 import { CatalogPreview, CatalogPhotoBooth } from '../CatalogPreview';
+import { LAND_PORTRAITS } from '../../rendering/LandPieces';
 
 /*
  * Karton (Emre, 2026-09-07): every catalogue card is a paper sticker with an
@@ -25,32 +26,6 @@ const LOCKED = 'w-full game-btn bg-card text-mute font-display tracking-wider py
 const BUY = 'w-full game-btn font-display text-base py-3 flex items-center justify-center gap-1.5';
 const BUY_ON = 'bg-kgrn hover:bg-kgrn-dark text-white';
 const BUY_OFF = 'bg-card text-mute';
-
-/** A small drawn picture for a card the catalogue has no model for. */
-const LandPicture: React.FC<{ kind: 'land' | 'concrete' }> = ({ kind }) => (
-  <div className={FRAME}>
-    {kind === 'land' ? (
-      <svg viewBox="0 0 120 80" className="w-32 h-24" aria-hidden>
-        <polygon points="60,14 112,40 60,66 8,40" fill="#3f8a3a" />
-        <polygon points="8,40 60,66 60,74 8,48" fill="#2f6a2c" />
-        <polygon points="112,40 60,66 60,74 112,48" fill="#27561f" />
-        <rect x="78" y="10" width="2" height="30" fill="rgb(var(--k-ink))" />
-        <polygon points="80,10 96,15 80,20" fill="#e0452b" />
-        <circle cx="52" cy="44" r="7" fill="#4ade80" />
-        <circle cx="52" cy="41" r="6" fill="#86efac" />
-      </svg>
-    ) : (
-      <svg viewBox="0 0 120 80" className="w-32 h-24" aria-hidden>
-        <polygon points="60,18 108,40 60,62 12,40" fill="#9aa3ad" />
-        <polygon points="12,40 60,62 60,70 12,48" fill="#6b7480" />
-        <polygon points="108,40 60,62 60,70 108,48" fill="#576069" />
-        {[0, 1, 2, 3].map((i) => (
-          <line key={i} x1={22 + i * 10} y1={40 + i * 4.6} x2={70 + i * 10} y2={18 + i * 4.6} stroke="#cbd5e1" strokeWidth="1.2" opacity="0.7" />
-        ))}
-      </svg>
-    )}
-  </div>
-);
 
 /**
  * Land is bought and paved on the map, but the player looks for it here, so
@@ -86,7 +61,7 @@ const LandCards: React.FC<{
   return (
     <>
       <div className={CARD}>
-        <LandPicture kind="land" />
+        <CatalogPreview type="land_parcel" />
         <div className="font-display text-base text-ink tracking-wide leading-tight">
           Arsa Satın Al ({owned.length}/{total})
         </div>
@@ -112,7 +87,7 @@ const LandCards: React.FC<{
       </div>
 
       <div className={CARD}>
-        <LandPicture kind="concrete" />
+        <CatalogPreview type="land_paved" />
         <div className="font-display text-base text-ink tracking-wide leading-tight">Zemin Betonu</div>
         <div className="flex gap-2">
           <span className={BADGE_FEATURE}>arsa başı</span>
@@ -327,7 +302,11 @@ export const BuildModal: React.FC = () => {
         );
 
   const photographable = useMemo(
-    () => Object.values(GAME_CONFIG.buildings).filter((b) => !b.fixed).map((b) => b.type),
+    () => [
+      ...Object.values(GAME_CONFIG.buildings).filter((b) => !b.fixed).map((b) => b.type),
+      // The land cards are photographed too, as patches of the map.
+      ...Object.keys(LAND_PORTRAITS)
+    ],
     []
   );
 

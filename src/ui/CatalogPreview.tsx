@@ -9,6 +9,7 @@ import { PumpMesh } from '../rendering/PumpMesh';
 import { BuildingEntity, PumpEntity } from '../domain/types/gameState';
 import { BUILDING_MODEL_URLS } from '../rendering/models/buildingModels';
 import { LIGHT_POLE_VISUAL_SCALE } from '../rendering/LightPole';
+import { LAND_PORTRAITS, LandPortrait, isLandPortrait } from '../rendering/LandPieces';
 
 /**
  * Pictures of the catalogue, drawn with the very meshes the forecourt uses.
@@ -122,6 +123,12 @@ const Booth: React.FC<{
         radius = 3.85 * LIGHT_POLE_VISUAL_SCALE;
       }
 
+      // A patch of land is wide and nearly flat. Framed by the sphere round
+      // its box it sat as a small plate in the middle of the card, so it is
+      // brought in to fill the frame the way a building does.
+      // The poured card holds two parcels side by side, so it is brought in less.
+      if (isLandPortrait(group.name)) radius *= group.name === 'land_paved' ? 0.7 : 0.6;
+
       const lens = camera as THREE.PerspectiveCamera;
       const vertical = (lens.fov * Math.PI) / 180;
       // Fit whichever axis runs out first, so a wide item is held by the
@@ -198,7 +205,11 @@ const Booth: React.FC<{
             {/* One boundary each: a model that never loads costs its own card
                 a picture and nothing else. */}
             <Suspense fallback={null}>
-              {type === 'pump_standard' || type === 'canopy' ? (
+              {isLandPortrait(type) ? (
+                // The land cards have no model of their own; they are
+                // photographed as a patch of the map instead.
+                <LandPortrait kind={LAND_PORTRAITS[type]} />
+              ) : type === 'pump_standard' || type === 'canopy' ? (
                 <PumpMesh pump={pump} />
               ) : (
                 <BuildingMesh building={building} />

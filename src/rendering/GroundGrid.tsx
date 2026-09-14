@@ -45,7 +45,7 @@ const roadZ = LAYOUT.roadZ * S;
 const roadHalfWidth = LAYOUT.roadHalfWidth * S;
 
 /** Kerbs are a trim detail, not a wall — keep them low and narrow. */
-const KERB = { width: 0.34, height: 0.16 };
+export const KERB = { width: 0.34, height: 0.16, color: '#c3cad4' };
 
 /** Gap between the road kerb and the forecourt, bridged by the driveways. */
 const VERGE_DEPTH = LAYOUT.vergeDepth * S;
@@ -201,7 +201,7 @@ const BuildGrid: React.FC<{
  * otherwise every parcel would restart the joint grid at its own corner and
  * the seams between parcels would be visible from the air.
  */
-const ConcreteApron: React.FC<{
+export const ConcreteApron: React.FC<{
   westX: number;
   northZ: number;
   width: number;
@@ -558,7 +558,7 @@ const FrontageLanding: React.FC<{
 };
 
 /** Post-and-rail fence marking land that is owned but not yet paved. */
-const ParcelFence: React.FC<{ col: number; row: number }> = ({ col, row }) => {
+export const ParcelFence: React.FC<{ col: number; row: number }> = ({ col, row }) => {
   const b = parcelBounds(col, row);
   const minX = b.minX * S;
   const maxX = b.maxX * S;
