@@ -74,25 +74,29 @@ describe('mixed road fleet', () => {
     ).toBeGreaterThan(2);
   });
 
+  // The length ratios below sit a notch under real life. The everyday cars were
+  // scaled up to read as big as their chunkier Kenney twins (Emre, 2026-09-14),
+  // while the big vehicles kept the lengths the docking and driving tests were
+  // tuned to — and every one of them still stands well taller than any car.
   it('renders emergency vans at a clearly larger scale than passenger cars', () => {
     // A van-based ambulance is ~6 m to a sedan's 4.7 m; a fire engine ~9.5 m.
     expect(VEHICLE_MODELS.ambulance.targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 1.25
+      VEHICLE_MODELS.sedan.targetLength * 1.18
     );
     expect(VEHICLE_MODELS.firetruck.targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 1.9
+      VEHICLE_MODELS.sedan.targetLength * 1.8
     );
   });
 
   it('gives heavy commercial vehicles a clearly larger road presence', () => {
     expect(VEHICLE_MODELS.truck.targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 1.3
+      VEHICLE_MODELS.sedan.targetLength * 1.2
     );
     expect(VEHICLE_MODELS['truck-with-trailer'].targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 2.6
+      VEHICLE_MODELS.sedan.targetLength * 2.4
     );
     expect(VEHICLE_MODELS.bus.targetLength).toBeGreaterThan(
-      VEHICLE_MODELS.sedan.targetLength * 2.5
+      VEHICLE_MODELS.sedan.targetLength * 2.3
     );
   });
 

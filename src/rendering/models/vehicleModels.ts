@@ -21,6 +21,15 @@
  * < lorry < fire engine < limousine < bus < artic — without any one body
  * swelling out of proportion. The three giants keep the lengths the docking
  * and driving tests were tuned to.
+ *
+ * Presence (Emre, 2026-09-14). Side by side on the forecourt the RgsDev
+ * everyday cars read smaller than their Kenney twins: much the same length,
+ * but a body drawn low and slim on small wheels beside Kenney's tall, chunky
+ * ones on big tyres. Their height cannot be raised on its own without
+ * stretching the wheels into ovals, so the sedan, taxi, hatchback, SUV and the
+ * police cars built on them are scaled up whole, about ten per cent. They stop
+ * at 4.1: every car stays shorter than the shortest van, and none is longer
+ * than the sports and muscle cars the forecourt's queue spacing already carries.
  */
 
 import { VehicleArchetype, VehicleModelVariant } from '../../domain/types/gameState';
@@ -55,11 +64,12 @@ function kenney(file: string, targetLength: number, tint?: string): VehicleModel
 }
 
 export const VEHICLE_MODELS: Record<VehicleModelVariant, VehicleModelConfig> = {
-  // Passenger cars, 4.3–4.9 m in life.
-  hatchback: rgsdev('hatchback', 3.45),
-  sedan: rgsdev('sedan', 3.7),
-  taxi: rgsdev('taxi', 3.7),
-  suv: rgsdev('suv', 3.8),
+  // Passenger cars, 4.3–4.9 m in life. The everyday four are scaled up to
+  // match their Kenney twins (see Presence above); the low sports cars are not.
+  hatchback: rgsdev('hatchback', 3.8),
+  sedan: rgsdev('sedan', 4.05),
+  taxi: rgsdev('taxi', 4.05),
+  suv: rgsdev('suv', 4.1),
   roadster: rgsdev('roadster', 3.8),
   sports: rgsdev('sports', 4.0),
   muscle: rgsdev('muscle', 4.1),
@@ -77,16 +87,24 @@ export const VEHICLE_MODELS: Record<VehicleModelVariant, VehicleModelConfig> = {
   // a thin sedan, so it is stretched to a real stretch-limo length and widened.
   limousine: { ...rgsdev('limousine', 8.6), widthScale: 1.25 },
   // The giants keep the lengths the docking and driving tests were tuned to.
+  // Their wheels are fitted to the arches (Emre, 2026-09-14): the fire
+  // engine's had been pushed a size up and out until they bulged from under
+  // the body, and the bus's sat so far inboard that from the side only a
+  // sliver of rim showed.
   firetruck: {
     ...rgsdev('firetruck', 7.4),
-    wheelScale: 1.4,
-    wheelTrackScale: 1.2
+    wheelScale: 1.15,
+    wheelTrackScale: 1.08
   },
-  bus: rgsdev('bus', 9.4),
+  bus: {
+    ...rgsdev('bus', 9.4),
+    wheelScale: 1.1,
+    wheelTrackScale: 1.14
+  },
   'truck-with-trailer': rgsdev('truck-with-trailer', 10),
   // Police cars: sized as their civilian twins, plus the beacon.
-  'police-sedan': { ...rgsdev('police-sedan', 3.85), beacon: true },
-  'police-suv': { ...rgsdev('police-suv', 3.8), beacon: true },
+  'police-sedan': { ...rgsdev('police-sedan', 4.1), beacon: true },
+  'police-suv': { ...rgsdev('police-suv', 4.1), beacon: true },
   'police-sports': { ...rgsdev('police-sports', 4.0), beacon: true },
   'police-muscle': { ...rgsdev('police-muscle', 4.1), beacon: true },
 
