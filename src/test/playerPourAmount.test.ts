@@ -138,6 +138,10 @@ describe('a pour the player sets by hand', () => {
       expect(miss.car.departureReason).toBe('SERVED_POOR');
       expect(miss.car.satisfaction).toBeLessThanOrEqual(POUR_MISS_SCORE);
       expect(miss.state.player.reputation).toBeCloseTo(exact.state.player.reputation - POUR_MISS_REPUTATION, 5);
+      // Counted for the day-end report: the ₺100 not paid for, or the ₺100 not sold.
+      const stats = miss.state.dayState.todayStats;
+      if (typed < 500) expect([stats.shortPours, stats.shortPourShortfall, stats.overPours ?? 0]).toEqual([1, 100, 0]);
+      else expect([stats.overPours, stats.overPourLoss, stats.shortPours ?? 0]).toEqual([1, 100, 0]);
     }
   });
 

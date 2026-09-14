@@ -65,7 +65,7 @@ export const DayReportModal: React.FC = () => {
   const accountReady = useGameStore((s) => s.accountReady);
 
   const report = dayReport(gameState);
-  const { income, expenses } = report;
+  const { income, expenses, pourMistakes: mistakes } = report;
   const net = Math.round(report.net);
   const dayOver = !gameState.dayState.isDayActive;
   const topLoss = report.lostBy[0];
@@ -149,11 +149,44 @@ export const DayReportModal: React.FC = () => {
               <Row label="Maaşlar" value={cost(expenses.wages)} />
               <Row label="Bakım ve işletme" value={cost(expenses.upkeep)} />
               {expenses.energy > 0 && <Row label="Elektrik" value={cost(expenses.energy)} />}
-              {expenses.repairs > 0 && <Row label="Tamir" value={cost(expenses.repairs)} />}
+              {expenses.repairs > 0 && <Row label="Pompa tamiri" value={cost(expenses.repairs)} />}
+              {expenses.misfuel > 0 && <Row label="Yanlış yakıt tamiri" value={cost(expenses.misfuel)} />}
               {expenses.loans > 0 && <Row label="Kredi taksitleri" value={cost(expenses.loans)} />}
               <Row label="Toplam" value={cost(expenses.total)} tone="text-kred" strong />
             </Section>
           </div>
+
+          {/* The player's own mistakes at the pump, and what they cost (Emre, 2026-09-14). */}
+          {(mistakes.misfuels > 0 || mistakes.overPours > 0 || mistakes.shortPours > 0) && (
+            <Section title="Dolum Hataları">
+              {mistakes.misfuels > 0 && (
+                <Row
+                  label="💥 Yanlış yakıt"
+                  value={`${mistakes.misfuels} araç · ${
+                    mistakes.misfuelFees > 0 ? `${cost(mistakes.misfuelFees)} tamir` : 'tamir ödenmedi'
+                  }`}
+                  tone="text-kred"
+                  hint="Yanlış tabancayla arızalanan araçlar ve ödenen tamir ücreti; giderlerde de ayrı satırda."
+                />
+              )}
+              {mistakes.overPours > 0 && (
+                <Row
+                  label="Fazla dolum zararı"
+                  value={`${mistakes.overPours} kez · ${cost(mistakes.overPourLoss)}`}
+                  tone="text-kred"
+                  hint="İstenenden fazla doldurduğun yakıtın satış değeri; müşteri bunu ödemedi. Yakıtın alış maliyeti giderlerde zaten sayılı."
+                />
+              )}
+              {mistakes.shortPours > 0 && (
+                <Row
+                  label="Eksik dolum"
+                  value={`${mistakes.shortPours} kez · ${lira(mistakes.shortPourShortfall)} eksik satış`}
+                  tone="text-kyel-dark"
+                  hint="İstenenden az doldurunca müşteri yalnızca döküleni ödedi."
+                />
+              )}
+            </Section>
+          )}
 
           <div
             className={`mt-2.5 flex items-center justify-between gap-3 border-2 border-ink rounded-md px-3 py-1 text-white ${

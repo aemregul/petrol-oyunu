@@ -670,6 +670,18 @@ export interface DayState {
     openingReputation?: number;
     /** Loan instalments the till could not cover at closing. */
     missedLoanPayments?: number;
+    /**
+     * The player's mistakes at the pump today (Emre, 2026-09-14). Cars given
+     * the wrong fuel, and the repairs paid for them — also inside `repairs`,
+     * kept apart so the report can name them. Pours over the ask and the fuel
+     * not paid for, at the pump price; pours short and the sale not made.
+     */
+    misfuels?: number;
+    misfuelFees?: number;
+    overPours?: number;
+    overPourLoss?: number;
+    shortPours?: number;
+    shortPourShortfall?: number;
   };
 }
 

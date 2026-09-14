@@ -25,7 +25,10 @@ export interface DayBooks {
     wages: number;
     upkeep: number;
     energy: number;
+    /** Pump repairs and servicing. */
     repairs: number;
+    /** Repairs to cars given the wrong fuel. */
+    misfuel: number;
     loans: number;
     total: number;
   };
@@ -40,6 +43,8 @@ export interface DayBooks {
 export function dayBooks(stats: DayStats): DayBooks {
   const energy = Math.round(stats.energyCost ?? 0);
   const upkeep = Math.max(0, stats.upkeep - energy);
+  // The same goes for a misfuelled car's repair, booked with the pumps'.
+  const misfuel = Math.min(stats.repairs, stats.misfuelFees ?? 0);
 
   const income = {
     fuel: stats.fuelRevenue,
@@ -53,7 +58,8 @@ export function dayBooks(stats: DayStats): DayBooks {
     wages: stats.wages,
     upkeep,
     energy,
-    repairs: stats.repairs,
+    repairs: stats.repairs - misfuel,
+    misfuel,
     loans: stats.loanPayments,
     total:
       stats.fuelCost + stats.marketCost + stats.wages + upkeep + energy + stats.repairs + stats.loanPayments
@@ -80,6 +86,17 @@ export interface DayReport extends DayBooks {
   cash: { opening: number | null; now: number };
   reputation: { opening: number | null; now: number };
   missedLoanPayments: number;
+  /** The player's mistakes at the pump today, and what they cost. */
+  pourMistakes: {
+    misfuels: number;
+    misfuelFees: number;
+    overPours: number;
+    /** Fuel poured past the ask, at the pump price: what the drivers did not pay. */
+    overPourLoss: number;
+    shortPours: number;
+    /** The sale that fell short of the ask. */
+    shortPourShortfall: number;
+  };
 }
 
 export function dayReport(state: GameState): DayReport {
@@ -116,6 +133,14 @@ export function dayReport(state: GameState): DayReport {
     averageScore: stats.customersServed > 0 ? stats.serviceScoreSum / stats.customersServed : null,
     cash: { opening: stats.openingCash ?? null, now: state.player.cash },
     reputation: { opening: stats.openingReputation ?? null, now: state.player.reputation },
-    missedLoanPayments: stats.missedLoanPayments ?? 0
+    missedLoanPayments: stats.missedLoanPayments ?? 0,
+    pourMistakes: {
+      misfuels: stats.misfuels ?? 0,
+      misfuelFees: stats.misfuelFees ?? 0,
+      overPours: stats.overPours ?? 0,
+      overPourLoss: stats.overPourLoss ?? 0,
+      shortPours: stats.shortPours ?? 0,
+      shortPourShortfall: stats.shortPourShortfall ?? 0
+    }
   };
 }

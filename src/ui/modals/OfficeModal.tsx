@@ -773,6 +773,28 @@ export const OfficeModal: React.FC = () => {
                     tone="text-kyel-dark"
                   />
                 )}
+                {/* The day's mistakes at the pump, named (Emre, 2026-09-14). */}
+                {(t.misfuels ?? 0) > 0 && (
+                  <Row
+                    label="Bugün yanlış yakıt tamiri"
+                    value={`${t.misfuels} araç · ${lira(t.misfuelFees ?? 0)}`}
+                    tone="text-kred"
+                  />
+                )}
+                {(t.overPours ?? 0) > 0 && (
+                  <Row
+                    label="Bugün fazla dolum zararı"
+                    value={`${t.overPours} kez · ${lira(t.overPourLoss ?? 0)}`}
+                    tone="text-kred"
+                  />
+                )}
+                {(t.shortPours ?? 0) > 0 && (
+                  <Row
+                    label="Bugün eksik dolum"
+                    value={`${t.shortPours} kez · ${lira(t.shortPourShortfall ?? 0)} eksik satış`}
+                    tone="text-kyel-dark"
+                  />
+                )}
                 <Row label="Tamamlanan gün" value={player.statistics.daysCompleted} />
               </Section>
 

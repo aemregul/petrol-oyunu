@@ -3965,6 +3965,7 @@ export function misfuelVehicle(
   vehicle.breakdown = { nozzle, repairPaid: false, repairSecondsLeft: MISFUEL_REPAIR_SECONDS };
   state.player.reputation = clamp(state.player.reputation - MISFUEL_REPUTATION, 1, 5);
   state.dayState.todayStats.customersLost++;
+  state.dayState.todayStats.misfuels = (state.dayState.todayStats.misfuels ?? 0) + 1;
   state.player.statistics.totalCustomersLost++;
 
   const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
@@ -4000,7 +4001,9 @@ export function payMisfuelRepair(state: GameState, vehicle: VehicleEntity): numb
 
   breakdown.repairPaid = true;
   breakdown.repairSecondsLeft = MISFUEL_REPAIR_SECONDS;
+  // Booked with the day's repairs, and kept apart too so the report can name it.
   state.dayState.todayStats.repairs += MISFUEL_REPAIR_FEE;
+  state.dayState.todayStats.misfuelFees = (state.dayState.todayStats.misfuelFees ?? 0) + MISFUEL_REPAIR_FEE;
   return MISFUEL_REPAIR_FEE;
 }
 
@@ -4373,6 +4376,16 @@ export function finalizeSale(
 
   state.dayState.todayStats.fuelRevenue += totalSale;
   state.dayState.todayStats.fuelCost += dispensed * state.tanks[vehicle.fuelType].averageCost;
+  // The pour's misses, for the day-end report and the books (Emre, 2026-09-14):
+  // over, the fuel the driver did not pay for; short, the sale that fell short.
+  const todayStats = state.dayState.todayStats;
+  if (off === 'over') {
+    todayStats.overPours = (todayStats.overPours ?? 0) + 1;
+    todayStats.overPourLoss = Number(((todayStats.overPourLoss ?? 0) + pouredValue - askedValue).toFixed(2));
+  } else if (off === 'short') {
+    todayStats.shortPours = (todayStats.shortPours ?? 0) + 1;
+    todayStats.shortPourShortfall = Number(((todayStats.shortPourShortfall ?? 0) + askedValue - pouredValue).toFixed(2));
+  }
   state.dayState.todayStats.tips += tip;
   state.dayState.todayStats.customersServed++;
 

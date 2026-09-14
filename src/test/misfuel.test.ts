@@ -9,6 +9,7 @@ import {
   MISFUEL_REPAIR_SECONDS,
   MISFUEL_REPUTATION
 } from '../domain/services/simulationEngine';
+import { dayBooks, dayReport } from '../domain/services/dayReport';
 import type { GameState, VehicleEntity } from '../domain/types/gameState';
 
 /**
@@ -140,6 +141,13 @@ describe('the wrong nozzle', () => {
     let now = store().gameState;
     expect(now.player.cash).toBe(15000 - MISFUEL_REPAIR_FEE);
     expect(now.dayState.todayStats.repairs).toBe(MISFUEL_REPAIR_FEE);
+    // The books name it apart from pump repairs, without counting it twice.
+    expect(now.dayState.todayStats.misfuels).toBe(1);
+    expect(now.dayState.todayStats.misfuelFees).toBe(MISFUEL_REPAIR_FEE);
+    const books = dayBooks(now.dayState.todayStats);
+    expect(books.expenses.misfuel).toBe(MISFUEL_REPAIR_FEE);
+    expect(books.expenses.repairs).toBe(0);
+    expect(dayReport(now).pourMistakes).toMatchObject({ misfuels: 1, misfuelFees: MISFUEL_REPAIR_FEE });
     expect(now.vehicles[car.id].breakdown?.repairPaid).toBe(true);
     expect(store().activeModal).toBe('NONE');
     // Paid once is paid.
