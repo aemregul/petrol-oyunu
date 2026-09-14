@@ -31,7 +31,8 @@ export const DEPARTURE_GLYPHS: Record<DepartureReason, MoodGlyph & { hint: strin
   FULL: { emoji: '😤', label: 'İstasyon dolu', hint: 'Pompalar ve kuyruk doluydu, girmeden yoluna devam etti. Yeni pompanın zamanı gelmiş olabilir.' },
   CLOSED: { emoji: '🔒', label: 'Kapalı', hint: 'İstasyon kapalıydı.' },
   NO_PARKING: { emoji: '🅿️🚫', label: 'Park yeri yok', hint: 'Tesis için geldi ama boş park yeri bulamadı. Otopark kur.' },
-  SENT_AWAY: { emoji: '👋', label: 'Gönderildi', hint: 'Müşteriyi sen gönderdin.' }
+  SENT_AWAY: { emoji: '👋', label: 'Gönderildi', hint: 'Müşteriyi sen gönderdin.' },
+  MISFUEL: { emoji: '💥', label: 'Yanlış yakıt', hint: 'Yanlış tabancayla dolum yapıldı, motor arızalandı. Tamiri sen ödedin, pompa kilitli kaldı.' }
 };
 
 /** How much patience is left, most first. The last one catches everything below. */

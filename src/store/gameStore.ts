@@ -44,7 +44,12 @@ import {
   dismissVehicle,
   DRIVEWAY_Z,
   energyCapacityOn,
-  SQUEEGEE_SATISFACTION
+  SQUEEGEE_SATISFACTION,
+  misfuelVehicle,
+  payMisfuelRepair,
+  MISFUEL_REPAIR_FEE,
+  MISFUEL_REPAIR_SECONDS,
+  POUR_MISS_REPUTATION
 } from '../domain/services/simulationEngine';
 import { solarPrice, solarUpkeep, solarPeakKwhPerHour } from '../domain/services/energy';
 import { unitPrice } from '../domain/services/catalogRules';
@@ -601,7 +606,18 @@ interface GameStore {
 
   // Fueling Actions
   openFuelingPanelForVehicle: (vehicleId: string) => void;
-  startVehicleFueling: (vehicleId: string, mode: 'LITERS' | 'MONEY' | 'FULL', targetValue: number) => boolean;
+  /**
+   * Starts a pour through the nozzle the player picked. The wrong nozzle does
+   * not pour: it breaks the car down at the pump, and returns false.
+   */
+  startVehicleFueling: (
+    vehicleId: string,
+    mode: 'LITERS' | 'MONEY' | 'FULL',
+    targetValue: number,
+    nozzle?: FuelType
+  ) => boolean;
+  /** Pays for a misfuelled car's repair; it leaves once the work is done. */
+  repairBrokenVehicle: (vehicleId: string) => boolean;
   /** Plugs an electric customer in by hand, where no attendant is on the post. */
   startVehicleCharging: (vehicleId: string) => boolean;
   completeVehicleFueling: (vehicleId: string) => void;
@@ -2914,12 +2930,22 @@ export const useGameStore = create<GameStore>((set, get) => {
     return true;
   },
 
-  startVehicleFueling: (vehicleId, mode, targetValue) => {
+  startVehicleFueling: (vehicleId, mode, targetValue, nozzle) => {
     const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
     const vehicle = state.vehicles[vehicleId];
     if (!vehicle) return false;
 
     const effects = createEffects();
+    // The wrong nozzle breaks the car down instead of pouring, and the window
+    // stays up on it so the repair can be paid (Emre, 2026-09-14).
+    if (nozzle && nozzle !== vehicle.fuelType) {
+      const broke = misfuelVehicle(state, vehicle, nozzle, effects);
+      flushEffects(state, effects);
+      if (broke) SaveManager.saveGame(state);
+      set({ gameState: state });
+      return false;
+    }
+
     const started = beginFueling(state, vehicle, mode, targetValue, 'PLAYER', effects);
     flushEffects(state, effects);
     set({
@@ -2927,6 +2953,32 @@ export const useGameStore = create<GameStore>((set, get) => {
       ...(started ? { activeModal: 'NONE' as const, selectedVehicleId: null } : {})
     });
     return started;
+  },
+
+  repairBrokenVehicle: (vehicleId) => {
+    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const vehicle = state.vehicles[vehicleId];
+    if (!vehicle || vehicle.state !== 'BROKEN_DOWN' || vehicle.breakdown?.repairPaid) return false;
+
+    const paid = payMisfuelRepair(state, vehicle);
+    if (paid === null) {
+      get().addNotification({
+        type: 'WARNING',
+        title: 'Yetersiz Bakiye',
+        message: `Araç tamiri için ₺${MISFUEL_REPAIR_FEE.toLocaleString('tr-TR')} gerekiyor.`
+      });
+      return false;
+    }
+
+    sounds.playBuildPlace();
+    SaveManager.saveGame(state);
+    set({ gameState: state, selectedVehicleId: null, activeModal: 'NONE' });
+    get().addNotification({
+      type: 'INFO',
+      title: 'Tamir Başladı',
+      message: `₺${paid.toLocaleString('tr-TR')} ödendi. Araç ${MISFUEL_REPAIR_SECONDS} saniyede onarılıp ayrılacak; pompa o zamana kadar kilitli.`
+    });
+    return true;
   },
 
   completeVehicleFueling: (vehicleId) => {
@@ -2950,11 +3002,12 @@ export const useGameStore = create<GameStore>((set, get) => {
     // says it; an attendant's sales would bury the corner.
     const lira = (n: number) => `₺${n.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
     // A pour off the driver's ask is said too, so the player learns from it.
+    const knock = `(-${POUR_MISS_REPUTATION} İtibar)`;
     const miss =
       off === 'over'
-        ? ` ${lira(poured - asked)} fazla doldurdun; müşteri fazlasını ödemedi.`
+        ? ` ${lira(poured - asked)} fazla doldurdun; müşteri fazlasını ödemedi ve mutsuz ayrıldı. ${knock}`
         : off === 'short'
-          ? ` Müşteri ${lira(asked)} istemişti; eksik doldurdun, memnuniyeti düştü.`
+          ? ` Müşteri ${lira(asked)} istemişti; eksik doldurdun, döküleni ödedi ve mutsuz ayrıldı. ${knock}`
           : '';
     get().addNotification({
       type: off ? 'WARNING' : tip > 0 ? 'REWARD' : 'INFO',
@@ -3822,7 +3875,8 @@ export function atPlayersWindow(vehicle: GameState['vehicles'][string] | undefin
   const waiting = (vehicle.state === 'AT_PUMP' || vehicle.state === 'REQUEST') && !vehicle.assignedActor;
   const playerSession =
     vehicle.assignedActor === 'PLAYER' && (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT');
-  return waiting || playerSession;
+  // A car the player misfuelled stays theirs until it is repaired.
+  return waiting || playerSession || vehicle.state === 'BROKEN_DOWN';
 }
 
 // The fuel window closes itself once its car is no longer the player's to

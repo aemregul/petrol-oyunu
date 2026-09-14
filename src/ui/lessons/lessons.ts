@@ -113,7 +113,7 @@ const FIRST_CUSTOMER_STEPS: LessonStep[] = [
     id: 'nozzle',
     title: 'Doğru tabanca',
     body: (view, id) => [
-      `${GAME_CONFIG.fuels[car(view, id)?.fuelType ?? 'gasoline'].shortName} tabancasını seç. Yanlış tabancayla dolum başlamaz.`
+      `${GAME_CONFIG.fuels[car(view, id)?.fuelType ?? 'gasoline'].shortName} tabancasını seç. Yanlış tabanca motoru arızalandırır: pompa kilitlenir, tamir parasını sen ödersin.`
     ],
     target: (view, id) => dom(`fuel-nozzle-${car(view, id)?.fuelType ?? 'gasoline'}`),
     advance: { kind: 'click' }
@@ -126,7 +126,7 @@ const FIRST_CUSTOMER_STEPS: LessonStep[] = [
       if (v?.request.mode === 'FULL') return ["Depoyu doldurmak istiyor: FULLE'ye bas."];
       return [
         `Kutuya istediği tutarı (${lira(v?.request.targetValue ?? 0)}) yaz ya da hazır tutarlardan seç, sonra BAŞLAT'a bas.`,
-        'Az doldurursan memnuniyeti düşer; fazla doldurursan fazlasını ödemez.'
+        'Az doldurursan yalnızca döküleni öder, fazla doldurursan fazlasını ödemez; ikisinde de mutsuz ayrılır ve itibarın düşer.'
       ];
     },
     target: (view, id) => dom(car(view, id)?.request.mode === 'FULL' ? 'fuel-full' : 'fuel-amount'),

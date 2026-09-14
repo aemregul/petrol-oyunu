@@ -8,6 +8,7 @@ import { VehicleModel } from './models/VehicleModel';
 import { ModelErrorBoundary } from './models/ModelErrorBoundary';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { MoodGlyph, vehicleMood } from './vehicleMood';
+import { MISFUEL_REPAIR_FEE } from '../domain/services/simulationEngine';
 
 /** Shown for the frame or two before a vehicle's model finishes loading. */
 const FallbackBody: React.FC<{ color: string }> = ({ color }) => (
@@ -55,8 +56,10 @@ export function canPlayerOpenVehicleService(
     !vehicle.chargingBuildingId &&
     vehicle.assignedActor === 'PLAYER' &&
     (vehicle.state === 'FUELING' || vehicle.state === 'PAYMENT');
+  // A misfuelled car is the player's to repair, attendant or not.
+  const brokenDown = vehicle.state === 'BROKEN_DOWN';
 
-  return playerFuelSession || (waitingForService && !attendantServing);
+  return playerFuelSession || brokenDown || (waitingForService && !attendantServing);
 }
 
 function getRequestHeight(modelVariant: VehicleEntity['modelVariant']): number {
@@ -291,6 +294,23 @@ export const VehicleMesh: React.FC<VehicleMeshProps> = ({ vehicle, showMood = tr
                 style={{ width: `${patienceRatio * 100}%` }}
               />
             </div>
+          </div>
+        </Html>
+      )}
+
+      {/* Broken down on the wrong fuel: the card is the way to the repair. */}
+      {vehicle.state === 'BROKEN_DOWN' && (
+        <Html position={[0, requestHeight, 0]} center distanceFactor={20} zIndexRange={[5, 0]}>
+          <div
+            className="cursor-pointer game-glass bg-kred text-white border-2 border-ink text-xs px-3 py-1.5 rounded-md font-display tracking-wide tabular-nums whitespace-nowrap"
+            onClick={(e) => {
+              e.stopPropagation();
+              serve();
+            }}
+          >
+            {vehicle.breakdown?.repairPaid
+              ? `🔧 Tamirde · ${Math.max(0, Math.ceil(vehicle.breakdown.repairSecondsLeft))} sn`
+              : `💥 Arızalı · Tamir et ₺${MISFUEL_REPAIR_FEE.toLocaleString('tr-TR')}`}
           </div>
         </Html>
       )}

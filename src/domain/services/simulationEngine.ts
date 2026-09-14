@@ -1727,7 +1727,7 @@ function vehicleBodiesOverlap(a: VehicleEntity, b: VehicleEntity): boolean {
 }
 
 const STANDING_TRAFFIC_STATES: VehicleState[] = [
-  'AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'VISITING'
+  'AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT', 'OPTIONAL_SHOP', 'VISITING', 'BROKEN_DOWN'
 ];
 
 /** Adjacent marked bays deliberately sit closer than two long body boxes. */
@@ -3939,6 +3939,87 @@ export function beginFueling(
   return true;
 }
 
+/**
+ * The wrong nozzle (Emre, 2026-09-14). Every nozzle in the window can be
+ * picked, and petrol into a diesel engine is not simply refused: the car
+ * breaks down where it stands, before a drop is sold. It holds its pump until
+ * the player pays for the repair and the repair is done, and only then does
+ * it leave. The station's name pays at once, and the customer is lost.
+ */
+export const MISFUEL_REPAIR_FEE = 2000;
+/** Seconds of work on the car once the repair is paid; the pump stays shut meanwhile. */
+export const MISFUEL_REPAIR_SECONDS = 20;
+export const MISFUEL_REPUTATION = 0.05;
+
+/** Breaks down a car given the wrong fuel at the player's hand. False when nothing happened. */
+export function misfuelVehicle(
+  state: GameState,
+  vehicle: VehicleEntity,
+  nozzle: FuelType,
+  effects: SimEffects
+): boolean {
+  if (vehicle.state !== 'AT_PUMP' && vehicle.state !== 'REQUEST') return false;
+  if (vehicle.chargingBuildingId || vehicle.assignedActor || nozzle === vehicle.fuelType) return false;
+
+  setVehicleState(vehicle, 'BROKEN_DOWN');
+  vehicle.breakdown = { nozzle, repairPaid: false, repairSecondsLeft: MISFUEL_REPAIR_SECONDS };
+  state.player.reputation = clamp(state.player.reputation - MISFUEL_REPUTATION, 1, 5);
+  state.dayState.todayStats.customersLost++;
+  state.player.statistics.totalCustomersLost++;
+
+  const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
+  const wanted = GAME_CONFIG.fuels[vehicle.fuelType].shortName;
+  const given = GAME_CONFIG.fuels[nozzle].shortName;
+  notify(
+    effects,
+    'CRITICAL',
+    'Yanlış Yakıt — Araç Arızalandı!',
+    `Müşteri ${wanted} istiyordu, ${given} verdin. Motor arızalandı ve ${pump ? pumpName(state, pump) : 'pompa'} kilitlendi. ` +
+      `Araca tıklayıp tamiri öde (₺${MISFUEL_REPAIR_FEE.toLocaleString('tr-TR')}); onarılınca araç ayrılır. (-${MISFUEL_REPUTATION} İtibar)`
+  );
+  playCue(effects, 'alert');
+  return true;
+}
+
+/**
+ * Pays for a misfuelled car's repair, and starts the clock on it. Returns the
+ * fee, or null when there is nothing to pay for or the till cannot cover it
+ * even on overdraft — a repair bill is not one the station can refuse.
+ */
+export function payMisfuelRepair(state: GameState, vehicle: VehicleEntity): number | null {
+  const breakdown = vehicle.breakdown;
+  if (vehicle.state !== 'BROKEN_DOWN' || !breakdown || breakdown.repairPaid) return null;
+
+  const tx = TransactionService.executeCashTransaction(state, {
+    type: 'REPAIR',
+    amount: -MISFUEL_REPAIR_FEE,
+    description: `Yanlış yakıt: ${vehicle.archetype.toUpperCase()} araç tamiri`,
+    allowOverdraft: true
+  });
+  if (!tx.success) return null;
+
+  breakdown.repairPaid = true;
+  breakdown.repairSecondsLeft = MISFUEL_REPAIR_SECONDS;
+  state.dayState.todayStats.repairs += MISFUEL_REPAIR_FEE;
+  return MISFUEL_REPAIR_FEE;
+}
+
+/** The repair is done: the car gives the pump back and drives off. */
+function releaseRepairedVehicle(state: GameState, vehicle: VehicleEntity, effects: SimEffects): void {
+  const pump = vehicle.targetPumpId ? state.pumps[vehicle.targetPumpId] : null;
+  if (pump) releasePump(pump);
+  vehicle.targetPumpId = null;
+  vehicle.breakdown = undefined;
+  vehicle.assignedActor = null;
+  sendAway(state, vehicle, 'MISFUEL');
+  notify(
+    effects,
+    'INFO',
+    'Araç Onarıldı',
+    `Arızalı araç ayrıldı; ${pump ? pumpName(state, pump) : 'pompa'} yeniden hizmette.`
+  );
+}
+
 /** What a wiped windscreen adds to the driver's satisfaction at the till. */
 export const SQUEEGEE_SATISFACTION = 8;
 
@@ -3950,6 +4031,13 @@ export const SQUEEGEE_SATISFACTION = 8;
  */
 export const POUR_TOLERANCE = 0.01;
 export const POUR_MISS_PENALTY = 300;
+/**
+ * A pour off the ask, short or over, sends the driver away unhappy: the
+ * service score is held below the "memnun" line, no tip is left, and the
+ * station's name takes a small knock at once (Emre, 2026-09-14).
+ */
+export const POUR_MISS_SCORE = 50;
+export const POUR_MISS_REPUTATION = 0.01;
 
 /** What the driver asked for at the window; a save from before keeps only the pour. */
 function askedOf(vehicle: VehicleEntity): NonNullable<VehicleEntity['request']['asked']> {
@@ -4250,22 +4338,25 @@ export function finalizeSale(
   const facilities = blockFacilities(state, vehicleSide(vehicle));
   // A wiped windscreen is the cheapest goodwill on the forecourt.
   const squeegee = vehicle.windowsCleaned ? SQUEEGEE_SATISFACTION : 0;
-  const serviceScore = clamp(
+  const scored = clamp(
     calculateServiceScore(speedRatio, accuracy, state.station.cleanliness) +
       facilities.satisfaction +
       squeegee,
     0,
     100
   );
+  // Short or over, the driver leaves unhappy whatever else went well.
+  const serviceScore = off ? Math.min(scored, POUR_MISS_SCORE) : scored;
   const mods = getEventModifiers(state);
   // Some drivers tip and some never do; the archetype says which.
   const tipHabit = GAME_CONFIG.customerTypes[vehicle.archetype]?.tipChanceModifier ?? 1;
-  const tip = Math.round(
-    calculateCustomerTip(totalSale, serviceScore, vehicle.archetype) * mods.tip * tipHabit
-  );
+  const tip = off
+    ? 0
+    : Math.round(calculateCustomerTip(totalSale, serviceScore, vehicle.archetype) * mods.tip * tipHabit);
 
   vehicle.satisfaction = serviceScore;
   markDeparture(state, vehicle, servedReason(serviceScore, tip));
+  if (off) state.player.reputation = clamp(state.player.reputation - POUR_MISS_REPUTATION, 1, 5);
 
   TransactionService.executeCashTransaction(state, {
     type: 'FUEL_SALE',
@@ -7018,6 +7109,14 @@ export function dismissVehicle(
   vehicle: VehicleEntity,
   why: DepartureReason = 'SENT_AWAY'
 ): number {
+  // A misfuelled car is towed off rather than driven: the repair is owed
+  // however it leaves, and the reason it leaves is still the wrong fuel.
+  if (vehicle.state === 'BROKEN_DOWN') {
+    payMisfuelRepair(state, vehicle);
+    vehicle.breakdown = undefined;
+    why = 'MISFUEL';
+  }
+
   const reserved = vehicle.request.reservedLiters ?? 0;
   const dispensed = vehicle.request.dispensedLiters;
   let unpaid = 0;
@@ -7080,7 +7179,10 @@ export function evictFromPump(
 
   for (const vehicle of Object.values(state.vehicles)) {
     if (vehicle.targetPumpId !== pumpId || !isOnForecourt(vehicle)) continue;
+    // A misfuelled car was counted lost, and cost its reputation, when it broke down.
+    const brokenDown = vehicle.state === 'BROKEN_DOWN';
     unpaidLiters += dismissVehicle(state, vehicle, why);
+    if (brokenDown) continue;
     evicted++;
 
     // Selling or carting off the pump somebody was using is the player's own
@@ -7180,7 +7282,7 @@ function releaseOrphanedHolds(state: GameState): void {
  * pump, which is not its to give — and goes. A driver holding no pump at all
  * is the walk-up to a dead bay, which has its own rule and its own cost.
  */
-const PUMP_STATES: VehicleState[] = ['AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT'];
+const PUMP_STATES: VehicleState[] = ['AT_PUMP', 'REQUEST', 'FUELING', 'PAYMENT', 'BROKEN_DOWN'];
 
 function dismissOrphanedAtPump(state: GameState): void {
   for (const vehicle of Object.values(state.vehicles)) {
@@ -7745,6 +7847,16 @@ function tickVehicles(
         // Employee-served customers settle automatically; a player-served car
         // waits for the hand-over button even though its pour ran in the world.
         if (vehicle.assignedActor !== 'PLAYER') finalizeSale(state, vehicle, effects);
+        break;
+      }
+
+      case 'BROKEN_DOWN': {
+        // Stands in the bay, holding the pump, until the repair is paid for;
+        // then the mechanic's clock runs and the car goes when it is done.
+        const breakdown = vehicle.breakdown;
+        if (breakdown && !breakdown.repairPaid) break;
+        if (breakdown) breakdown.repairSecondsLeft -= dt;
+        if (!breakdown || breakdown.repairSecondsLeft <= 0) releaseRepairedVehicle(state, vehicle, effects);
         break;
       }
 

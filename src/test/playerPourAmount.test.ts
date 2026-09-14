@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createInitialGameState } from '../domain/types/initialState';
 import { GameState, VehicleEntity } from '../domain/types/gameState';
-import { createEffects, beginFueling, dispenseStep, finalizeSale } from '../domain/services/simulationEngine';
+import {
+  createEffects,
+  beginFueling,
+  dispenseStep,
+  finalizeSale,
+  POUR_MISS_REPUTATION,
+  POUR_MISS_SCORE
+} from '../domain/services/simulationEngine';
 import { useGameStore } from '../store/gameStore';
 
 /**
@@ -116,6 +123,22 @@ describe('a pour the player sets by hand', () => {
     expect(over.receipt.poured).toBeCloseTo(600, 5);
     expect(over.state.tanks.gasoline.stock).toBeCloseTo(1000 - 600 / PRICE, 5);
     expect(over.car.satisfaction).toBeLessThan(exact.car.satisfaction);
+  });
+
+  it('sends a driver poured off the ask away unhappy, without a tip and with a little reputation lost', () => {
+    // The dice held low: a driver served on the ask would tip.
+    let n = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.001 + 0.0003 * (n++ % 100));
+    const exact = sell(500);
+    expect(exact.state.player.reputation).toBe(createInitialGameState().player.reputation);
+
+    for (const typed of [400, 600]) {
+      const miss = sell(typed);
+      expect(miss.receipt.tip).toBe(0);
+      expect(miss.car.departureReason).toBe('SERVED_POOR');
+      expect(miss.car.satisfaction).toBeLessThanOrEqual(POUR_MISS_SCORE);
+      expect(miss.state.player.reputation).toBeCloseTo(exact.state.player.reputation - POUR_MISS_REPUTATION, 5);
+    }
   });
 
   it('counts a full tank filled with FULLE, and an attendant’s pour, as spot on', () => {

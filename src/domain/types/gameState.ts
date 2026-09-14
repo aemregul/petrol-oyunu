@@ -74,6 +74,12 @@ export type VehicleState =
   | 'TO_PARK'
   /** Standing still — in a park bay or at the pump — while the driver is inside a facility. */
   | 'VISITING'
+  /**
+   * Given the wrong fuel at the pump: the engine has failed and the car stands
+   * in the bay, holding the pump, until the player pays for the repair and the
+   * repair is done (Emre, 2026-09-14).
+   */
+  | 'BROKEN_DOWN'
   | 'EXIT'
   | 'DESPAWN';
 
@@ -112,7 +118,9 @@ export type DepartureReason =
   /** Came for a building and found nowhere to park. */
   | 'NO_PARKING'
   /** The player sent them off. */
-  | 'SENT_AWAY';
+  | 'SENT_AWAY'
+  /** Given the wrong fuel; left once the engine was repaired. */
+  | 'MISFUEL';
 
 export type PumpState =
   | 'IDLE'
@@ -325,6 +333,12 @@ export interface VehicleEntity {
    * until then, for through traffic, and on saves from before it was kept.
    */
   departureReason?: DepartureReason;
+  /**
+   * The wrong fuel went in: the nozzle the player picked, whether the repair
+   * has been paid for, and the seconds of work left once it has. Present only
+   * while the car is BROKEN_DOWN.
+   */
+  breakdown?: { nozzle: FuelType; repairPaid: boolean; repairSecondsLeft: number };
   shoppingIntent: boolean;
 }
 

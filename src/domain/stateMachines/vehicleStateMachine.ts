@@ -18,8 +18,9 @@ const VALID_VEHICLE_TRANSITIONS: Record<VehicleState, VehicleState[]> = {
   QUEUE: ['PUMP_RESERVED', 'EXIT', 'DESPAWN'],
   PUMP_RESERVED: ['AT_PUMP', 'EXIT', 'DESPAWN'],
   // A charged car is served where it stands, so it leaves for the shop from here.
-  AT_PUMP: ['REQUEST', 'OPTIONAL_SHOP', 'TO_PARK', 'EXIT', 'DESPAWN'],
-  REQUEST: ['FUELING', 'EXIT', 'DESPAWN'],
+  // The wrong nozzle breaks the car down before a drop is sold.
+  AT_PUMP: ['REQUEST', 'OPTIONAL_SHOP', 'TO_PARK', 'BROKEN_DOWN', 'EXIT', 'DESPAWN'],
+  REQUEST: ['FUELING', 'BROKEN_DOWN', 'EXIT', 'DESPAWN'],
   // A charged car settles up where it stands, so it leaves for the shop or
   // the park straight from here.
   FUELING: ['PAYMENT', 'OPTIONAL_SHOP', 'TO_PARK', 'EXIT', 'DESPAWN'],
@@ -29,6 +30,8 @@ const VALID_VEHICLE_TRANSITIONS: Record<VehicleState, VehicleState[]> = {
   OPTIONAL_SHOP: ['EXIT', 'DESPAWN'],
   TO_PARK: ['VISITING', 'EXIT', 'DESPAWN'],
   VISITING: ['EXIT', 'DESPAWN'],
+  // Repaired, or towed when the station shuts, and gone.
+  BROKEN_DOWN: ['EXIT', 'DESPAWN'],
   EXIT: ['DESPAWN'],
   DESPAWN: []
 };

@@ -45,7 +45,12 @@ export const PumpPanel: React.FC = () => {
   const pumpNo = String(pumpNumber(gameState, pump));
   const canopyPrice = GAME_CONFIG.buildings.canopy.price;
   const canopyRefund = Math.round((canopyPrice * GAME_CONFIG.economy.refundRatio) / 10) * 10;
-  const stateInfo = STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-ink' };
+  // A misfuelled car holds the bay until it is repaired, whatever the pump's own state says.
+  const holder = pump.currentVehicleId ? gameState.vehicles[pump.currentVehicleId] : null;
+  const stateInfo =
+    holder?.state === 'BROKEN_DOWN'
+      ? { text: 'KİLİTLİ — araç arızalı', className: 'text-kred' }
+      : STATE_LABELS[pump.state] ?? { text: pump.state, className: 'text-ink' };
 
   // Check if an attendant is assigned to this specific pump
   const attendant = Object.values(gameState.employees).find(

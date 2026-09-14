@@ -78,7 +78,9 @@ function sections(): Section[] {
       render: () => (
         <>
           <P>Araç pompaya yanaşır ve bekler. Üstüne tıklayınca panel açılır: istediği yakıt türü ve tutar yazar. Aynı tabancayı seç, istediği tutarı kutuya yaz ya da hazır tutarlardan seç, dolumu başlat; sayaç kendi akar, bitince teslim edip parasını alırsın.</P>
-          <P>Tutarı tutturmak senin işin: az doldurursan müşteri döküleni öder ama memnuniyeti düşer; fazla doldurursan yalnızca istediğini öder, fazlası senin zararın.</P>
+          <P>Tutarı tutturmak senin işin: az doldurursan müşteri yalnızca döküleni öder; fazla doldurursan yalnızca istediğini öder, fazlası senin zararın. İkisinde de müşteri bahşiş bırakmadan mutsuz ayrılır ve itibarın biraz düşer.</P>
+          <H>Yanlış tabanca</H>
+          <P>Bütün tabancalar her zaman seçilebilir; hangisinin doğru olduğunu müşterinin isteğinden okursun. Yanlış yakıtla BAŞLAT'a basarsan motor arızalanır: araç pompada kalır ve pompayı kilitler, itibarın düşer. Araca tıklayıp tamir parasını ödersin, tamir bitince araç ayrılır ve pompa yeniden açılır.</P>
           <H>Cam temizleme ne kazandırır</H>
           <P>Cam temizle düğmesi müşteri memnuniyetine sekiz puan ekler ve bahşiş ihtimalini artırır. Memnuniyet gün sonunda itibara döner, itibar yarınki trafiği belirler. Küçük bir tık, büyük bir zincir.</P>
           <H>Sabır</H>
