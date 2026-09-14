@@ -2,10 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { GAME_CONFIG } from '../../config/gameConfig';
 import { FuelType } from '../../domain/types/gameState';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Minus, Plus } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import { REQUEST_LIRA_STEP } from '../../domain/services/simulationEngine';
 
 const PRESETS = [250, 400, 600, 800, 1000, 1250, 1600, 2000];
+
+/**
+ * The −/+ buttons and the arrow keys move the sum by the step drivers ask in,
+ * so a preset plus a few taps reaches any request without a keyboard.
+ */
+const AMOUNT_STEP = REQUEST_LIRA_STEP;
 
 const FUEL_ORDER: FuelType[] = ['gasoline', 'diesel', 'lpg'];
 
@@ -108,6 +115,19 @@ export const CustomerFuelModal: React.FC = () => {
     sounds.playClick();
     startVehicleFueling(vehicle.id, mode, value);
   };
+
+  // Steps land on the grid: 1.827 goes up to 1.850 and down to 1.800.
+  const nudge = (dir: 1 | -1) => {
+    if (!rightFuelChosen) return;
+    const base = amount > 0 ? amount : 0;
+    const next =
+      dir > 0
+        ? Math.floor(base / AMOUNT_STEP) * AMOUNT_STEP + AMOUNT_STEP
+        : Math.ceil(base / AMOUNT_STEP) * AMOUNT_STEP - AMOUNT_STEP;
+    sounds.playClick();
+    setAmountText(next > 0 ? String(next) : '');
+  };
+  const canStepDown = rightFuelChosen && amount > 0;
 
   const askedSum = `₺${requestPrice.toLocaleString('tr-TR')}`;
   // A sum typed off the ask is allowed — it costs — and the line says what it will cost.
@@ -232,22 +252,54 @@ export const CustomerFuelModal: React.FC = () => {
                 ))}
               </div>
 
-              {/* The sum + start / full */}
+              {/* The sum, stepped in ₺50 */}
               <div className="flex gap-1.5">
+                <button
+                  aria-label={`${AMOUNT_STEP} ₺ azalt`}
+                  disabled={!canStepDown}
+                  onClick={() => nudge(-1)}
+                  className={`game-btn px-3 font-display text-sm tabular-nums flex items-center gap-0.5 ${
+                    canStepDown ? 'bg-card hover:bg-board text-ink' : 'bg-board text-mute'
+                  }`}
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                  {AMOUNT_STEP}
+                </button>
                 <input
                   type="number"
-                  min={10}
-                  step={1}
+                  inputMode="numeric"
+                  min={0}
+                  step={AMOUNT_STEP}
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ''))}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+                    e.preventDefault();
+                    nudge(e.key === 'ArrowUp' ? 1 : -1);
+                  }}
                   placeholder="₺ tutar gir"
-                  className="flex-1 min-w-0 bg-board border-2 border-ink rounded-md px-3 py-2.5 text-sm font-mono font-bold text-ink placeholder:text-mute focus:outline-none focus:bg-paper"
+                  className="flex-1 min-w-0 bg-board border-2 border-ink rounded-md px-3 py-2.5 text-center text-base font-mono font-bold text-ink placeholder:text-mute placeholder:text-sm focus:outline-none focus:bg-paper [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
+                <button
+                  aria-label={`${AMOUNT_STEP} ₺ artır`}
+                  disabled={!rightFuelChosen}
+                  onClick={() => nudge(1)}
+                  className={`game-btn px-3 font-display text-sm tabular-nums flex items-center gap-0.5 ${
+                    rightFuelChosen ? 'bg-card hover:bg-board text-ink' : 'bg-board text-mute'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {AMOUNT_STEP}
+                </button>
+              </div>
+
+              {/* Start / full */}
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
                   data-tour="fuel-start"
                   disabled={!canStart}
                   onClick={() => start('MONEY', amount)}
-                  className={`game-btn px-4 font-display text-sm tracking-wide ${
+                  className={`game-btn py-2.5 font-display text-sm tracking-wide ${
                     canStart ? 'bg-kgrn hover:bg-kgrn-dark text-white' : 'bg-board text-mute'
                   }`}
                 >
@@ -258,7 +310,7 @@ export const CustomerFuelModal: React.FC = () => {
                   disabled={!canFill}
                   title={wantsFull ? undefined : 'Bu müşteri depo istemiyor'}
                   onClick={() => start('FULL', demandLiters)}
-                  className={`game-btn px-4 font-display text-sm tracking-wide ${
+                  className={`game-btn py-2.5 font-display text-sm tracking-wide ${
                     canFill ? 'bg-kred hover:bg-kred-dark text-white' : 'bg-board text-mute'
                   }`}
                 >
