@@ -5,6 +5,7 @@ import { sounds } from '../../audio/soundEffects';
 import { styleFor, timeAgo } from '../notificationStyle';
 import { TONE_DOT, TONE_TEXT } from '../gameStyle';
 import { isAdmin } from '../../services/admin';
+import { GUEST_DAY_LIMIT } from '../../services/guestLicence';
 
 /**
  * The settings card, in the office's dress: one paper card, sections with a
@@ -342,7 +343,7 @@ export const SettingsModal: React.FC = () => {
                         ? `Bulut kaydı eşitlenemedi: ${cloudSync.message ?? 'bilinmeyen hata'}. Kayıt bu cihazda duruyor.`
                         : 'Bulut kaydı hazırlanıyor.'
                   : account
-                    ? 'Misafir hesabı bu cihaza bağlı; Google ya da e-posta ile giriş yaparsan kaydın hesabına taşınır.'
+                    ? `Misafir hesabı bu cihaza bağlı ve ${GUEST_DAY_LIMIT} oyun günüyle sınırlı; Google ya da e-posta ile giriş yaparsan kaydın hesabına taşınır.`
                     : 'Oyun kaydı bu cihazda otomatik tutulur (her 15 sn).'}
               </Hint>
               {account && account.provider !== 'guest' && (

@@ -3,6 +3,7 @@ import { ArrowRight, X } from 'lucide-react';
 import { useGameStore } from '../../store/gameStore';
 import { dayReport } from '../../domain/services/dayReport';
 import { DEPARTURE_GLYPHS } from '../../rendering/vehicleMood';
+import { GUEST_DAY_LIMIT, guestDaysLeft, guestLicenceApplies } from '../../services/guestLicence';
 
 const lira = (n: number) => `₺${Math.round(n).toLocaleString('tr-TR')}`;
 const cost = (n: number) => (Math.round(n) === 0 ? lira(0) : `−${lira(n)}`);
@@ -52,12 +53,16 @@ const Tile: React.FC<{ label: string; value: React.ReactNode; note: string; tone
  * the next morning starts from its button, never by itself. Closing the card
  * leaves the day stopped; the GÜN SONU button by the clock brings it back.
  * Kept compact (players, 2026-09-13): income and costs sit side by side so
- * the whole day reads without scrolling.
+ * the whole day reads without scrolling. A guest is told here how much of the
+ * temporary licence is left, and at its end the button leads to an account
+ * (Emre, 2026-09-14).
  */
 export const DayReportModal: React.FC = () => {
   const gameState = useGameStore((s) => s.gameState);
   const setActiveModal = useGameStore((s) => s.setActiveModal);
   const startNextDay = useGameStore((s) => s.startNextDay);
+  const account = useGameStore((s) => s.account);
+  const accountReady = useGameStore((s) => s.accountReady);
 
   const report = dayReport(gameState);
   const { income, expenses } = report;
@@ -65,6 +70,10 @@ export const DayReportModal: React.FC = () => {
   const dayOver = !gameState.dayState.isDayActive;
   const topLoss = report.lostBy[0];
   const { opening: repOpening, now: repNow } = report.reputation;
+
+  const guest = guestLicenceApplies(account, accountReady);
+  const guestLeft = guestDaysLeft(gameState);
+  const licenceSpent = guest && guestLeft === 0;
 
   return (
     <div className="k-dim animate-fade-in select-none">
@@ -183,22 +192,31 @@ export const DayReportModal: React.FC = () => {
           )}
         </div>
 
-        <div className="px-4 py-2 border-t-2 border-ink shrink-0 flex gap-2">
-          <button
-            onClick={() => setActiveModal('NONE')}
-            className="game-btn bg-card hover:bg-board text-ink px-3 py-1.5 font-display text-sm tracking-wide"
-            title="Gün durmuş bekler; saatin yanındaki GÜN SONU düğmesi raporu geri açar"
-          >
-            Sahaya Dön
-          </button>
-          <button
-            onClick={startNextDay}
-            disabled={!dayOver}
-            className="game-btn flex-1 bg-kgrn hover:bg-kgrn-dark text-white px-3 py-1.5 font-display text-sm tracking-wide flex items-center justify-center gap-2"
-          >
-            <span>Günü Kapat · Gün {report.day + 1}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+        <div className="px-4 py-2 border-t-2 border-ink shrink-0 flex flex-col gap-1.5">
+          {guest && dayOver && (
+            <p className={`text-[11px] font-bold leading-snug ${licenceSpent ? 'text-kred' : 'text-mute'}`}>
+              {licenceSpent
+                ? `Misafir ruhsatının ${GUEST_DAY_LIMIT} günü doldu. Kaydolursan istasyonun hesabına taşınır ve kaldığın sabahtan devam edersin.`
+                : `Geçici ruhsat: ${guestLeft} gün kaldı. Kaydolursan ilerlemen hesabına taşınır.`}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveModal('NONE')}
+              className="game-btn bg-card hover:bg-board text-ink px-3 py-1.5 font-display text-sm tracking-wide"
+              title="Gün durmuş bekler; saatin yanındaki GÜN SONU düğmesi raporu geri açar"
+            >
+              Sahaya Dön
+            </button>
+            <button
+              onClick={startNextDay}
+              disabled={!dayOver}
+              className="game-btn flex-1 bg-kgrn hover:bg-kgrn-dark text-white px-3 py-1.5 font-display text-sm tracking-wide flex items-center justify-center gap-2"
+            >
+              <span>{licenceSpent ? 'Kaydol ve Devam Et' : `Günü Kapat · Gün ${report.day + 1}`}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

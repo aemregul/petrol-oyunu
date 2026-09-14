@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Fuel, Mail, KeyRound, Stamp } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { WelcomeScene } from '../rendering/WelcomeScene';
+import { GUEST_DAY_LIMIT, guestSaveSpent } from '../services/guestLicence';
 
 /**
  * Karşılama kapısı: gece, oyunun kendi 3B istasyonunun önünde duran bir
@@ -141,6 +142,10 @@ export const WelcomeGate: React.FC = () => {
   const signInEmail = useGameStore((s) => s.signInEmail);
   const signInGuest = useGameStore((s) => s.signInGuest);
   const sendPasswordReset = useGameStore((s) => s.sendPasswordReset);
+  // A guest who has used up the temporary licence comes back here to sign up:
+  // the gate says why, and a second guest licence is not on offer for the
+  // same station (Emre, 2026-09-14).
+  const guestSpent = useGameStore((s) => guestSaveSpent(s.gameState));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -229,19 +234,32 @@ export const WelcomeGate: React.FC = () => {
             <div className="mt-4">
               {mode === 'login' ? (
                 <div className="flex flex-col gap-4">
-                  {/* Misafir: geçici ruhsat */}
-                  <div className="flex flex-col gap-1.5">
-                    <button
-                      disabled={accountBusy}
-                      onClick={signInGuest}
-                      className="game-btn rounded-xl border-2 border-emerald-700 bg-emerald-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-md hover:bg-emerald-500 disabled:opacity-50"
-                    >
-                      Geçici Ruhsat Al — Misafir Oyna
-                    </button>
-                    <p className="text-center text-[11px] font-semibold text-stone-500">
-                      Kayıt yok, evrak yok — üç saniyede vardiyadasın.
-                    </p>
-                  </div>
+                  {/* Misafir: geçici ruhsat. Süresi dolmuş bir istasyonla dönen
+                      oyuncuya ikinci ruhsat verilmez; neden burada olduğu yazar. */}
+                  {guestSpent ? (
+                    <div className="rounded-xl border-2 border-amber-600/60 bg-amber-50 px-4 py-3 text-center">
+                      <div className="text-[13px] font-black text-amber-800">
+                        Geçici ruhsatının {GUEST_DAY_LIMIT} günü doldu
+                      </div>
+                      <p className="mt-1 text-[11px] font-semibold leading-snug text-stone-600">
+                        İstasyonun bu cihazda seni bekliyor. Kaydol ya da giriş yap; ilerlemen hesabına taşınır ve
+                        kaldığın sabahtan devam edersin.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        disabled={accountBusy}
+                        onClick={signInGuest}
+                        className="game-btn rounded-xl border-2 border-emerald-700 bg-emerald-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-md hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        Geçici Ruhsat Al — Misafir Oyna
+                      </button>
+                      <p className="text-center text-[11px] font-semibold text-stone-500">
+                        Kayıt yok, evrak yok — {GUEST_DAY_LIMIT} gün misafir oyna, sonra kaydol.
+                      </p>
+                    </div>
+                  )}
 
                   <LaneDivider label="ruhsat sahibi girişi" />
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { X, UserRound, LogOut, Pencil, Check, CloudOff } from 'lucide-react';
+import { X, UserRound, LogOut, Pencil, Check, CloudOff, Stamp } from 'lucide-react';
 import { sounds } from '../../audio/soundEffects';
+import { GUEST_DAY_LIMIT, guestDaysLeft } from '../../services/guestLicence';
 
 /**
  * Hesabım: yalnız profil — kim olduğun, istasyonun adı, ömürlük istatistikler
@@ -32,6 +33,8 @@ export const AccountModal: React.FC = () => {
   const signOutAccount = useGameStore((s) => s.signOutAccount);
   const renameStation = useGameStore((s) => s.renameStation);
   const gameState = useGameStore((s) => s.gameState);
+  const leaveGuestForSignIn = useGameStore((s) => s.leaveGuestForSignIn);
+  const guestLeft = guestDaysLeft(gameState);
 
   const { player, station, dayState, missions } = gameState;
   const stats = player.statistics;
@@ -156,7 +159,29 @@ export const AccountModal: React.FC = () => {
                     }
                   />
                   {account.email && <Row label="E-posta" value={account.email} />}
+                  {account.provider === 'guest' && (
+                    <Row
+                      label="Geçici ruhsat"
+                      value={guestLeft > 0 ? `${guestLeft} / ${GUEST_DAY_LIMIT} gün kaldı` : 'Doldu'}
+                      accent={guestLeft <= 1 ? '!text-kred' : undefined}
+                    />
+                  )}
                 </div>
+                {/* A guest's way to an account (Emre, 2026-09-14). Not a sign-in
+                    form: it leaves the guest session for the welcome gate,
+                    which is still the one place identities are chosen. */}
+                {account.provider === 'guest' && (
+                  <button
+                    onClick={() => {
+                      sounds.playClick();
+                      void leaveGuestForSignIn();
+                    }}
+                    className="game-btn px-4 py-3 font-display text-base tracking-wide bg-kgrn hover:bg-kgrn-dark text-white flex items-center justify-center gap-2"
+                  >
+                    <Stamp className="w-4 h-4" />
+                    <span>Kaydol, İstasyonunu Koru</span>
+                  </button>
+                )}
                 <button
                   onClick={signOutAccount}
                   className="game-btn px-4 py-3 font-display text-base tracking-wide bg-kred hover:bg-kred-dark text-white flex items-center justify-center gap-2"

@@ -97,6 +97,7 @@ import {
 import { zoomToFit, CAMERA_VIEWS } from '../rendering/cameraFrame';
 import { siteCleaningCost } from '../domain/services/maintenance';
 import { dayBooks } from '../domain/services/dayReport';
+import { guestDaysLeft, guestLicenceApplies } from '../services/guestLicence';
 
 const SOUND_PLAYERS: Record<SoundCue, () => void> = {
   click: () => sounds.playClick(),
@@ -346,7 +347,8 @@ export type ActiveModalType =
   | 'GUIDE'
   | 'FEEDBACK'
   | 'ADMIN'
-  | 'DAY_REPORT';
+  | 'DAY_REPORT'
+  | 'GUEST_LIMIT';
 
 export interface PerformanceMetrics {
   fps: number;
@@ -416,6 +418,12 @@ interface GameStore {
   signInEmail: (email: string, password: string, register: boolean) => Promise<boolean>;
   signInGuest: () => Promise<void>;
   signOutAccount: () => Promise<void>;
+  /**
+   * The way from a guest's expired licence to the welcome gate (Emre,
+   * 2026-09-14): signs the guest out quietly, since the gate only opens with
+   * nobody signed in. The save stays in this browser for the account to take.
+   */
+  leaveGuestForSignIn: () => Promise<void>;
   /**
    * The cloud copy of the save (Emre, 2026-09-09). `syncCloudSave` runs when
    * an account signs in and decides which copy wins; `pushCloudSaveNow`
@@ -2671,6 +2679,18 @@ export const useGameStore = create<GameStore>((set, get) => {
     }
   },
 
+  leaveGuestForSignIn: async () => {
+    // No "signed out" toast: the gate that opens is the message. The report
+    // stays the open card, so once the account is in, closing the day is the
+    // next thing on screen.
+    set({ activeModal: 'DAY_REPORT', accountError: null });
+    try {
+      await accountSignOut();
+    } catch (error) {
+      get().addNotification({ type: 'WARNING', title: 'Çıkış Başarısız', message: describeAuthError(error) });
+    }
+  },
+
   renameStation: (name) => {
     // Tabelaya sığmayan ya da bomboş bir ad tabela değildir.
     const trimmed = name.trim().replace(/\s+/g, ' ');
@@ -3662,13 +3682,35 @@ export const useGameStore = create<GameStore>((set, get) => {
   },
 
   startNextDay: () => {
+    const { gameState: current, account, accountReady } = get();
     // Only a day that has closed has a next morning to start.
-    if (get().gameState.dayState.isDayActive) return;
+    if (current.dayState.isDayActive) return;
+
+    // A guest's temporary licence covers five days (Emre, 2026-09-14). The
+    // sixth morning belongs to a registered station: the day stays closed and
+    // the player is shown the way to an account, which takes the save along.
+    const guest = guestLicenceApplies(account, accountReady);
+    if (guest && guestDaysLeft(current) === 0) {
+      sounds.playClick();
+      set({ activeModal: 'GUEST_LIMIT' });
+      return;
+    }
 
     sounds.playClick();
-    const state = JSON.parse(JSON.stringify(get().gameState)) as GameState;
+    const state = JSON.parse(JSON.stringify(current)) as GameState;
     const effects = createEffects();
     beginNewDay(state, effects);
+    if (guest) {
+      const left = guestDaysLeft(state);
+      effects.notifications.push({
+        type: left === 1 ? 'WARNING' : 'INFO',
+        title: 'Geçici Ruhsat',
+        message:
+          left === 1
+            ? 'Misafir olarak son günün. Kaydolursan istasyonun seninle kalır.'
+            : `Misafir olarak bugünle birlikte ${left} gün daha oynayabilirsin. Kaydolursan ilerlemen hesabına taşınır.`
+      });
+    }
     flushEffects(state, effects);
 
     SaveManager.saveGame(state);
