@@ -13,6 +13,7 @@ import { GAME_CONFIG } from '../../config/gameConfig';
 import { GameState } from '../types/gameState';
 import { DrivewaySide, drivewaySideAt } from './simulationEngine';
 import { REST_COMPLEX_ABSORBS } from './placement';
+import { isFarSide, parseParcelKey } from './land';
 
 /** How many of this type stand on the station, or on one block of it. */
 export function ownedCount(state: GameState, type: string, side?: DrivewaySide): number {
@@ -58,12 +59,21 @@ export function buildLimitReason(state: GameState, type: string, side: DrivewayS
   return null;
 }
 
-/** Whether any block at all could still take one — what the catalogue card shows. */
+/**
+ * Whether any block the player owns land on could still take one — what the
+ * catalogue card shows. A block with no land of theirs is not a way out: the
+ * far side stays closed until a parcel across the road is bought.
+ */
 export function catalogLimitReason(state: GameState, type: string): string | null {
-  const near = buildLimitReason(state, type, 'near');
-  const far = buildLimitReason(state, type, 'far');
-  if (!near || !far) return null;
+  const sides: DrivewaySide[] = state.station.plots.ownedParcels.some((key) => isFarSide(parseParcelKey(key).row))
+    ? ['near', 'far']
+    : ['near'];
+  const reasons = sides.map((side) => buildLimitReason(state, type, side));
+  if (reasons.some((reason) => reason === null)) return null;
   const rule = GAME_CONFIG.buildingRules[type];
-  if (rule?.maxTotal !== undefined) return near;
-  return `Her iki arsada da sınır dolu (arsa başına ${rule?.maxPerSide ?? 1}).`;
+  if (rule?.maxTotal !== undefined) return reasons[0];
+  const perSide = rule?.maxPerSide ?? 1;
+  return sides.length === 2
+    ? `Her iki arsada da sınır dolu (arsa başına ${perSide}).`
+    : `Arsadaki sınır dolu (arsa başına ${perSide}); yol karşısına arsa alınca orada da kurulabilir.`;
 }

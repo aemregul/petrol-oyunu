@@ -44,11 +44,28 @@ describe('build limits', () => {
     expect(buildLimitReason(state, 'toilet', 'near')).not.toBeNull();
     // The far block is not.
     expect(buildLimitReason(state, 'toilet', 'far')).toBeNull();
+    // With no land across the road, there is nowhere left: the card locks.
+    expect(catalogLimitReason(state, 'toilet')).toContain('arsa başına 1');
+    // Once a far parcel is owned, the card opens again for that block.
+    state.station.plots.ownedParcels.push('0,-1');
     expect(catalogLimitReason(state, 'toilet')).toBeNull();
 
     // Both full: the catalogue card locks.
     state.buildings.wc2 = building('wc2', 'toilet', [8, -20]);
     expect(catalogLimitReason(state, 'toilet')).toContain('Her iki arsada');
+  });
+
+  it('locks a per-block card once the only block the player owns is full', () => {
+    const state = createInitialGameState();
+    state.player.level = 12;
+    expect(catalogLimitReason(state, 'mini_market')).toBeNull();
+    state.buildings.shop = building('shop', 'mini_market', validSpot(state, 'mini_market'));
+    expect(catalogLimitReason(state, 'mini_market')).not.toBeNull();
+    // The car park takes two on a block: one is not yet the cap.
+    state.buildings.cp1 = building('cp1', 'car_park', [4, 4]);
+    expect(catalogLimitReason(state, 'car_park')).toBeNull();
+    state.buildings.cp2 = building('cp2', 'car_park', [10, 4]);
+    expect(catalogLimitReason(state, 'car_park')).toContain('arsa başına 2');
   });
 
   it('counts the rest complex as the shop, restaurant, café and toilet of its block', () => {
