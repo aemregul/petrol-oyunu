@@ -61,6 +61,8 @@ export const PumpPanel: React.FC = () => {
   // Rearranging is a late-game luxury; the panel says so rather than offering
   // a button that only warns (Emre, 2026-09-10).
   const canMove = gameState.player.level >= EDIT_MODE_LEVEL;
+  const solarLevel = GAME_CONFIG.ev.solar.unlockLevel;
+  const canFitSolar = gameState.player.level >= solarLevel;
   const upgrade = GAME_CONFIG.buildingUpgrades[upgradePathFor('pump_standard')]?.[pump.level + 1];
   const repairCost =
     pump.health < 100
@@ -270,11 +272,19 @@ export const PumpPanel: React.FC = () => {
               <button
                 data-tour="pump-solar"
                 onClick={() => fitSolarCanopy(pump.id)}
-                className="w-full py-2.5 game-btn bg-kyel hover:bg-kyel-dark text-ink font-display tracking-wide text-sm flex items-center justify-center gap-1.5"
+                disabled={!canFitSolar}
+                title={canFitSolar ? 'Sundurmaya güneş paneli tak' : `Güneş paneli için Seviye ${solarLevel} gerekiyor`}
+                className={`w-full py-2.5 game-btn font-display tracking-wide text-sm flex items-center justify-center gap-1.5 ${
+                  canFitSolar
+                    ? 'bg-kyel hover:bg-kyel-dark text-ink'
+                    : 'bg-board text-mute cursor-not-allowed'
+                }`}
               >
                 <Sun className="w-3.5 h-3.5" />
                 <span>
-                  Güneşli Sundurma — ₺{solarPrice(GAME_CONFIG.buildings.canopy.size).toLocaleString('tr-TR')}
+                  {canFitSolar
+                    ? `Güneşli Sundurma — ₺${solarPrice(GAME_CONFIG.buildings.canopy.size).toLocaleString('tr-TR')}`
+                    : `Güneşli Sundurma — Sv.${solarLevel}`}
                 </span>
               </button>
             )}
